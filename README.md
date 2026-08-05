@@ -20,6 +20,34 @@ any OS, no installs, no accounts, several operators sharing one switcher
 session safely. It's built on a control stack that runs daily in live
 broadcast production.
 
+## WebATEM vs. ATEM Software Control
+
+ATEM Software Control (ASC) is Blackmagic's own free control app, and it's
+excellent — WebATEM isn't trying to replace all of it. The difference is
+*access*: ASC is a desktop app tied to one machine; WebATEM is a control
+surface any device on your network can open.
+
+|  | **WebATEM** | **ATEM Software Control** |
+|---|---|---|
+| **Runs on** | Any browser — Windows, macOS, **Linux**, ChromeOS, iPad, phone | Windows & macOS desktop only |
+| **Client install** | None — just open a URL | Installed per machine |
+| **Access from** | Any device on the network | The machine it's installed on |
+| **Multiple operators** | One shared switcher session, many operators | Each machine opens its own session |
+| **Phones / tablets** | ✓ Responsive | ✗ |
+| **Updating clients** | Update one container | Update every machine |
+| **Needs a host?** | Yes — a box running Docker | No — runs on your laptop |
+| **Price** | Free, open source | Free (proprietary) |
+| **Feature breadth** | Core: switching, keyers, Fairlight audio, media pool, macros, profiles, HyperDeck | Everything, incl. camera control (CCU), streaming & recording, SuperSource |
+| **Support** | Community / self-hosted | Official Blackmagic |
+
+**Reach for ASC** when you need the full feature set on one operator's machine
+— camera control, streaming/recording, SuperSource, recording macros.
+
+**Reach for WebATEM** when you want the core control surface available to
+anyone on the network, on any device or OS, with nothing to install — a second
+operator on an iPad, a Linux box in the rack room, a phone at the camera
+position.
+
 ## Features
 
 - **Full switcher control** — program/preview buses per M/E, cut/auto,
