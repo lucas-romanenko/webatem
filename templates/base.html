@@ -1,0 +1,124 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{{ app_title }}{% endblock %}</title>
+
+    {% block extra_css %}{% endblock %}
+
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.24/dist/full.min.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+    <!-- PWA meta tags -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="application-name" content="{{ app_title }}">
+    <meta name="apple-mobile-web-app-title" content="{{ app_title }}">
+    <meta name="theme-color" content="#1d232a">
+</head>
+
+<body class="min-h-screen flex flex-col">
+
+    <!-- Main content -->
+    <main class="container mx-auto px-4 flex-grow max-w-[3000px]">
+        {% block content %}{% endblock %}
+    </main>
+
+    {% block extra_js %}{% endblock %}
+
+    <!-- Site-wide haptic feedback for touch devices. window.haptic(ms):
+         Android gets the real Vibration API; iOS Safari has none, so the
+         best-effort fallback is the (unofficial, iOS 17.4+) system tick
+         from toggling a switch-style checkbox inside a user gesture.
+         A delegated listener gives every button tap a light tick on
+         coarse-pointer (touch) devices; call window.haptic(25) directly
+         for stronger gesture confirmations (e.g. long-press actions). -->
+    <!-- Kept minimally styled on purpose: opacity:0 / pointer-events:none /
+         label-forwarded clicks have all been reported to defeat the iOS
+         switch tick on some builds. Offscreen position only; the input
+         itself receives the click. -->
+    <div aria-hidden="true" style="position:fixed;left:-100px;top:-100px;">
+        <input id="haptic-tick" type="checkbox" switch tabindex="-1">
+    </div>
+    <script>
+        (function () {
+            var tick = document.getElementById('haptic-tick');
+            window.haptic = function (ms) {
+                try {
+                    if (navigator.vibrate) { navigator.vibrate(ms || 10); return; }
+                    if (tick) tick.click();   // synthetic — most iOS builds ignore it
+                } catch (e) { /* haptics are garnish — never break the tap */ }
+            };
+            var coarse = window.matchMedia && matchMedia('(pointer: coarse)');
+            // Android (and anything with a real Vibration API): light tick on
+            // every button tap.
+            document.addEventListener('click', function (e) {
+                if (!coarse || !coarse.matches) return;
+                if (e.target && e.target.closest &&
+                    e.target.closest('button, .btn, [role="button"]')) window.haptic(10);
+            }, { passive: true, capture: true });
+
+            // iOS: synthetic switch clicks carry no haptic on current builds —
+            // only a PHYSICAL tap that natively toggles a switch does. So on
+            // iOS every button gets an invisible full-size <label for=switch>
+            // overlay: the finger lands on the label (native toggle → real
+            // haptic) and the click keeps bubbling to the button's handlers.
+            // Verified semantics: JS listeners + form submits still fire; an
+            // ancestor <a>'s navigation default is CONSUMED by the label, so
+            // a delegated shim below restores it; label taps move focus to
+            // the switch, so focus-driven UI (.dropdown) is skipped.
+            if (coarse && coarse.matches && !navigator.vibrate && tick) {
+                // Zero-specificity positioning context (explicit positioning
+                // on a button still wins) — avoids per-element
+                // getComputedStyle, which thrashed layout on 3000-button
+                // pages badly enough to freeze the tab.
+                var st = document.createElement('style');
+                st.textContent = ':where(.hap-host){position:relative}'
+                    + 'label[data-hap]{position:absolute;inset:0;cursor:inherit}';
+                document.head.appendChild(st);
+                var protoLabel = document.createElement('label');
+                protoLabel.htmlFor = 'haptic-tick';
+                protoLabel.setAttribute('data-hap', '1');
+                protoLabel.setAttribute('aria-hidden', 'true');
+                var enhance = function (root) {
+                    if (!root.querySelectorAll) return;
+                    var els = root.querySelectorAll('button, .btn, [role="button"]');
+                    for (var i = 0; i < els.length; i++) {
+                        var el = els[i];
+                        if (el.__hap) continue;
+                        el.__hap = 1;
+                        if (el.closest('.dropdown')) continue;      // focus-driven
+                        if (el.hasAttribute('x-text')) continue;    // Alpine wipes children
+                        if (el.matches('input, select, textarea, label')) continue;
+                        el.classList.add('hap-host');
+                        el.appendChild(protoLabel.cloneNode());
+                    }
+                };
+                enhance(document);
+                new MutationObserver(function (muts) {
+                    for (var i = 0; i < muts.length; i++) {
+                        var added = muts[i].addedNodes;
+                        for (var j = 0; j < added.length; j++) {
+                            if (added[j].nodeType === 1) enhance(added[j]);
+                        }
+                    }
+                }).observe(document.body, { childList: true, subtree: true });
+                // Restore the <a> navigation the label consumed.
+                document.addEventListener('click', function (e) {
+                    var l = e.target && e.target.closest && e.target.closest('label[data-hap]');
+                    if (!l || e.defaultPrevented) return;
+                    var a = l.closest('a[href]');
+                    if (!a) return;
+                    var href = a.getAttribute('href');
+                    if (!href || href.charAt(0) === '#' || href.indexOf('javascript:') === 0) return;
+                    if (a.target === '_blank') window.open(a.href);
+                    else window.location.href = a.href;
+                });
+            }
+        })();
+    </script>
+</body>
+</html>

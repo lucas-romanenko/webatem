@@ -1,0 +1,36 @@
+                <!-- Transition Controls -->
+                <div class="card bg-base-200 shadow-lg">
+                    <div class="card-body">
+                        <h2 class="card-title mb-4">
+                            <i class="bi bi-shuffle text-primary"></i>
+                            Transition Controls
+                        </h2>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
+                            <div class="flex gap-3">
+                                <button class="btn btn-error flex-1" @click="$store.atem.send('cut')">
+                                    CUT
+                                </button>
+                                <button class="btn btn-warning flex-1" @click="$store.atem.send('auto')">
+                                    AUTO
+                                </button>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-medium whitespace-nowrap">Rate:</span>
+                                <input 
+                                    type="text" 
+                                    :class="$store.atem.getRateInputClass('me')"
+                                    class="w-16 h-8"
+                                    id="transitionRate"
+                                    placeholder="1:00"
+                                    x-model="$store.atem.inputs.transitionRate"
+                                    @keydown.enter="$store.atem.send('set_transition_rate', {rate: $store.atem.inputs.transitionRate}); $event.target.blur()"
+                                >
+                                <button 
+                                    class="btn btn-primary btn-sm" 
+                                    @click="$store.atem.send('set_transition_rate', {rate: $store.atem.inputs.transitionRate})">
+                                    Set
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>

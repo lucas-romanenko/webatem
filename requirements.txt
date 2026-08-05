@@ -1,0 +1,8 @@
+Django==6.0.7
+channels==4.3.2
+uvicorn[standard]==0.52.0
+pillow==12.3.0
+whitenoise==6.12.0
+pytest==9.1.1
+pytest-django==4.12.0
+pytest-timeout==2.4.0

@@ -1,0 +1,34 @@
+/* static/css/atem_connect.css */
+
+/* Connect button: center spinner + text (override DaisyUI .btn if needed) */
+button#connectBtn {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 0.5rem;
+    text-align: center;
+}
+
+/* Single wrapper for loading state so the whole block is centered in the button */
+.atem-connect-btn-inner {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+/* =================================================================
+   IP Input Placeholder Styling
+================================================================= */
+#ipAddress::placeholder {
+    color: #9ca3af !important;
+    opacity: 0.7 !important;
+    font-style: italic !important;
+    font-weight: 300 !important;
+}
+
+#ipAddress:not(:placeholder-shown) {
+    font-style: normal !important;
+    font-weight: 400 !important;
+    color: inherit !important;
+}
