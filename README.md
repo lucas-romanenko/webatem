@@ -1,18 +1,24 @@
 # WebATEM
 
-**Browser-based control for Blackmagic ATEM switchers.** One Docker container,
-any device with a browser — desktop, tablet, or phone, on any OS. Built for
-multi-operator broadcast environments and battle-tested in daily live
-production.
+**Control your Blackmagic ATEM switcher from any browser.** One Docker
+container, and a full control surface opens at a URL on every device on your
+network — no app to install, nothing to log into.
+
+Because it's a web app, it runs **anywhere with a browser**: Windows, macOS,
+**Linux**, ChromeOS, an iPad, a phone. Blackmagic's own ATEM Software Control
+is a Windows/Mac desktop app — WebATEM works on the machines it never
+supported, and on the tablet in your hand at the same time.
 
 > 📸 *Screenshot/GIF coming here — control surface, media pool, keyers.*
 
 ## Why
 
-ATEM Software Control is a desktop app, one machine at a time. This runs on
-a server once and gives every operator on the network a full control surface
-at a URL — no installs, no accounts, several operators sharing one switcher
-session safely.
+ATEM Software Control is a native desktop app: one OS family, one machine at a
+time, installed per operator. WebATEM runs on a server once and hands every
+operator on the network the same full control surface at a URL — any device,
+any OS, no installs, no accounts, several operators sharing one switcher
+session safely. It's built on a control stack that runs daily in live
+broadcast production.
 
 ## Features
 
