@@ -53,10 +53,25 @@ method_atem_to_rgb(PyObject *self, PyObject *args)
     }
 
     data_length = input_buffer.len;
+    /* The loop reads fixed 8-byte groups (2 pixels each); a ragged length
+       would read up to 7 bytes past the end of the input on the last
+       group. The wire format never produces one — reject it. */
+    if (data_length % 8 != 0) {
+        PyBuffer_Release(&input_buffer);
+        return PyErr_Format(PyExc_ValueError,
+                            "frame length %zd is not a multiple of 8",
+                            data_length);
+    }
+    if (data_length == 0) {
+        /* malloc(0) may legally return NULL; don't misreport it as OOM. */
+        PyBuffer_Release(&input_buffer);
+        return Py_BuildValue("y#", "", (Py_ssize_t) 0);
+    }
     char *buffer;
     char *resbuffer = (char *) malloc(data_length);
 
     if (resbuffer == NULL) {
+        PyBuffer_Release(&input_buffer);
         return PyErr_NoMemory();
     }
 
@@ -64,7 +79,7 @@ method_atem_to_rgb(PyObject *self, PyObject *args)
 
     int pixel_size = 8;
     buffer = input_buffer.buf;
-    for (int i = 0; i < data_length; i += pixel_size) {
+    for (Py_ssize_t i = 0; i < data_length; i += pixel_size) {
         // Convert 10-bit BT.709 Y'CbCrA 4:2:2 to RGB
         // Unpack bytes to 2xY 2xA and a B and R pair
         unsigned short a1 = (buffer[0] << 4) + ((buffer[1] & 0xf0) >> 4);
@@ -111,6 +126,7 @@ method_atem_to_rgb(PyObject *self, PyObject *args)
 
     res = Py_BuildValue("y#", resbuffer, data_length);
     free(resbuffer);
+    PyBuffer_Release(&input_buffer);
     return res;
 }
 
@@ -128,18 +144,31 @@ method_rgb_to_atem(PyObject *self, PyObject *args)
     }
 
     data_length = input_buffer.len;
+    /* Same 8-byte-group bound as atem_to_rgb: RGBA is consumed 2 pixels
+       at a time, so a ragged length would over-read the final group. */
+    if (data_length % 8 != 0) {
+        PyBuffer_Release(&input_buffer);
+        return PyErr_Format(PyExc_ValueError,
+                            "frame length %zd is not a multiple of 8",
+                            data_length);
+    }
+    if (data_length == 0) {
+        PyBuffer_Release(&input_buffer);
+        return Py_BuildValue("y#", "", (Py_ssize_t) 0);
+    }
     unsigned char *buffer;
     buffer = input_buffer.buf;
 
     char *outbuffer = (char *) malloc(data_length);
     if (outbuffer == NULL) {
+        PyBuffer_Release(&input_buffer);
         return PyErr_NoMemory();
     }
 
     char *writepointer = outbuffer;
 
     int pixel_size = 8;
-    for (int i = 0; i < data_length; i += pixel_size) {
+    for (Py_ssize_t i = 0; i < data_length; i += pixel_size) {
         // Convert RGBA 8888 to 10-bit BT.709 Y'CbCrA
         float r1 = (float)buffer[0] / 255;
         float g1 = (float)buffer[1] / 255;
@@ -189,6 +218,7 @@ method_rgb_to_atem(PyObject *self, PyObject *args)
 
     res = Py_BuildValue("y#", outbuffer, data_length);
     free(outbuffer);
+    PyBuffer_Release(&input_buffer);
     return res;
 }
 
@@ -204,11 +234,45 @@ method_rle_encode(PyObject *self, PyObject *args)
         return NULL;
     }
 
+    /* The stream is a sequence of 8-byte words; a ragged length was
+       silently truncated before (and a 1-byte input read AND wrote 8
+       bytes through 1-byte buffers via the len==1 special case). */
+    if (input_buffer.len % 8 != 0) {
+        Py_ssize_t bad_length = input_buffer.len;
+        PyBuffer_Release(&input_buffer);
+        return PyErr_Format(PyExc_ValueError,
+                            "RLE input length %zd is not a multiple of 8",
+                            bad_length);
+    }
+    if (input_buffer.len == 0) {
+        PyBuffer_Release(&input_buffer);
+        return Py_BuildValue("y#", "", (Py_ssize_t) 0);
+    }
+
     Py_ssize_t c = 0, i, w;
     uint64_t *data = input_buffer.buf;
     uint64_t *buf = malloc(input_buffer.len);
+    if (buf == NULL) {
+        PyBuffer_Release(&input_buffer);
+        return PyErr_NoMemory();
+    }
     for (i = 0, w = 0, c = 0; i < input_buffer.len / 8; ++i) {
-        assert(data[i] != RLE_HEADER);
+        if (data[i] == RLE_HEADER) {
+            /* 0xFE..FE is the run-block marker; a literal occurrence is
+               unrepresentable in the stream. rgb_to_atem output can never
+               contain it (byte 0 of every group is a >>4 of a 10-bit
+               alpha, max 0x3A) — but native-format stills from a profile
+               archive reach here unconverted, so this is operator data.
+               Raise instead of emitting a stream the switcher would
+               misparse. (Was assert(): compiled live, it aborted the
+               whole process on such input.) */
+            free(buf);
+            PyBuffer_Release(&input_buffer);
+            PyErr_SetString(PyExc_ValueError,
+                            "RLE input contains the reserved header word "
+                            "0xFEFEFEFEFEFEFEFE");
+            return NULL;
+        }
         if (i != 0 && data[i - 1] == data[i]) {
             ++c;
             if (i + 1 < input_buffer.len) {
@@ -227,20 +291,19 @@ method_rle_encode(PyObject *self, PyObject *args)
         buf[w++] = data[i];
         c = 0;
     }
-    if (c > 2 && input_buffer.len > 1) {
+    if (c > 2) {
         buf[w++] = RLE_HEADER;
         beputu64(&buf[w++], c);
         buf[w++] = data[i - 1];
-    } else if (c > 0 && input_buffer.len > 1) {
+    } else if (c > 0) {
         for (Py_ssize_t j = 0; j < c; ++j) {
             buf[w++] = data[i - 1];
         }
-    } else if (input_buffer.len == 1) {
-        buf[0] = data[0];
     }
 
     res = Py_BuildValue("y#", buf, w * 8);
     free(buf);
+    PyBuffer_Release(&input_buffer);
     return res;
 }
 
