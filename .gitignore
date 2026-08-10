@@ -7,3 +7,7 @@ staticfiles/
 db.sqlite3
 .pytest_cache/
 *.egg-info/
+
+# Frontend build
+node_modules/
+atem_control/static/vendor/webatem.css

@@ -1,0 +1,9 @@
+{
+  "name": "webatem-css",
+  "private": true,
+  "description": "Build-time only: compiles Tailwind + daisyUI into a single static stylesheet. Not used at runtime.",
+  "devDependencies": {
+    "tailwindcss": "3.4.16",
+    "daisyui": "4.12.24"
+  }
+}
