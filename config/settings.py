@@ -44,6 +44,14 @@ DEBUG = _env_bool('DEBUG', False)
 ALLOWED_HOSTS = [h.strip() for h in os.getenv('ALLOWED_HOSTS', '*').split(',') if h.strip()]
 CSRF_TRUSTED_ORIGINS = [o.strip() for o in os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',') if o.strip()]
 
+# WebSocket Origin checking is same-origin by default and deliberately does
+# NOT follow ALLOWED_HOSTS: the '*' above must never switch off the one
+# browser-side guard on the control socket (see config/websocket.py). Only
+# needed when a reverse proxy rewrites Host on the way to the app.
+WEBSOCKET_ALLOWED_ORIGINS = [
+    o.strip() for o in os.getenv('WEBSOCKET_ALLOWED_ORIGINS', '').split(',') if o.strip()
+]
+
 # No accounts, no login: this is an open LAN tool (like the hardware panel).
 # django.contrib.auth stays installed only because the app's initial
 # migration was born with a (since-removed) FK into it.

@@ -95,6 +95,12 @@ database and a generated secret key live in the `atem-data` volume). See
   network. If you must expose it further, put your reverse proxy's auth
   (basic auth, SSO) and TLS in front, and set
   `CSRF_TRUSTED_ORIGINS=https://your.host`.
+- **Web pages can't drive it cross-origin.** The control WebSocket only
+  accepts browser connections from the app's own pages (same-origin),
+  independent of `ALLOWED_HOSTS` — so a malicious website open in an
+  operator's browser can't reach the switchers through it. If your
+  reverse proxy rewrites the `Host` header, list the browser-facing
+  host in `WEBSOCKET_ALLOWED_ORIGINS`.
 - It talks raw UDP to switchers on port 9910 (the ATEM protocol itself has
   no authentication — that's the hardware, not this app), so the container
   needs to be on a network that can reach them.

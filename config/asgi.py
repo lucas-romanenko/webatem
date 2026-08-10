@@ -11,13 +11,18 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 django_asgi_app = get_asgi_application()
 
 from channels.routing import ProtocolTypeRouter, URLRouter  # noqa: E402
-from channels.security.websocket import AllowedHostsOriginValidator  # noqa: E402
+from django.conf import settings  # noqa: E402
 
 import atem_control.routing  # noqa: E402
+from config.websocket import SameOriginValidator  # noqa: E402
 
+# Not AllowedHostsOriginValidator: that reads ALLOWED_HOSTS, whose '*'
+# default would admit every Origin — a drive-by page in an operator's
+# browser could cut program. See config/websocket.py.
 application = ProtocolTypeRouter({
     'http': django_asgi_app,
-    'websocket': AllowedHostsOriginValidator(
-        URLRouter(atem_control.routing.websocket_urlpatterns)
+    'websocket': SameOriginValidator(
+        URLRouter(atem_control.routing.websocket_urlpatterns),
+        extra_origins=settings.WEBSOCKET_ALLOWED_ORIGINS,
     ),
 })
