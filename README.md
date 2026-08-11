@@ -149,7 +149,9 @@ Bare-metal instead of Docker: Python 3.12+, `pip install -r requirements.txt`,
 compile the C extension (`gcc -shared -fPIC -O2 -I$(python3 -c 'import
 sysconfig; print(sysconfig.get_paths()["include"])') pyatem/mediaconvertmodule.c
 -o pyatem/mediaconvert$(python3 -c 'import sysconfig;
-print(sysconfig.get_config_var("EXT_SUFFIX"))')`), then
+print(sysconfig.get_config_var("EXT_SUFFIX"))')`), build the stylesheet
+(`npm install && npm run build:css` — without it the app renders
+unstyled; Docker does this in its CSS build stage), then
 `python manage.py migrate && python manage.py runserver`.
 
 ## License
@@ -159,6 +161,11 @@ print(sysconfig.get_config_var("EXT_SUFFIX"))')`), then
   library](https://git.sr.ht/~martijnbraam/pyatem) and remains
   **LGPL-3.0-only** — see [pyatem/LICENSE](pyatem/LICENSE) and
   [pyatem/NOTICE.md](pyatem/NOTICE.md).
+- Bundled frontend assets (Alpine.js, Bootstrap Icons, Tailwind/daisyUI)
+  are MIT — notices in
+  [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
+
+Security posture and how to report vulnerabilities: [SECURITY.md](SECURITY.md).
 
 Not affiliated with or endorsed by Blackmagic Design. ATEM and HyperDeck are
 trademarks of Blackmagic Design Pty Ltd. Use against production hardware at
