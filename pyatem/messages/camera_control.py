@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """
 Camera control packets — broadcast SDI camera control messages routed
 through the ATEM. Each packet carries one parameter update (focus,

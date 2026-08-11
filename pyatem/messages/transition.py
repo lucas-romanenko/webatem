@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """
 Transition messages — settings (style + next-transition selection),
 per-style configuration (mix / dip / wipe / DVE / stinger), and live

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """Private state-helper primitives + full-state assembler.
 
 Canonical home for everything that used to live in the deleted

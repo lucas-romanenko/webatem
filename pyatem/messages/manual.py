@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """
 Manual / catch-all field — lets callers construct a fake "received"
 field with any 4-char code and arbitrary raw bytes. Used by tests and

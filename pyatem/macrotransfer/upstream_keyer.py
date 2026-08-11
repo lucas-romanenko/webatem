@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """Macro codec — USK ops (key type, on-air, fill/cut, luma, mask,
 fly enable, DVE position/size/border/shadow, mask edges, DVE & fly
 key rate, advanced chroma key, fly keyframes).

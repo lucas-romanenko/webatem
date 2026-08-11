@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """Macro codec — macro-flow ops (MacroSleep)."""
 
 from pyatem.macrotransfer._helpers import _u32le, _u32le_bytes

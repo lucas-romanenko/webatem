@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """Macro codec — Fairlight audio-mixer ops (strip fader/mix,
 master fader, EQ, compressor, limiter, expander, input gain,
 dynamics gain, headphones).

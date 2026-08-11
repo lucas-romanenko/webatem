@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """
 State / connection resolution helpers — accept an ATEM, ATEMConnection,
 or AtemProtocol and return the right thing for the caller's purpose

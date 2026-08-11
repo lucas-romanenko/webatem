@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """
 Streaming state messages — encoder bitrate config, target service config,
 live status, and runtime stats.

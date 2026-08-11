@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """
 pyatem — control Blackmagic ATEM switchers from Python.
 

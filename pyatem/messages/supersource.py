@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """
 SuperSource — multi-box compositor available on larger ATEMs (Production
 4k, Constellation, etc.). Up to 4 boxes per supersource, each with its

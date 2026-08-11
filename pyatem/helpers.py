@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """
 ATEM protocol helpers — rate parsing/formatting, transition-selection bitmask,
 keyframe enum lookup.

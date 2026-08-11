@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """
 Enum tables and format constants for the ATEM Software Control profile XML.
 

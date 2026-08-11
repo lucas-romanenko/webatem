@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """
 pyatem.profile — Read/write Blackmagic ATEM Software Control "Save Switcher
 State" XML profiles.

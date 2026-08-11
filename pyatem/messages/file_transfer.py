@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """
 File transfer messages — bulk download/upload of media-pool / macro store
 content. The wire protocol is FTSU (download request) → FTDa stream →

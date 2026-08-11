@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """
 Downstream keyer (DSK) messages — on-air toggle, auto transition, rate,
 fill / key sources, gain (clip / gain / invert / pre-multiply), mask

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """Macro file-transfer I/O — download from + upload to the ATEM's macro store.
 
 Two notable wire-format quirks distinguish the macro store from the

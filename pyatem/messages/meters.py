@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """
 Audio meter messages — broadcast realtime levels for legacy audio mixer
 and Fairlight (per-strip + master).

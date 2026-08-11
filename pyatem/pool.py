@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """
 Ref-counted singleton-per-IP pool of ``ATEMConnection`` instances.
 

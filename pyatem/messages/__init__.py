@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """
 ATEM wire-format messages — declarative DSL classes, one file per feature.
 

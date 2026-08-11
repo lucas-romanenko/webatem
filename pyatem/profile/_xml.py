@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """
 XML serialization helpers — format Python values into ATEM Software
 Control's attribute-string conventions, parse them back. Used by both

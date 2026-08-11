@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """Shared decode/encode primitives, source-id resolvers, and enum
 tables for the macrotransfer codec.
 

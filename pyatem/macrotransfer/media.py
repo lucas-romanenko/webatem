@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """Macro codec — media-player ops."""
 
 from pyatem.macrotransfer._helpers import _u16le, _u16le_bytes

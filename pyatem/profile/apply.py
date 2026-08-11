@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """
 Apply side — walk the parsed XML, dispatch to per-feature operations.
 

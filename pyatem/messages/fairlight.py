@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """
 Fairlight audio messages — master / strip / dynamics / EQ band / levels-arm.
 

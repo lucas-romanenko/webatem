@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """
 Wait for a pyatem connection to complete its initial state dump.
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """
 Color generators (1 and 2) — solid-colour video sources usable as USK fill,
 AUX, etc. Configured via hue / saturation / luma; ATEM stores them as fixed

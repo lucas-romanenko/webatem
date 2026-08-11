@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """
 Multiviewer messages — quadrant layout, per-window source routing, VU /
 safe-area overlay flags.

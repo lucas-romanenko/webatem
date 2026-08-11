@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """
 ATEM device info probe — read a few identity fields from a connection.
 

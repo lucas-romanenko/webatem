@@ -1,5 +1,6 @@
 # Copyright 2021 - 2022, Martijn Braam and the OpenAtem contributors
 # SPDX-License-Identifier: LGPL-3.0-only
+# Modified 2025 - 2026, Lucas Romanenko for WebATEM — see NOTICE.md
 import struct
 import pyatem.mediaconvert as mc
 

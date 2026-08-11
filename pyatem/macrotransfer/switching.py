@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """Macro codec — switching ops (bus, transition, ftb, aux, color
 generator, video mode).
 

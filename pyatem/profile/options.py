@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """
 Save / Apply / Result dataclasses for the profile package.
 

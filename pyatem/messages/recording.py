@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """
 Recording state messages — disk inventory, encoder settings, current
 recording status, and elapsed-time counter.

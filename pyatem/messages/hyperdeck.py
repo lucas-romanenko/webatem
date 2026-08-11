@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """HyperDeck binding messages — the ATEM's own HyperDeck control settings.
 
 The ATEM acts as a HyperDeck client: in Software Control's HyperDecks

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """Macro file-transfer + bytecode codec.
 
 This is the read + write side that closes the macro round-trip gap

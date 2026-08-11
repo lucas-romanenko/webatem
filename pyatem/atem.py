@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """
 pyatem.atem — primary user-facing interface to a Blackmagic ATEM switcher.
 

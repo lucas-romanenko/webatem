@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """Macro codec — HyperDeck binding ops (network address + switcher input).
 
 Reverse-engineered live 2026-06-09 by recording HyperDeck settings changes

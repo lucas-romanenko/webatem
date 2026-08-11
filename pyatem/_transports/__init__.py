@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """
 Alternate transports for ``AtemProtocol`` — USB (for the Mini line)
 and TCP (for the OpenSwitcher relay).

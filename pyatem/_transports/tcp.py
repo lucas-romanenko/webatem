@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """
 TCP transport — talks to an OpenSwitcher proxy that fronts one or more
 upstream ATEMs over TCP. AV Server's production deployments don't use

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """
 Tally messages — broadcast-only state from the ATEM listing program /
 preview status for each input.

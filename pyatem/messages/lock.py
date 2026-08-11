@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """
 Lock messages — request / release a datastore lock for bulk transfers.
 The ATEM grants exclusive access to a store via the lock protocol; the

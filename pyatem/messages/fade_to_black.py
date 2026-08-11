@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """
 Fade-to-black messages — trigger / configure / state / enable.
 

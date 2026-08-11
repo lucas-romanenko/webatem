@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """
 Macro messages — record / replay / sleep + state notifications.
 

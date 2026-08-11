@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """Macro codec — DSK ops (fill/cut input, rate, auto, on-air,
 clip, gain, mask enable, pre-multiply).
 """

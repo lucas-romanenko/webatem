@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """
 Media messages — media-pool slot management (capture / clear / metadata)
 plus media-player source loading.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """
 Upstream keyer (USK) — on-air toggle, type / fill / cut sources, mask
 crop, the four key-type-specific property blocks (luma, chroma /
