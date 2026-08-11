@@ -263,13 +263,13 @@ def test_execute_upload_macros_only_runs_apply_for_macro_only_ip(
         [],  # no image items
         skip_tally=True,
         macro_xml_path=xml_path,
-        macro_only_ips=['192.168.81.84'],
+        macro_only_ips=['192.168.1.13'],
     )
 
     # Exactly one per-IP call, for the macro-only IP, with no
     # slot_paths and the XML path forwarded.
     assert len(calls) == 1
-    assert calls[0]['ip'] == '192.168.81.84'
+    assert calls[0]['ip'] == '192.168.1.13'
     assert calls[0]['slot_paths'] == []
     assert calls[0]['macro_xml_path'] == xml_path
     # No image ItemResults to surface, no synthetic macro result added

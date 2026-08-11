@@ -97,7 +97,7 @@ def tmp_clip(tmp_path):
 
 
 def test_upload_clip_logs_in_anonymous_and_cwds_to_slot(fake_ftp, tmp_clip):
-    result = upload_clip('192.168.82.191', tmp_clip)
+    result = upload_clip('192.168.1.10', tmp_clip)
     assert isinstance(result, UploadResult)
     assert result.name == 'sample clip.mp4'
     assert result.size == os.path.getsize(tmp_clip)
@@ -114,7 +114,7 @@ def test_upload_clip_logs_in_anonymous_and_cwds_to_slot(fake_ftp, tmp_clip):
 
 
 def test_upload_clip_explicit_slot_skips_auto_detect(fake_ftp, tmp_clip):
-    upload_clip('192.168.82.191', tmp_clip, slot=2)
+    upload_clip('192.168.1.10', tmp_clip, slot=2)
     ftp = fake_ftp[0]
     # No nlst — we knew which slot we wanted.
     call_kinds = [c[0] for c in ftp.calls]
@@ -144,7 +144,7 @@ def test_upload_clip_falls_back_to_anonymous_user_on_login_perm(
 
     monkeypatch.setattr(upload_module.ftplib, 'FTP',
                         lambda host, timeout=None: _StrictFTP(host, timeout))
-    upload_clip('192.168.82.191', tmp_clip)
+    upload_clip('192.168.1.10', tmp_clip)
     # No assertion on instances here; just confirming no exception leaked.
 
 
@@ -164,7 +164,7 @@ def test_upload_clip_raises_when_no_slot_dir_at_root(fake_ftp, tmp_clip):
     up.ftplib.FTP = make_no_slots  # restored by fake_ftp fixture teardown
 
     with pytest.raises(OSError, match='no slot dir'):
-        upload_clip('192.168.82.191', tmp_clip)
+        upload_clip('192.168.1.10', tmp_clip)
 
 
 def test_upload_clip_auto_detects_named_volume(fake_ftp, tmp_clip):
@@ -179,7 +179,7 @@ def test_upload_clip_auto_detects_named_volume(fake_ftp, tmp_clip):
     import pyhyperdeck.upload as up
     up.ftplib.FTP = make_named  # restored by fake_ftp fixture teardown
 
-    result = upload_clip('192.168.82.192', tmp_clip)
+    result = upload_clip('192.168.1.11', tmp_clip)
     assert result.slot_dir == 'sd1'
     assert ('cwd', 'sd1') in fake_ftp[-1].calls
 
@@ -195,7 +195,7 @@ def test_upload_clip_named_volume_usb_only(fake_ftp, tmp_clip):
     import pyhyperdeck.upload as up
     up.ftplib.FTP = make_usb
 
-    result = upload_clip('192.168.82.192', tmp_clip)
+    result = upload_clip('192.168.1.11', tmp_clip)
     assert result.slot_dir == 'usb'
 
 
@@ -212,17 +212,17 @@ def test_upload_clip_ignores_system_dirs_when_no_volume(fake_ftp, tmp_clip):
     up.ftplib.FTP = make_system_only
 
     with pytest.raises(OSError, match='no slot dir'):
-        upload_clip('192.168.82.192', tmp_clip)
+        upload_clip('192.168.1.11', tmp_clip)
 
 
 def test_upload_clip_raises_file_not_found_for_missing_source(fake_ftp):
     with pytest.raises(FileNotFoundError):
-        upload_clip('192.168.82.191', '/nonexistent/path/to/clip.mp4')
+        upload_clip('192.168.1.10', '/nonexistent/path/to/clip.mp4')
 
 
 def test_upload_clip_invokes_progress_callback(fake_ftp, tmp_clip):
     progress: list = []
-    upload_clip('192.168.82.191', tmp_clip,
+    upload_clip('192.168.1.10', tmp_clip,
                 progress_callback=progress.append)
     # FakeFTP feeds callback two chunks — by the end the running total
     # equals the full file size.

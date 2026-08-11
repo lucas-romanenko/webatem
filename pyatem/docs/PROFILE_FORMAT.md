@@ -1009,7 +1009,7 @@ mapping.)
 
 ## Section selection
 
-The AV Server ships a Software Control–style section-selection dialog
+The application ships a Software Control–style section-selection dialog
 on top of `Profile.from_atem` (save) and `Profile.apply` (load). The
 underlying API:
 
@@ -1050,9 +1050,9 @@ underlying API:
   flag is True. All flags default True — the no-args
   ``Profile.from_atem(atem)`` call still produces a byte-identical
   full-fidelity profile on the reference XML.
-- `av_server.atem_control.profile.dialog.describe_save_sections(atem)` /
+- `atem_control.profile.dialog.describe_save_sections(atem)` /
   `describe_load_sections(profile)` — return the JSON section
-  descriptor the AV Server save/load modal renders. This lives in the
+  descriptor the save/load modal renders. This lives in the
   application rather than pyatem itself — the descriptor shape is UI
   scaffolding (``group``, ``me_tab``, ``checked``, ``supported``,
   ``reason``), not part of the save/restore feature. Sections are a flat list; each
@@ -1085,9 +1085,9 @@ underlying API:
 
   The descriptor's section ``id`` values are stable: they map
   directly to the keys ``build_save_options`` (in
-  ``av_server/atem_control/profile/export.py``) and
+  ``atem_control/profile/export.py``) and
   ``_build_apply_options`` (in
-  ``av_server/atem_control/profile/views.py``) read out of the
+  ``atem_control/profile/views.py``) read out of the
   dialog's selection map.
 - `pyatem.profile.download_media_pool_images(atem)` — captures every
   used media-pool slot as a PNG via the still-store file-transfer

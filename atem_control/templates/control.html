@@ -38,7 +38,7 @@
         
 {% include 'control/_header.html' %}
 
-        <!-- M/E selector (Stage 4A) — only rendered on multi-M/E units, so
+        <!-- M/E selector — only rendered on multi-M/E units, so
              single-M/E switchers look exactly as before. Buttons switch
              which M/E the per-M/E surfaces (buses, transition, USKs, FtB)
              render and control; background M/Es stay live in state.mes. -->
@@ -1204,7 +1204,7 @@
                                       : profileBusyMessage"></span>
                         <!-- While a save is capturing media-pool images
                              (profileBusy + a live capture session), Cancel
-                             aborts the capture (L10) instead of being inert.
+                             aborts the capture instead of being inert.
                              Otherwise it closes the dialog. -->
                         <button class="btn btn-ghost"
                                 x-show="!(profileBusy && $store.atem.profileCaptureSession

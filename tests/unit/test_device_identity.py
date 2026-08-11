@@ -20,9 +20,9 @@ def _pad(s, size):
 
 CAPTURED = (
     b'7665f2ed6f4042e6bbcbbe17ef0143e7'
-    + _pad('192.168.81.85', 16)
-    + _pad('ATEM-TEST-2-AV-OFFICE.local', 64)
-    + _pad('ATEM TEST 2 - AV OFFICE', 64)
+    + _pad('192.168.1.12', 16)
+    + _pad('ATEM-TEST-2.local', 64)
+    + _pad('ATEM TEST 2', 64)
 )
 
 
@@ -33,9 +33,9 @@ def test_payload_shape():
 def test_parse_captured_payload():
     field = DeviceIdentityField(CAPTURED)
     assert field.device_id == '7665f2ed6f4042e6bbcbbe17ef0143e7'
-    assert field.ip == '192.168.81.85'
-    assert field.hostname == 'ATEM-TEST-2-AV-OFFICE.local'
-    assert field.name == 'ATEM TEST 2 - AV OFFICE'
+    assert field.ip == '192.168.1.12'
+    assert field.hostname == 'ATEM-TEST-2.local'
+    assert field.name == 'ATEM TEST 2'
 
 
 def test_recv_auto_registered():
@@ -44,7 +44,7 @@ def test_recv_auto_registered():
 
 def test_device_name_reader():
     mx = {'device-identity': DeviceIdentityField(CAPTURED)}
-    assert device_name(mx) == 'ATEM TEST 2 - AV OFFICE'
+    assert device_name(mx) == 'ATEM TEST 2'
 
 
 def test_device_name_absent_falls_back_to_default():

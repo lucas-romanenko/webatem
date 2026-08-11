@@ -78,7 +78,7 @@ PUMP_INTERVAL = 0.01
 # (5) large reliable packets in <1ms on one ATEM packet; the switcher drops
 # the tail of that microburst. Outbound retransmit-request handling now
 # recovers such drops (the ATEM requests them, ``_retransmit_from`` in
-# transport.py serves them go-back-N — KI #24, 2026-06-12), but pacing is
+# transport.py serves them go-back-N — added 2026-06-12), but pacing is
 # cheaper: it avoids the drop and the recovery round-trip in the first place.
 # One packet per drain (normal live control — a slider tick, a cut) skips the
 # spacing entirely, so realtime control latency is unchanged.
@@ -510,7 +510,7 @@ class ATEMConnection:
                     # again and every send vanishes. Without this check the
                     # worker parked forever on the empty queue with
                     # is_connected still True — a zombie lane the pool kept
-                    # serving (SH-3, session-hygiene audit 2026-07-06).
+                    # serving (session-hygiene audit, 2026-07-06).
                     # Raising routes through the unexpected-exit handler:
                     # goodbye + on_died -> pool eviction -> callers reconnect.
                     raise RuntimeError(
@@ -708,7 +708,7 @@ class ATEMConnection:
         except Exception:
             pass
         # Free the SocketQueue's socketpair FDs too — they were GC-only,
-        # which pinned 2 FDs per leaked protocol (L4, 2026-07-06).
+        # which pinned 2 FDs per leaked protocol (2026-07-06).
         try:
             self._protocol.transport.thread_queue.close()
         except Exception:

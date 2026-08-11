@@ -272,9 +272,10 @@ def test_build_full_state_characterization_snapshot():
 # Multi-M/E (REFACTOR Stage 4A) — all M/Es populate from their own state
 # =============================================================================
 #
-# No multi-M/E hardware is available locally (.85 is 1 M/E), so this fake
-# 2-M/E topology IS the primary gate for the multi-M/E backend until the
-# Romania deployment can validate against real hardware. The fake extends
+# No multi-M/E hardware is available locally (the production ATEM is a
+# 1 M/E unit), so this fake 2-M/E topology IS the primary gate for the
+# multi-M/E backend until a multi-M/E deployment can validate against
+# real hardware. The fake extends
 # the single-M/E topology: ME0 keeps its values; ME1 gets DISTINCT values
 # on every per-M/E surface (program/preview, transition style + selection
 # + rates + per-style detail, USKs, FtB) so cross-M/E bleed-through shows
@@ -462,7 +463,7 @@ def test_multi_me_values_are_distinct_and_correctly_placed():
 
 def test_single_me_still_yields_one_entry():
     """The single-M/E fake (no _top, no _MeC) must keep producing a
-    1-element mes array — the .85 no-regression contract."""
+    1-element mes array — the single-M/E no-regression contract."""
     state = _build_state_normalized()
     assert len(state['mes']) == 1
     assert len(state['mes'][0]['usk']['data']) == 4

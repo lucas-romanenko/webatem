@@ -147,7 +147,7 @@ class ApplyOptions(_PerMeOptions):
     # profile XML's <MediaPool><Stills> entries reference image files
     # (and the caller provides those bytes via the load endpoint's
     # multipart upload), the load view hands them to the application
-    # uploader (``av_server.content_change.uploader.execute_upload``)
+    # uploader (``atem_control.uploader.execute_upload``)
     # after applying the rest of the config. Defaults True so
     # cross-studio profile-clones move the media pool too.
     restore_media_pool_images: bool = True
@@ -199,7 +199,7 @@ class SaveOptions(_PerMeOptions):
     corresponding ``<...>`` element from the output.
 
     The save dialog drives this from the operator's checkbox state;
-    see ``av_server/atem_control/profile/views.py:profile_save_dialog_init``
+    see ``atem_control/profile/views.py:profile_save_dialog_init``
     for the section descriptor that the dialog renders.
     """
 

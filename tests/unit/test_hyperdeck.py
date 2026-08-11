@@ -53,9 +53,9 @@ def _rxms_raw(slot, ip, inp):
 
 
 def test_rxms_reader_configured():
-    node = HyperdeckSettingsField(_rxms_raw(0, '192.168.82.192', 4))
+    node = HyperdeckSettingsField(_rxms_raw(0, '192.168.1.11', 4))
     hd = hyperdeck_settings({'hyperdeck-settings': {0: node}}, 0)
-    assert hd == {'slot': 0, 'network_address': '192.168.82.192',
+    assert hd == {'slot': 0, 'network_address': '192.168.1.11',
                   'input': 4, 'configured': True}
 
 

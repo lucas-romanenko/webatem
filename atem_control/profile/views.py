@@ -221,8 +221,8 @@ def profile_save(request):
 
 @require_POST
 def profile_save_cancel(request):
-    """L10 (2026-07-07): cancel an in-flight profile save's media-pool
-    capture phase. The save runs in a separate long-lived POST; this marks
+    """Cancel an in-flight profile save's media-pool capture phase
+    (2026-07-07). The save runs in a separate long-lived POST; this marks
     its session (X-Capture-Session, echoed in the JSON body as
     ``session_id``) for cancellation so the capture loop stops at the next
     slot boundary. Advertised in the dialog since forever but never wired —

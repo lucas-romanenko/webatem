@@ -78,8 +78,8 @@ class FadeToBlackEnableCommand(Send):
       Disable packet: ``[00 <mE> 00 xx]``
 
     Ambiguity note: a multi-ME disable to ME2 produces ``[00 01 00]``,
-    indistinguishable from an ME1 enable. AV Server only targets ME1
-    so this isn't a practical concern.
+    indistinguishable from an ME1 enable. This application only
+    targets ME1 so this isn't a practical concern.
     """
     CODE = 'FEna'
     SIZE = 4
@@ -157,7 +157,7 @@ class FadeToBlackEnabledField(Recv):
     Decoding heuristic (reverse-engineered): bytes 0-1 of ``[00 01 ...]``
     are read as "enabled", anything else as "disabled". Unambiguous on
     single-ME switchers; on multi-ME a disable targeting ME2 looks like
-    an ME1 enable. AV Server only uses ME1 so this is safe.
+    an ME1 enable. This application only uses ME1 so this is safe.
 
     :ivar enabled: FtB is enabled for the targeted M/E
     :ivar disabled: logical negation of ``enabled``

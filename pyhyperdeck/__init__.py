@@ -14,7 +14,7 @@ Public surface::
     from pyhyperdeck import Hyperdeck, upload_clip
 
     # Control:
-    with Hyperdeck('192.168.82.191') as hd:
+    with Hyperdeck('192.168.1.10') as hd:
         info = hd.device_info()        # dict
         clips = hd.disk_list()         # List[Clip]
         hd.stop()
@@ -23,7 +23,7 @@ Public surface::
         hd.play(loop=True, single_clip=True)
 
     # File upload:
-    result = upload_clip('192.168.82.191', '/path/to/clip.mp4')
+    result = upload_clip('192.168.1.10', '/path/to/clip.mp4')
     print(result.throughput_mb_s)
 """
 

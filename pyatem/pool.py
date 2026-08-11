@@ -13,7 +13,7 @@ quick page transitions a window to reuse the existing socket.
 IMPORTANT — single-Uvicorn-worker invariant: the instance dict is
 process-local. Multiple Uvicorn workers would each get independent copies,
 break reference counting and create duplicate ATEM connections. See
-CLAUDE.md in the app repo for the rationale.
+the "Single worker, by design" note in the repository README.
 
 Threading contract
 ==================
@@ -225,7 +225,7 @@ class ATEMInstanceManager:
             if instance['ref_count'] <= 0:
                 # Double release. Decrementing below zero would arm a
                 # second grace timer and could steal a ref a concurrent
-                # holder just took through the 0-window (L2, 2026-07-06).
+                # holder just took through the 0-window (2026-07-06).
                 logger.error(
                     f"Double release for {ip_address} "
                     f"(ref_count={instance['ref_count']}) — ignoring")
@@ -385,7 +385,7 @@ def acquire_connection(ip_address: str):
 
     This is the only way application code (outside pyatem's own internals)
     should get a connection. Opening ``AtemProtocol(ip)`` directly is reserved
-    for the application uploader (``av_server.content_change.uploader``), which
+    for the application uploader (``atem_control.uploader``), which
     runs in a SEPARATE process and needs ``aggressive_drain=True`` transport
     tuning the pool can't provide. (The ``MediaPoolWatcher`` used to open a
     second socket; since 2026-07-02 it rides THIS pooled connection via

@@ -21,6 +21,13 @@ class ActivityLog:
 
 def record_activity(*, feature='', device='', action='', user=None,
                     target='', target_name='', summary='', **extra):
+    """Write one operator-activity line to the application log.
+
+    ``user`` is vestigial — kept for call-site compatibility with the
+    original monorepo's audit log. This app has no authentication, so
+    callers always pass ``None`` and entries are logged without a user
+    (the ``-`` placeholder).
+    """
     username = getattr(user, 'username', None) or str(user or '-')
     _log.info("activity user=%s action=%s target=%s: %s",
               username, action, target_name or target, summary)

@@ -2,8 +2,9 @@
 stop/loop + live status), called by the control-page HyperDeck modal.
 
 Decks are addressed by IP (the deck's own 9993 address, as configured in the
-HyperDecks settings panel / ATEM binding). Auth mirrors the ATEM control page:
-authenticated + ``can_access_atem``.
+HyperDecks settings panel / ATEM binding). No authentication — like the rest
+of the app this is an open LAN tool by design, with the same trust model as
+the ATEM control page.
 """
 import json
 import logging

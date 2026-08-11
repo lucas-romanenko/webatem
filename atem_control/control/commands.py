@@ -60,8 +60,8 @@ HandlerResult = Tuple[bool, Optional[str]]
 #
 # Per-M/E verbs (program/preview/cut/auto, transition, USK, FtB) thread
 # ``me=d.get('me', 0)`` — the frontend stamps every payload with the active
-# M/E index (Stage 4A). Absent means M/E 1, so pre-4A payloads behave
-# unchanged. Global verbs (DSK, aux, color gen, media, macros, fairlight,
+# M/E index. Absent means M/E 1, so older payloads without the stamp
+# behave unchanged. Global verbs (DSK, aux, color gen, media, macros, fairlight,
 # hyperdeck, video mode, input labels) ignore the stamp.
 # ---------------------------------------------------------------------------
 
@@ -432,7 +432,7 @@ ATEM_COMMAND_MAP = {
         q=(None if d.get('q') is None else float(d['q'])),
         frequency_range=d.get('range'),
     ),
-    # F4: master-bus per-band EQ → CMBP (no source/channel), not a per-strip
+    # Master-bus per-band EQ → CMBP (no source/channel), not a per-strip
     # CEBP at the phantom source 0.
     'set_audio_master_eq_band': lambda c, d: ops.set_fairlight_master_eq_band(
         c,

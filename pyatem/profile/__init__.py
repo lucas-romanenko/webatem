@@ -55,7 +55,7 @@ maintenance):
     apply.py     — ``_apply_*`` (walk XML → emit wire commands)
 
 The section-selection dialog descriptors (which used to live in
-``dialog.py``) moved to ``av_server.atem_control.profile.dialog`` —
+``dialog.py``) moved to ``atem_control.profile.dialog`` —
 they're UI scaffolding for the save/load modal, not part of the
 save/restore feature.
 """

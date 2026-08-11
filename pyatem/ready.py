@@ -67,7 +67,7 @@ def wait_ready(
 
     # The handler must come off on EVERY exit path — wait_ready runs per
     # connect attempt, and a leaked closure per attempt accumulates on
-    # long-lived protocols (L1, session-hygiene audit 2026-07-06).
+    # long-lived protocols (session-hygiene audit, 2026-07-06).
     try:
         deadline = time.time() + timeout
         while time.time() < deadline:

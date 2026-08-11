@@ -119,7 +119,7 @@ _KNOWN_OPS = {
     0x002F: ('KeyMaskEnable',         *_op(_usk, 'key_mask_enable')),
     # DVE / fly key — sizes, positions, mask. Op codes empirically discovered
     # 2026-04-29 by recording single-field wire commands into slot 99 on a
-    # live ATEM Constellation HD; see av_server/tools/macro_opcode_discovery.py.
+    # live ATEM Constellation HD.
     0x0035: ('DVEKeyMaskEnable',      *_op(_usk, 'dve_mask_enable')),
     0x0036: ('DVEKeyMaskTop',         *_op(_usk, 'dve_mask_top')),
     0x0037: ('DVEKeyMaskBottom',      *_op(_usk, 'dve_mask_bottom')),
@@ -143,7 +143,8 @@ _KNOWN_OPS = {
     # Media player
     0x00DA: ('MediaPlayerSourceStillIndex', *_op(_media, 'media_player_still_index')),
     0x00E1: ('MediaPlayerSourceStill',      *_op(_media, 'media_player_still_only')),
-    # Fairlight audio mixer (verified live-recorded on .85 2026-04-30:
+    # Fairlight audio mixer (verified live-recorded on a production ATEM
+    # 2026-04-30:
     # CFSP→0x014b strip volume, CFSP→0x014a strip state, CFMP→0x016b
     # master volume).
     0x014A: ('FairlightAudioMixerInputSourceMixType',     *_op(_fl, 'fairlight_strip_mix_type')),

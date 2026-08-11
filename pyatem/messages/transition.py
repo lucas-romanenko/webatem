@@ -303,7 +303,7 @@ class TransitionSettingsField(Recv):
     """
     CODE = 'TrSS'
     PRETTY = 'transition-settings'
-    # Stage 4A (control-topology refactor): keyed per M/E. The wire format
+    # Control-topology refactor: keyed per M/E. The wire format
     # always carried the M/E index at byte 0; without a KEY_FORMAT the
     # packet was stored bare and the last-arriving M/E overwrote the
     # others — invisible on 1-M/E units, wrong on Constellations.
@@ -686,7 +686,7 @@ def set_next_transition_layers(conn, *, background=False,
 
 
 def transition_style(mx, me=0):
-    # transition-settings is keyed per M/E since Stage 4A (TrSS carries
+    # transition-settings is keyed per M/E (TrSS carries
     # the M/E index at byte 0; see TransitionSettingsField.KEY_FORMAT).
     return safe_int(_kv(mx, 'transition-settings', me, attr='style'), 0)
 
@@ -889,7 +889,7 @@ def set_dve_clip(conn, clip, me=0):
     """DVE-tx clip wire is ×10 of percent — same family as USK luma /
     stinger clip/gain. Bucket B because of the clamp 0..1000.
     Earlier code used percent_to_thousandths (×100) and had frontend
-    writes landing 100× too low; verified empirically Bug D 2026-05-04."""
+    writes landing 100× too low; verified empirically 2026-05-04."""
     conn.send(DveSettingsCommand(index=me, key_clip=percent_to_tenths(clip)))
 
 
@@ -943,7 +943,7 @@ def dve_enable_key(mx, me=0):
 def dve_clip(mx, me=0):
     """Wire is ×10 of percent — same family as USK luma / stinger clip/gain.
     Earlier code used percent_from_thousandths (÷100), which had frontend
-    showing 10× too low; verified empirically Bug D 2026-05-04."""
+    showing 10× too low; verified empirically 2026-05-04."""
     return value_from_tenths(_kv(mx, 'transition-dve', me, attr='key_clip'), 0.0)
 
 
@@ -1000,10 +1000,9 @@ def set_stinger_rate(conn, rate_str, me=0):
 
 def set_stinger_source(conn, source, me=0):
     """``source`` is a media-player SLOT INDEX (u8, 1..4 on the wire) —
-    NOT a frontend source ID. IQ-5 (open): the corresponding reader
+    NOT a frontend source ID. Open question: the corresponding reader
     default returns 3010 (MP1's source ID), which lives in a different
-    ID space; never feed a reader-defaulted value back into this op.
-    See CLAUDE.md Investigation Queue IQ-5."""
+    ID space; never feed a reader-defaulted value back into this op."""
     conn.send(StingerSettingsCommand(index=me, mediaplayer=int(source)))
 
 

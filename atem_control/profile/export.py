@@ -39,7 +39,7 @@ from atem_control.profile.dialog import (
 logger = logging.getLogger(__name__)
 
 
-# L10 (2026-07-07): cross-request cancel registry for the media-pool
+# Cross-request cancel registry (2026-07-07) for the media-pool
 # capture phase. The save runs in one long-lived POST; the cancel arrives
 # on a SEPARATE POST (/profile/save/cancel/) carrying the same
 # X-Capture-Session id. We record cancelled session ids here; the save's
@@ -345,7 +345,7 @@ def export_profile_zip(
         # later save (and so the registry doesn't accumulate).
         _clear_capture_cancel(cancel_session)
 
-    # Filename name component: prefer the AV Server's database name for
+    # Filename name component: prefer the application's database name for
     # the ATEM (matches what operators see in the equipment list); fall
     # back to the device's self-reported model when the equipment row
     # is missing so a save never fails on a misconfigured equipment DB.

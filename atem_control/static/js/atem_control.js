@@ -216,7 +216,7 @@ window.AudioMeters = {
 
     // Drop every cell's sample floor (and release the peak holds) so the
     // decay loop runs the bars down to silence. Called when the meter
-    // stream dies — WebSocket close or in-page ATEM switch (SH-13b).
+    // stream dies — WebSocket close or in-page ATEM switch.
     // Without this the bars freeze at the last received level and read
     // as a live signal.
     reset() {
@@ -1255,7 +1255,7 @@ window.ATEMControl = {
     },
 
     // Simplified command sender. Every payload is stamped with the active
-    // M/E index (Stage 4A) — the dispatch table threads it into the
+    // M/E index — the dispatch table threads it into the
     // per-M/E pyatem ops (me defaults to 0 server-side when absent);
     // global verbs ignore it. Explicit params.me wins over the stamp.
     cmd(command, params = {}) {
@@ -1471,7 +1471,7 @@ window.ATEMControl = {
             
             // Drop any stale ``atem_initial_state`` left over from the
             // Connect page. We used to apply it here as a "render
-            // instantly" optimization, but with the Issue #15
+            // instantly" optimization, but with the
             // ``stateReady`` gate that's now actively harmful: applying
             // localStorage state flips stateReady true BEFORE this
             // page's WebSocket has had a chance to connect, which
@@ -1563,7 +1563,7 @@ window.ATEMControl = {
             alpineInstance.mediaPool.locked = false;
             alpineInstance.mediaPool.forIP = ipAddress;
 
-            // SH-13: the HyperDeck transport modal (and its poll timers)
+            // The HyperDeck transport modal (and its poll timers)
             // belongs to the OLD ATEM's decks — left alone, its transport
             // buttons keep driving the previous ATEM's deck. close() stops
             // the timers + hides the modal; also forget the deck list so a
@@ -1572,30 +1572,30 @@ window.ATEMControl = {
             alpineInstance.hyperdeck.deckIp = null;
             alpineInstance.hyperdeck.decks = [];
 
-            // SH-27: per-slot "Uploading…" overlays (and their safety
+            // Per-slot "Uploading…" overlays (and their safety
             // timers) belong to the old ATEM's pool.
             for (const slot of alpineInstance.pendingUploads.slice()) {
                 alpineInstance._clearUploading(slot);
             }
 
-            // SH-13b: the meter subscription died with the old consumer —
+            // The meter subscription died with the old consumer —
             // clear the flag so the audio panel's x-effect re-subscribes
             // on the new connection, and run the painted bars down to
             // silence instead of freezing at the last received level.
             alpineInstance.audioMetersSubscribed = false;
             window.AudioMeters.reset();
 
-            // L22: cancel every in-flight realtime-slider send + drag/mute
+            // Cancel every in-flight realtime-slider send + drag/mute
             // guard — they reference the old ATEM's values.
             window.ATEMControl.RealtimeSlider.cancelAll();
 
-            // L25: a profile dialog opened against the old ATEM must not
+            // A profile dialog opened against the old ATEM must not
             // apply its selections to the new one.
             if (window.AtemProfile && typeof window.AtemProfile.forceClose === 'function') {
                 window.AtemProfile.forceClose();
             }
 
-            // SH-28: gate the control surface behind the loading overlay
+            // Gate the control surface behind the loading overlay
             // until the NEW ATEM's first atem_state arrives — otherwise the
             // old ATEM's full surface renders as the new one's. Only on an
             // in-page IP CHANGE: stateReady deliberately persists across
@@ -1684,13 +1684,13 @@ window.ATEMControl = {
                 }
                 this.stopAllRateCountdowns();
 
-                // L22: cancel EVERY in-flight realtime-slider send and
+                // Cancel EVERY in-flight realtime-slider send and
                 // drag/mute guard (was: just the selected color generator's
                 // three paths) — a dead socket can't deliver the echo the
                 // mute windows are waiting for.
                 window.ATEMControl.RealtimeSlider.cancelAll();
 
-                // SH-13b: the server-side meter subscription died with the
+                // The server-side meter subscription died with the
                 // socket. Clear the client flag so the audio panel's
                 // x-effect re-subscribes once reconnected, and decay the
                 // painted bars to silence — a frozen last-received level
@@ -2491,7 +2491,7 @@ const USK_SLIDER_DESCRIPTORS = [
     { name: 'USKChromaBlue',              field: 'chroma_blue',               verb: 'set_usk_chroma_blue',               payloadKey: 'blue',             step: 0.001 },
 ];
 
-// DSK-indexed sliders (Stage 3B — the settings DSK sections render via
+// DSK-indexed sliders (the settings DSK sections render via
 // x-for off topology.dsks). dragRegistry path: `atem:dsk.${dskIndex}.<field>`;
 // state target: state.dsks[dskIndex].<field>; wire payload:
 // { dsk: dskIndex, <payloadKey>: value }. Same DSK clip/gain wire scale
@@ -2507,8 +2507,8 @@ const DSK_SLIDER_DESCRIPTORS = [
 // optimistic write, still send". `setter: false` rows never had a
 // fire-and-forget set<Name>() (stinger / DVE-tx are slider-only), so none
 // is generated. Stinger and DVE-tx share the USK-luma wire scale (x10 of
-// percent); DVE-tx was fixed in Bug D commit 1 (7da176c).
-// ``path`` is a function of the store since Stage 4A — these transition
+// percent); DVE-tx historically used the wrong scale and was corrected.
+// ``path`` is a function of the store — these transition
 // params are per-M/E, so the registry key embeds the active M/E index.
 const GLOBAL_SLIDER_DESCRIPTORS = [
     { name: 'StingerClip', field: 'clip', verb: 'set_stinger_clip', payloadKey: 'clip', step: 0.1, setter: false,
@@ -2528,7 +2528,7 @@ function buildSliderHandlers() {
     const handlers = {};
 
     for (const d of USK_SLIDER_DESCRIPTORS) {
-        // M/E-indexed registry path (Stage 4A) so switching M/Es can't
+        // M/E-indexed registry path so switching M/Es can't
         // collide echo guards across M/Es. Must stay in sync with the
         // guard-side strings in updateState.
         const path = (store, i) => `atem:me.${store.activeMe}.usk.${i}.${d.field}`;
@@ -2656,11 +2656,11 @@ document.addEventListener('alpine:init', () => {
         // the initial default values gate their x-show on
         // ``connected && stateReady`` instead of just ``connected``. This
         // eliminates the visible flash when the first real state arrives
-        // and bindings update wholesale (Issue #15).
+        // and bindings update wholesale.
         stateReady: false,
         // Which M/E this page renders. All per-M/E reads route through
-        // state.mes[activeMe] (Stage 3C); the command send path stamps
-        // every payload with it (Stage 4A — see ATEMControl.cmd), and the
+        // state.mes[activeMe]; the command send path stamps
+        // every payload with it (see ATEMControl.cmd), and the
         // dragRegistry paths embed it. Switch via setActiveMe(), never by
         // assigning directly — the rate inputs need a resync on switch.
         activeMe: 0,
@@ -2806,7 +2806,7 @@ document.addEventListener('alpine:init', () => {
         },
 
         _clearUploading(slotIndex) {
-            // L24: retire the slot's safety timer with the overlay —
+            // Retire the slot's safety timer with the overlay —
             // otherwise a previous upload's timer fires 120 s later and
             // kills the overlay of a rapid re-upload to the same slot.
             const t = this._uploadSafetyTimers[slotIndex];
@@ -2818,7 +2818,7 @@ document.addEventListener('alpine:init', () => {
             if (i >= 0) this.pendingUploads.splice(i, 1);
         },
 
-        // Per-slot upload safety-timer handles (L24). Plain non-reactive
+        // Per-slot upload safety-timer handles. Plain non-reactive
         // property — nothing binds to it; only _armUploadSafetyTimer /
         // _clearUploading touch it.
         _uploadSafetyTimers: {},
@@ -3012,11 +3012,11 @@ document.addEventListener('alpine:init', () => {
 
         // ATEM state - reactive with DVE support
         state: {
-            // Per-M/E state lives under mes[me] (Stage 3C). One entry per
-            // M/E; every M/E is populated since the Stage 4A multi-M/E
+            // Per-M/E state lives under mes[me]. One entry per
+            // M/E; every M/E is populated since the multi-M/E
             // flip. Must exist in the initial state so the updateState
             // merge (which only copies already-defined keys) picks up
-            // mes (Guardrail 7). The entry's sub-shapes are the pre-3C
+            // mes. The entry's sub-shapes are the earlier
             // flat program/preview/usk/ftb/transition defaults, unchanged.
             mes: [{
             program: null,
@@ -3123,9 +3123,9 @@ document.addEventListener('alpine:init', () => {
                 }
             },
             }],
-            // One entry per DSK (Stage 3B dsk → dsks[] restructure). Must
+            // One entry per DSK (dsk → dsks[] restructure). Must
             // exist in the initial state so the updateState merge (which
-            // only copies already-defined keys) picks up dsks (Guardrail 7).
+            // only copies already-defined keys) picks up dsks.
             // Single default entry = the pre-restructure single-DSK shape;
             // replaced by the real per-DSK array on first snapshot.
             dsks: [
@@ -3163,7 +3163,7 @@ document.addEventListener('alpine:init', () => {
             // by the real 10-slot list (build_full_state) on first snapshot.
             hyperdecks: [],
             // Must exist in the initial state so the updateState merge picks
-            // up topology (the Stage 3A USK x-for renders zero sections
+            // up topology (the USK x-for renders zero sections
             // without it). Shape mirrors _build_topology's empty result;
             // all-zero counts mean the dynamic-count surfaces render nothing
             // until the real capability counts arrive on first snapshot.
@@ -3635,7 +3635,7 @@ document.addEventListener('alpine:init', () => {
         },
 
         // DSK Control Methods — first arg is the 0-based DSK index
-        // (Stage 3B: the settings DSK sections render via x-for off
+        // (the settings DSK sections render via x-for off
         // topology.dsks).
         setDSKFillSource(dsk, source) {
             this.send('set_dsk_fill_source', { dsk: dsk, source: parseInt(source) });
@@ -3981,8 +3981,8 @@ document.addEventListener('alpine:init', () => {
             // up Alpine bindings on the FIRST update after page load —
             // dependents reading ``$store.atem.state.mes[activeMe].usk
             // .data[0].chroma_foreground`` would stay on the initial default
-            // values until any user interaction triggered a re-render
-            // (Issue #15). Diagnostic confirmed the data DID land in the
+            // values until any user interaction triggered a re-render.
+            // Diagnostic confirmed the data DID land in the
             // store; the bindings just weren't seeing the change.
             //
             // Reassigning ``state`` itself fires Alpine's outer-proxy
@@ -4231,7 +4231,7 @@ document.addEventListener('alpine:init', () => {
             }
         },
 
-        // Switch the rendered/controlled M/E (Stage 4A). Everything that
+        // Switch the rendered/controlled M/E. Everything that
         // reads mes[activeMe] re-scopes reactively; sends pick up the new
         // index via the cmd() payload stamp; rate inputs resync here
         // instead of waiting for the next poll.
@@ -4813,8 +4813,8 @@ document.addEventListener('alpine:init', () => {
 
         // Audio meter subscription — tab-gated. The Fairlight meter stream
         // is ~375 msg/s sustained on a 14-strip mixer, which saturates the
-        // WebSocket write buffer and causes the atem_state lag tracked as
-        // Issue #13. We only subscribe while the operator has the audio
+        // WebSocket write buffer and causes multi-second atem_state
+        // lag. We only subscribe while the operator has the audio
         // panel open AND the browser tab is visible. The template wires
         // these via x-effect on audioPanelOpen and visibilitychange.
         audioMetersSubscribed: false,

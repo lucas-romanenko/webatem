@@ -174,10 +174,9 @@ def capture_still(conn):
     """Capture the current Program output into a new media pool slot.
 
     The ATEM allocates the slot itself; the caller observes the new slot
-    via ``mediaplayer-file-info`` mixerstate events. The full capture
-    pipeline (Phase 1/2/3 wait + raw download + PNG encode) lives in the
-    application at ``av_server.atem_control.still_capture``; this op is
-    just the wire send."""
+    via ``mediaplayer-file-info`` mixerstate events. A full capture
+    pipeline (slot-settle wait + raw download + PNG encode) is an
+    application-layer concern; this op is just the wire send."""
     conn.send(CaptureStillCommand())
 
 

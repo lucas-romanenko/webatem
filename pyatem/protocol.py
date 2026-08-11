@@ -155,7 +155,7 @@ class AtemProtocol:
                 # transfer_requested made the first post-reconnect transfer
                 # queue behind a corpse for a full caller timeout, and
                 # stale locks[] skipped the PLCK the new session needs
-                # (SH-16, session-hygiene audit 2026-07-06).
+                # (session-hygiene audit, 2026-07-06).
                 self._reset_transfer_lane()
             self.connected = False
             return
@@ -181,7 +181,7 @@ class AtemProtocol:
             # nothing: the session stayed ESTABLISHED with a gutted
             # mixerstate the ATEM never re-dumps. Say goodbye and
             # re-handshake so a fresh full state dump arrives
-            # (L3, session-hygiene audit 2026-07-06).
+            # (session-hygiene audit, 2026-07-06).
             self.log.error(
                 'Protocol corruption — forcing a clean session reconnect')
             self._raise('disconnected')
@@ -219,7 +219,7 @@ class AtemProtocol:
         # live dict raced that off() into "dictionary changed size during
         # iteration", aborting save_field_data BETWEEN FTDC's queue-pop and
         # _transfer_trigger — a silently stranded media-store lock on the
-        # shared session (SH-4, session-hygiene audit 2026-07-06). A
+        # shared session (session-hygiene audit, 2026-07-06). A
         # handler exception must not poison the packet loop either.
         handlers = self.callbacks.get(event)
         if not handlers:
@@ -300,7 +300,7 @@ class AtemProtocol:
             if self.transfer is None:
                 # Straggler chunk after abort_transfers / lane reset — the
                 # packet is already ACKed, so raising here would also drop
-                # any state fields bundled in it (SH-15, 2026-07-06).
+                # any state fields bundled in it (2026-07-06).
                 self.log.debug('FTDa with no transfer in flight — ignoring')
                 return
             if contents.transfer == self.transfer.tid:
@@ -330,7 +330,7 @@ class AtemProtocol:
                 return
             if contents.transfer != self.transfer.tid:
                 # A stale or foreign transfer id must not fail OUR
-                # in-flight transfer (SH-15, 2026-07-06).
+                # in-flight transfer (2026-07-06).
                 self.log.debug(
                     f'FTDE for transfer {contents.transfer}, ours is '
                     f'{self.transfer.tid} — ignoring')
@@ -380,7 +380,7 @@ class AtemProtocol:
             # MUST run even if event delivery blows up, or the lane wedges
             # with the store lock held and nothing in flight — the
             # empty-queue unlock inside the trigger is what releases the
-            # ATEM's media lock (SH-4, session-hygiene audit 2026-07-06).
+            # ATEM's media lock (session-hygiene audit, 2026-07-06).
             try:
                 if self.transfer.upload:
                     self._raise('upload-done', store, self.transfer.slot)

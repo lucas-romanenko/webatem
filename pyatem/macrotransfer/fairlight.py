@@ -35,7 +35,7 @@ _MIX_TYPE_NAMES = {1: 'Off', 2: 'On', 4: 'AFV'}
 _MIX_TYPE_TO_INT = {v: k for k, v in _MIX_TYPE_NAMES.items()}
 
 # Trailing u16 at offset 14 of MixType ops. Live-recorded macros
-# consistently show 0x000c here (verified on .85 with CFSP-state
+# consistently show 0x000c here (verified on a live ATEM with CFSP-state
 # recordings); the decoder ignores it but the encoder emits it for
 # round-trip-byte-identical recovery.
 

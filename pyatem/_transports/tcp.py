@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 """
 TCP transport — talks to an OpenSwitcher proxy that fronts one or more
-upstream ATEMs over TCP. AV Server's production deployments don't use
-this; ``AtemProtocol.__init__`` lazy-imports it when the caller passes
+upstream ATEMs over TCP. This application's production deployments
+don't use this; ``AtemProtocol.__init__`` lazy-imports it when the caller passes
 ``ip='tcp://...'``.
 """
 

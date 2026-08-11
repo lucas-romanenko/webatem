@@ -1,9 +1,10 @@
 """
 pyatem-based media pool upload service.
 
-Used by the application's uploader worker (``run_uploader`` management
-command) and one-off callers (downtime-overlay button uploads, profile-
-load image upload) to push stills into an ATEM media pool in-process.
+Entry point is ``execute_upload``, called from the media-pool upload view
+(``atem_control/media_pool/views.py``) and the profile-load image upload
+(``atem_control/profile/views.py``) to push stills into an ATEM media
+pool in-process.
 Opens one short-lived AtemProtocol per unique IP, uses the transport's
 aggressive-drain mode for bulk-upload throughput (~3 s per 1080p still
 vs. ~25 s with ACK-paced sends), and verifies each upload via MPfe
@@ -66,7 +67,7 @@ HASH_SETTLE_TIMEOUT = 10.0
 REUPLOAD_SETTLE = 1.0
 
 # Tally cycle-wait timings + the shared cold->hot->cold loop live in
-# ``content_change.tally`` so the media-pool and HyperDeck paths can't drift.
+# ``atem_control.tally`` so the media-pool and HyperDeck paths can't drift.
 from atem_control.tally import (
     ticked_pump,
     wait_for_safe_cycle,
@@ -231,7 +232,7 @@ def _wait_for_safe_upload_window(protocol, slot_0_indexed: int,
                                  observation: float = TALLY_OBSERVATION_SECONDS,
                                  timeout: float = TALLY_TIMEOUT) -> bool:
     """Cycle-wait for tally safety before overwriting a media-pool slot. Thin
-    wrapper over the shared ``wait_for_safe_cycle`` (content_change.tally) with
+    wrapper over the shared ``wait_for_safe_cycle`` (``atem_control.tally``) with
     the media-pool slot liveness predicate, so the cold->hot->cold loop is
     identical to the HyperDeck path."""
     slot_user = slot_0_indexed + 1
@@ -770,7 +771,7 @@ def _close_protocol(protocol: AtemProtocol) -> None:
         protocol.transport.sock.close()
     except Exception:
         pass
-    # Free the SocketQueue's socketpair FDs too (L4, 2026-07-06).
+    # Free the SocketQueue's socketpair FDs too (2026-07-06).
     try:
         protocol.transport.thread_queue.close()
     except Exception:

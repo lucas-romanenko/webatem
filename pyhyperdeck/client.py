@@ -14,7 +14,7 @@ Public surface::
 
     from pyhyperdeck import Hyperdeck
 
-    with Hyperdeck('192.168.82.191') as hd:
+    with Hyperdeck('192.168.1.10') as hd:
         info = hd.device_info()
         for clip in hd.disk_list():
             print(clip.clip_id, clip.name, clip.duration)
@@ -168,7 +168,7 @@ class Hyperdeck:
 
     def connect(self) -> None:
         """Open the TCP connection and drain the greeting (500 connection info)."""
-        # SH-20 FIX (2026-07-06): connect() over an already-connected
+        # Fix (2026-07-06): connect() over an already-connected
         # instance must not overwrite _sock and leak the old socket.
         if self._sock is not None:
             self.close()
@@ -184,7 +184,7 @@ class Hyperdeck:
         try:
             self._greeting = self._read_response(skip_async=False)
         except Exception:
-            # SH-20 FIX (2026-07-06): a failed greeting read must not leak
+            # Fix (2026-07-06): a failed greeting read must not leak
             # the just-opened socket until GC — close + clear before
             # re-raising so the instance is cleanly reconnectable.
             self.close()

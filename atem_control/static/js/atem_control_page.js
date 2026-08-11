@@ -114,7 +114,7 @@ document.addEventListener('alpine:init', () => {
         // props is one or more of: enabled, shape, frequency, gain_db, q, range
         if (!this.audioModal) return;
         if (this.audioModal.stripId === '_master') {
-            // F4: master-bus EQ bands go to CMBP, NOT a per-strip CEBP at
+            // Master-bus EQ bands go to CMBP, NOT a per-strip CEBP at
             // source 0 (a non-existent strip) — matches setEqEnable/setMakeupGain.
             ATEMControl.cmd('set_audio_master_eq_band', { band: bandIdx, ...props });
         } else {

@@ -35,7 +35,7 @@ WIPE_PATTERN_TO_INT = {n: i for i, n in enumerate(WIPE_PATTERN_NAMES)}
 # DVE transition effect names → wire int (transition-dve.style).
 # Complete 16-entry set for ATEM 1 M/E Constellation HD: 8 Squeeze
 # (16..23) + 8 Push (24..31). Byte 16 = SqueezeTopLeft is
-# hardware-confirmed via av_server/tools/macro_dve_probe.py (slot 10: the
+# hardware-confirmed via a live DVE probe (slot 10: the
 # stored macro byte and the live transition-dve.style both read 16, which
 # the switcher labels SqueezeTopLeft); the rest follow the contiguous
 # Squeeze-then-Push ordering. The macro codec's

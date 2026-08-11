@@ -29,8 +29,9 @@ layer's concern (Django Channels, SSE, whatever). The three events:
     'slot_updated'   → {'slot': <slot dict>}
     'player_updated' → {'player': <player dict>}
 
-Relies on single-uvicorn-worker (see CLAUDE.md in the app repo) — the
-``_watchers`` registry is process-local.
+Relies on the single-uvicorn-worker deployment model (see "Single
+worker, by design" in the repository README) — the ``_watchers``
+registry is process-local.
 
 Threads per watcher:
     1. Binder thread — owns the watcher's relationship to the pooled
@@ -291,7 +292,7 @@ class MediaPoolWatcher:
                 f"MediaPool[{self.ip_address}] acquire, ref_count={self._ref_count}"
             )
 
-            # SH-19: an acquire can land while a grace-teardown is mid-
+            # An acquire can land while a grace-teardown is mid-
             # flight — stop event set, threads alive but COMMITTED to
             # exiting. The old is_alive()-only checks then skipped both
             # restart blocks and the watcher died with ref_count > 0: a
@@ -536,12 +537,12 @@ class MediaPoolWatcher:
         own mixerstate (the state dump already lives there; no extra
         round-trip). The watcher owns NO socket.
 
-        ``predecessor`` (SH-19): the previous generation's binder thread
+        ``predecessor``: the previous generation's binder thread
         when this one was started mid-teardown. Its finally block mutates
         shared attributes (handler ids, _protocol, pool ref), so wait for
         it to fully exit before touching anything. It is already stopped
         (stop event was set) and exits within one 0.5s tick."""
-        # Capture this generation's stop event + work queue at entry (SH-19).
+        # Capture this generation's stop event + work queue at entry.
         # A later acquire-during-teardown installs FRESH ones for the next
         # generation; looping on self._stop_event would then read the
         # successor's (unset) event and this binder would run forever
@@ -970,7 +971,7 @@ class MediaPoolWatcher:
     def _run_worker(self):
         """Consume decode + broadcast tasks. Exits on STOP sentinel.
 
-        The queue is CAPTURED at entry (SH-19): an acquire landing mid-
+        The queue is CAPTURED at entry: an acquire landing mid-
         teardown replaces ``self._work_queue`` for the new generation; this
         (old) worker must keep draining ITS OWN queue — whose STOP sentinel
         was queued by the teardown — instead of racing the new worker on

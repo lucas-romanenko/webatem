@@ -27,8 +27,11 @@ class ATEMConnectionLoggingMixin:
     """
     Mixin providing connection/disconnection event logging for the ATEM consumer.
 
+    No user identity is involved — the app is unauthenticated by design, so
+    log entries carry connection metadata only (IP address, timestamps,
+    disconnect reason and session duration).
+
     Expects the consumer to have:
-        - self.scope (WebSocket scope with 'user')
         - self.connected_ip (str or None)
         - self.connect_time (float or None)
     """
@@ -83,10 +86,10 @@ class ATEMConnectionLoggingMixin:
                 data=log_data
             )
 
-            # Mirror into the centralized activity log (2026-07-07). The
+            # Mirror into the activity log (2026-07-07). The
             # ATEMControlLog stays the canonical connect/disconnect table
             # (the Connect page "Recent ATEMs" reads it); this makes the
-            # same events show in the cross-app admin activity view.
+            # same events show in the application activity log.
             from atem_control.activity import ActivityLog
             from atem_control.activity import arecord_activity
             eq_name = ''

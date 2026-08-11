@@ -2,8 +2,7 @@
 """Macro codec — HyperDeck binding ops (network address + switcher input).
 
 Reverse-engineered live 2026-06-09 by recording HyperDeck settings changes
-on an ATEM and decoding the macro (av_server/tools/macro_roundtrip_smoke.py
-pattern). Two op codes:
+on an ATEM and decoding the resulting macro bytecode. Two op codes:
 
   0x0110  HyperDeckNetworkAddress  [u8 slot][u8 0][u16 marker 0x024a][u32 IP]
           The IPv4 is stored byte-REVERSED (little-endian) at 4-7; bytes 2-3

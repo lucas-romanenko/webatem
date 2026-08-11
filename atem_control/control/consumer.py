@@ -29,7 +29,8 @@ logger = logging.getLogger(__name__)
 # Per-IP audio meter subscriber count. First subscriber sends SFLN(enable=True)
 # to the ATEM (start streaming FMLv/FDLv); last unsubscriber sends
 # SFLN(enable=False) (stop streaming). All consumers run in the same asyncio
-# event loop (single ASGI worker per CLAUDE.md), so dict ops are race-free.
+# event loop (single ASGI worker, by design — see README), so dict ops are
+# race-free.
 _meter_subscribers: dict[str, int] = {}
 
 
@@ -65,7 +66,7 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
         # Pooled ATEM connection. current_ip serves double duty as the
         # "IP we hold a pool ref to" — release exactly when we clear it.
         # _pool_entry is the pool's entry dict for identity-guarded release
-        # (SH-7 FIX 2026-07-06).
+        # (fixed 2026-07-06).
         self.connection = None
         self.current_ip: str | None = None
         self.current_atem_name: str | None = None
@@ -111,7 +112,7 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
         # The AtemProtocol object the meter handlers were registered on —
         # a pooled re-handshake builds a NEW protocol (and a NEW ATEM
         # session that never got SFLN), so identity change means the
-        # meters must re-arm (L12).
+        # meters must re-arm.
         self._meter_protocol = None
         self._meter_loop = None
         self._meter_batch_strips: dict = {}  # strip_id → latest payload this tick
@@ -139,7 +140,7 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
         self.connection = None
         self._pool_entry = None
         if ip:
-            # SH-7 FIX (2026-07-06): identity-guarded release — if our entry
+            # Fix (2026-07-06): identity-guarded release — if our entry
             # was evicted (worker death) and another holder created a fresh
             # one, releasing by IP alone would steal the replacement's ref
             # and tear a live operator's session down 2s later.
@@ -166,7 +167,7 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
         """Release everything a live session holds — audit log, media-pool
         watcher ref, audio-meter refcount, monitor task, pool ref.
 
-        L9 FIX (2026-07-06): shared by ``disconnect()``,
+        Fix (2026-07-06): shared by ``disconnect()``,
         ``_perform_disconnect`` and the monitor loop's crash path so every
         exit route gets the same per-step exception isolation — one failing
         step must never skip the pool-ref release."""
@@ -240,7 +241,7 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
 
         except Exception as e:
             logger.error(f"Error processing message: {e}", exc_info=True)
-            # SH-8 FIX (2026-07-06): the error re-send must not raise on a
+            # Fix (2026-07-06): the error re-send must not raise on a
             # dead socket — an escaping send kills the consumer's app task
             # before websocket.disconnect is dispatched, leaking the pool
             # ref / watcher ref / meter refcount until process restart.
@@ -395,7 +396,7 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
         # Clean up existing connection
         if self.current_ip:
             await self.stop_monitoring()
-            # SH-9 FIX (2026-07-06): the in-page ATEM switch must drop the
+            # Fix (2026-07-06): the in-page ATEM switch must drop the
             # audio-meter subscription against the OLD connection before the
             # pool ref goes away — _unsubscribe_audio_meters keys off
             # self.current_ip / self.connection, which _release_pool_ref
@@ -456,7 +457,7 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
             # it closes. Auto-subscribing on connect (the original behavior)
             # caused ~375 msg/s sustained WebSocket spam regardless of which
             # tab the operator was on, which saturated the WS write buffer
-            # and produced the 5–30 s atem_state lag tracked as Issue #13.
+            # and produced a 5–30 s atem_state lag.
 
             await asyncio.sleep(1.0)
             await self.start_monitoring()
@@ -479,7 +480,7 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
     async def _perform_disconnect(self, reason='user_requested'):
         """Execute disconnection with logging and cleanup.
 
-        L9 FIX (2026-07-06): runs the shared per-step-guarded cleanup —
+        Fix (2026-07-06): runs the shared per-step-guarded cleanup —
         the old bare sequence let one raise (e.g. the watcher release)
         skip the pool-ref release on the inactivity path."""
         await self._cleanup_session(reason=reason)
@@ -526,7 +527,7 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
         Polls faster during transitions or recent activity, slower when idle.
         Also monitors for inactivity timeout to auto-disconnect.
 
-        Issue #13 diagnostic: when ``ATEM_STATE_LAG_TRACE`` is set in the
+        State-lag diagnostic: when ``ATEM_STATE_LAG_TRACE`` is set in the
         environment, each iteration logs the time spent in
         ``build_full_state`` vs. ``send_json``. The send_json side is the
         Channels write — if those times are big, the bottleneck is
@@ -569,7 +570,7 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
                         await self._auto_disconnect_inactive()
                         break
 
-                # L12: meters must survive a pooled in-place reconnect
+                # Meters must survive a pooled in-place reconnect
                 # (new protocol object + new ATEM session) — cheap
                 # identity check, no-op when nothing changed.
                 self._rearm_audio_meters_if_reconnected()
@@ -583,7 +584,7 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
                 # mixerstate when it gives up on reconnects, which makes
                 # build_full_state return ``{'is_connected': False}``.
                 # Treat that as "ATEM dropped mid-session" and notify the
-                # frontend so the disconnect banner (Issue #14 option A)
+                # frontend so the disconnect banner
                 # appears. Without this, the worker keeps retrying SYN
                 # forever and the operator surface looks normal indefinitely.
                 atem_reachable = current_state.get('is_connected', False)
@@ -650,7 +651,7 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
             pass
         except Exception as e:
             logger.error(f"Error in monitoring loop: {e}", exc_info=True)
-            # SH-8 FIX (2026-07-06): a crashed monitor loop used to just
+            # Fix (2026-07-06): a crashed monitor loop used to just
             # log and die, silently disabling the 5-minute inactivity net —
             # if the socket was already gone (a failed state send is the
             # typical crash here), the session stayed pool-ref'd forever.
@@ -754,7 +755,7 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
         await self.send(text_data=json.dumps(data))
 
     async def _safe_send_json(self, data) -> bool:
-        """``send_json`` that never raises (SH-8 FIX 2026-07-06).
+        """``send_json`` that never raises (fixed 2026-07-06).
 
         A send on a dead socket raising out of a Channels group handler or
         an error path kills the consumer's app task before
@@ -780,7 +781,7 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
         if self._mediapool_ip:
             await self._unsubscribe_media_pool()
 
-        # L11 FIX (2026-07-06): acquire the watcher BEFORE joining the
+        # Fix (2026-07-06): acquire the watcher BEFORE joining the
         # Channels group. The old order left a failed acquire's consumer in
         # the group with _mediapool_ip unset — never discarded, with group
         # handlers firing into it. Setting _mediapool_ip right after the
@@ -876,7 +877,7 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
         self._meter_protocol = protocol
 
     def _rearm_audio_meters_if_reconnected(self):
-        """L12: a pooled re-handshake builds a NEW AtemProtocol and a NEW
+        """A pooled re-handshake builds a NEW AtemProtocol and a NEW
         ATEM session — the meter handlers were registered on the old
         object and the new session never received SFLN(enable), so the
         meters froze at the old levels (looking live) until every
@@ -1101,7 +1102,7 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
     # Channels group event handlers. Django Channels maps the message 'type'
     # (with '.' → '_') to these method names.
     #
-    # SH-8 FIX (2026-07-06): all group handlers send via _safe_send_json —
+    # Fix (2026-07-06): all group handlers send via _safe_send_json —
     # a broadcast landing in the window between client death and disconnect
     # dispatch (wide while thumbnails stream) must not raise out of the
     # handler and kill the consumer's app task.
@@ -1134,16 +1135,16 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
         })
 
     async def mediapool_slot_uploaded(self, event):
-        # Fast-path event from content_change/views/webhook.py — the upload
-        # webhook synthesises a thumbnail from the local source file and
-        # broadcasts it before the watcher's reconnect-and-refetch cycle.
+        # Fast-path event broadcast when an upload lands — a thumbnail
+        # synthesised from the local source file arrives before the
+        # watcher's reconnect-and-refetch cycle.
         await self._safe_send_json({
             'type': 'media_pool_slot_uploaded',
             'data': event.get('payload', {}),
         })
 
     async def mediapool_upload_failed(self, event):
-        # From content_change/views/webhook.py on a failed/cancelled upload:
+        # Broadcast on a failed/cancelled upload:
         # clears the initiator's Uploading overlay and surfaces the error
         # instead of leaving a spinner to die into its 120s safety timer.
         await self._safe_send_json({

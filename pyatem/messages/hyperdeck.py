@@ -30,8 +30,8 @@ class HyperdeckSettingsField(Recv):
     ====== ==== ====== ===========
 
     Layout verified live 2026-05-29 against an ATEM with a deck bound at
-    192.168.82.192 on input 4:
-    ``RXMS[0] = 00 00 | 00 00 | c0 a8 52 c0 | 00 04 | ...``.
+    192.168.1.11 on input 4:
+    ``RXMS[0] = 00 00 | 00 00 | c0 a8 01 0b | 00 04 | ...``.
     """
     CODE = 'RXMS'
     PRETTY = 'hyperdeck-settings'

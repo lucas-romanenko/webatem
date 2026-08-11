@@ -303,7 +303,7 @@ Fairlight EQ + dynamics processor + headphones) round-trips
 |--------------|------------------|
 | `MacroSleep` | `macro_sleep`    |
 
-**Fairlight audio mixer** (added 2026-04-30 from live discovery on .85)
+**Fairlight audio mixer** (added 2026-04-30 from live discovery on a production ATEM)
 | Op id                                       | Operation                       |
 |---------------------------------------------|---------------------------------|
 | `FairlightAudioMixerInputSourceFaderGain`   | `set_fairlight_strip(volume=…)` |
@@ -344,8 +344,8 @@ clear message.
 `TransitionSource` and `AuxiliaryInput` — previously listed here as
 gaps — were closed 2026-04-28. See the verified-scenario row in §
 "Verified scenarios" below. The 11 DVE / DSK ops missing from the
-decoder table were closed 2026-04-29 (C1 fix); see _KNOWN_OPS in
-`pyatem/macrotransfer.py`.
+decoder table were closed 2026-04-29; see _KNOWN_OPS in
+`pyatem/macrotransfer/__init__.py`.
 
 ### Symbolic input resolution
 
@@ -697,12 +697,12 @@ Constellation HD:
 | Apply 6-op `Deal Cam` macro from `macros_only_2025-05-12_11-24-47.xml` into slot 0. Trigger playback — verify program switches to Camera1, USK 0 turns on with fill=MediaPlayer1 and cut=MediaPlayer1Key, MP0 selects still slot 0. | 2026-04-28 | ✅ |
 | Overwrite slot 0, re-apply the original profile, verify slot 0 is back to "Deal Cam". | 2026-04-28 | ✅ |
 | Apply synthetic 5-op macro with `MacroSleep frames=60`. Trigger playback, sample program over 4 s. | 2026-04-28 | ✅ |
-| **Download bytecode for all 40 used slots on .85 via FTSU/FTDa/FTUA/FTDC. No locking.** | 2026-04-28 | ✅ |
+| **Download bytecode for all 40 used slots on a production ATEM via FTSU/FTDa/FTUA/FTDC. No locking.** | 2026-04-28 | ✅ |
 | **Decode "Deal Cam" bytecode and compare op-by-op against `macros_only_2025-05-12_11-24-47.xml`. All 6 ops match exactly, including attribute values.** | 2026-04-28 | ✅ |
 | **Round-trip: live-save (Profile.from_atem) → live-apply (Profile.apply) → live-save again. 39/40 slots functionally identical; one slot differs by exactly the documented Unknown_0x001F gap.** | 2026-04-28 | ✅ (now closed; see 0x001F entry below) |
 | **Apply reference XML's "Deal Cam" macro to slot 0, then read back via Profile.from_atem. All 6 ops byte-identical to input XML.** | 2026-04-28 | ✅ |
 | **0x001F mapped to `AuxiliaryInput` after user-supplied XML reference. Round-trip "aux" macro at slot 80 (2 AuxiliaryInput ops): apply→save→modify→restore→save preserves both ops; playback flips AUX1+AUX6 to recorded sources. Full-pool round-trip on the captured corpus was 42/42 with 0 unknown ops.** | 2026-04-28 | ✅ |
-| **C1 fix: 11 op-codes added (DVE Y-size, X/Y position, mask enable + four edges, DSK gain/mask-enable/pre-multiply). Op codes discovered live (`av_server/tools/macro_opcode_discovery.py`): 0x0035, 0x0036–0x0039, 0x0048, 0x004A–0x004B, 0x009D, 0x009E, 0x00A4. Profile.from_atem of an 11-op test macro produces zero `Unknown_0x...` artifacts.** | 2026-04-29 | ✅ |
+| **11 op-codes added (DVE Y-size, X/Y position, mask enable + four edges, DSK gain/mask-enable/pre-multiply). Op codes discovered live: 0x0035, 0x0036–0x0039, 0x0048, 0x004A–0x004B, 0x009D, 0x009E, 0x00A4. Profile.from_atem of an 11-op test macro produces zero `Unknown_0x...` artifacts.** | 2026-04-29 | ✅ |
 
 ## Future work
 

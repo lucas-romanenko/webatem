@@ -83,7 +83,7 @@ def test_encode_key_on_air_true():
 
 def test_encode_luma_clip_marker():
     """The marker u16 at params offset 2 is uninitialized memory in
-    Software Control's emit. Live .85 recordings (Lots XML, 2026-04-30)
+    Software Control's emit. Live production-ATEM recordings (Lots XML, 2026-04-30)
     consistently produce 0x000c here; older fixtures had 0x0000. The
     encoder uses 0x000c to match the live default — either is
     functionally equivalent (ATEM ignores the byte)."""
@@ -116,7 +116,7 @@ def test_encode_aux_input_camera1():
     assert out == _pack_op(0x001F, bytes([0, 0]) + struct.pack('<H', 1))
 
 
-# ----- Fairlight ops (added 2026-04-30 — verified live on .85) --------------
+# ----- Fairlight ops (added 2026-04-30 — verified on a live ATEM) -----------
 
 def test_encode_fairlight_strip_fader_gain_camera1():
     """Op 0x014b — 16-byte params: source(2) + marker(2) + sourceId(8) +
@@ -377,7 +377,7 @@ def test_fairlight_byte_identical_roundtrip_for_live_captures():
     ('DownstreamKeyTie', {'keyIndex': '0', 'tie': 'True'}),
     ('DownstreamKeyTie', {'keyIndex': '1', 'tie': 'False'}),
     ('HyperDeckNetworkAddress', {'slot': '1', 'networkAddress': '10.20.30.40'}),
-    ('HyperDeckNetworkAddress', {'slot': '0', 'networkAddress': '192.168.82.192'}),
+    ('HyperDeckNetworkAddress', {'slot': '0', 'networkAddress': '192.168.1.11'}),
     ('HyperDeckInput', {'slot': '3', 'input': '7'}),
     ('DownstreamKeyAuto', {'keyIndex': '0'}),
     ('DownstreamKeyRate', {'keyIndex': '0', 'rate': '25'}),
