@@ -133,6 +133,10 @@ def atem_discovered(request):
     return JsonResponse({
         'available': available,
         'atems': discovery.discovered_atems(),
+        # This host's own /24 — the page auto-sweeps it (plus any subnet
+        # mDNS spots an ATEM on) so discovery works even where multicast
+        # is blocked.
+        'subnet': discovery.local_subnet(),
     })
 
 

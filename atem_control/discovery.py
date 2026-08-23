@@ -36,10 +36,14 @@ import time
 
 logger = logging.getLogger(__name__)
 
-# Blackmagic mDNS service the ATEMs (and Ultimattes, HyperDecks, …)
-# announce themselves under; we filter on the TXT ``class`` field.
-_MDNS_SERVICE = "_blackmagic._tcp.local."
-_ATEM_CLASS = "AtemSwitcher"
+# mDNS service the ATEMs advertise under — this is the ATEM-SPECIFIC type
+# and every instance IS a switcher (no class filter needed). The instance
+# name IS the operator-set switcher name, so discovery is fully passive:
+# names come straight off the announcement, zero switcher contact, exactly
+# like ATEM Software Control. (NOT ``_blackmagic._tcp`` — that's the
+# Ultimattes/other BMD gear; the ATEMs are on ``_switcher_ctrl._udp``.
+# Empirically verified on the studio VLAN: 250 named ATEMs here.)
+_MDNS_SERVICE = "_switcher_ctrl._udp.local."
 
 # ATEM control port + the wire handshake bytes. A client hello is a SYN
 # (flag 0x02) carrying opcode 0x01; the switcher replies SYN opcode 0x02;
@@ -70,19 +74,26 @@ def _decode(value) -> str:
     return value.decode() if isinstance(value, bytes) else (value or '')
 
 
+def _instance_name(service_name: str) -> str:
+    """The operator-set switcher name from an mDNS instance name. Strips
+    the service suffix and un-escapes DNS label dots (``1\\.1`` → ``1.1``)
+    so a room named 'ATEM TO-BC 1.1 CL 01' reads back with its dots."""
+    friendly = service_name.replace('.' + _MDNS_SERVICE, '').replace(_MDNS_SERVICE, '').rstrip('.')
+    return friendly.replace('\\.', '.').replace('\\032', ' ')
+
+
 class _AtemListener:
-    """Zeroconf ServiceListener that mirrors AtemSwitcher announcements
-    into ``_registry``. Runs on zeroconf's own thread."""
+    """Zeroconf ServiceListener that mirrors ATEM ``_switcher_ctrl._udp``
+    announcements into ``_registry``. Every instance IS an ATEM (the
+    service type is ATEM-specific), and the instance name IS the switcher
+    name — no class filter, no handshake. Runs on zeroconf's own thread."""
 
     def _resolve(self, zc, type_, name):
         try:
-            info = zc.get_service_info(type_, name, timeout=2000)
+            info = zc.get_service_info(type_, name, timeout=2500)
         except Exception:
             return
         if not info:
-            return
-        props = {_decode(k): _decode(v) for k, v in (info.properties or {}).items() if k}
-        if props.get('class') != _ATEM_CLASS:
             return
         addrs = []
         try:
@@ -91,7 +102,11 @@ class _AtemListener:
             pass
         if not addrs:
             return
-        friendly = name.replace('.' + _MDNS_SERVICE, '').replace(_MDNS_SERVICE, '').rstrip('.')
+        props = {_decode(k): _decode(v) for k, v in (info.properties or {}).items() if k}
+        friendly = _instance_name(name)
+        # This service's TXT carries only 'unique id' (no model); the name
+        # is authoritative. Dedup by unique id so one switcher reachable at
+        # several addresses collapses to one entry.
         key = props.get('unique id') or addrs[0]
         with _registry_lock:
             _registry[key] = {
@@ -107,7 +122,7 @@ class _AtemListener:
         self._resolve(zc, type_, name)
 
     def remove_service(self, zc, type_, name):
-        friendly = name.replace('.' + _MDNS_SERVICE, '').replace(_MDNS_SERVICE, '').rstrip('.')
+        friendly = _instance_name(name)
         with _registry_lock:
             for key, entry in list(_registry.items()):
                 if entry['name'] == friendly:
@@ -167,36 +182,87 @@ def _name_for_ip(ip: str) -> tuple[str, str]:
 # On-demand subnet sweep
 # --------------------------------------------------------------------------
 
-def local_subnet() -> str | None:
-    """The /24 prefix (first three octets) of this host's primary
-    outbound interface, e.g. ``'192.168.81'``. None if it can't be
-    determined."""
+# Largest network we'll auto-sweep: a /22 is 1024 addresses (~1s of
+# hellos), which covers a facility spread across several /24s on one
+# subnet (the studio VLAN here is a /22). Anything wider than this (a
+# /16, say) we clamp to the host's /24 rather than firing 65k hellos —
+# the manual subnet field can target the rest.
+_MAX_SWEEP_HOSTS = 1024
+
+
+def _primary_ipv4() -> str | None:
+    """This host's primary outbound IPv4 (no packet is sent — connect()
+    on a UDP socket just resolves the source address the OS would use)."""
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        # No packet is sent — connect() on a UDP socket just picks the
-        # route/source address the OS would use to reach that dest.
         s.connect(('8.8.8.8', 80))
-        ip = s.getsockname()[0]
+        return s.getsockname()[0]
     except Exception:
         return None
     finally:
         s.close()
-    parts = ip.split('.')
-    if len(parts) != 4:
+
+
+def _iface_netmask(ifname: str) -> str | None:
+    """The IPv4 netmask of ``ifname`` via SIOCGIFNETMASK (Linux). None on
+    any error / non-Linux."""
+    import fcntl
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        packed = struct.pack('256s', ifname.encode()[:15])
+        return socket.inet_ntoa(fcntl.ioctl(s.fileno(), 0x891b, packed)[20:24])
+    except OSError:
         return None
-    return '.'.join(parts[:3])
+    finally:
+        s.close()
 
 
-def sweep_subnet(subnet: str, *, settle: float = 2.0) -> list[str]:
-    """Send the light hello to every host on ``subnet`` (a 3-octet /24
-    prefix like ``'192.168.81'``) and return the IPs that answered like
-    an ATEM, sorted numerically. Half-open only — a goodbye is sent to
+def local_network():
+    """The host's own IPv4 network as an ``ipaddress.IPv4Network`` using
+    the interface's REAL prefix (a /22 studio VLAN is one network, not
+    four /24s). Falls back to the /24 of the primary IP if the mask can't
+    be read. None if no address is found."""
+    import ipaddress
+    ip = _primary_ipv4()
+    if not ip:
+        return None
+    # Find the interface that carries this address and read its mask.
+    try:
+        for _idx, name in socket.if_nameindex():
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:
+                import fcntl
+                packed = struct.pack('256s', name.encode()[:15])
+                addr = socket.inet_ntoa(fcntl.ioctl(s.fileno(), 0x8915, packed)[20:24])
+            except OSError:
+                continue
+            finally:
+                s.close()
+            if addr == ip:
+                mask = _iface_netmask(name)
+                if mask:
+                    return ipaddress.IPv4Network(f'{ip}/{mask}', strict=False)
+                break
+    except Exception:
+        pass
+    return ipaddress.IPv4Network(f'{ip}/24', strict=False)
+
+
+def local_subnet() -> str | None:
+    """Display label for the host's own subnet, e.g. ``'192.168.80.0/22'``
+    (or the /24 prefix string on fallback). Used by the Connect page."""
+    net = local_network()
+    return str(net) if net else None
+
+
+def sweep_ips(ips, *, settle: float = 2.0) -> list[str]:
+    """Send the light ATEM hello to each IP in ``ips`` and return those
+    that answered like an ATEM. Half-open only — a goodbye is sent to
     every responder, no session is established. ``settle`` is how long to
     keep collecting replies after the last hello goes out."""
-    parts = subnet.strip().rstrip('.').split('.')
-    if len(parts) != 3 or not all(p.isdigit() and 0 <= int(p) <= 255 for p in parts):
+    ips = list(ips)
+    if not ips:
         return []
-    prefix = '.'.join(parts)
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind(('', 0))
@@ -227,12 +293,12 @@ def sweep_subnet(subnet: str, *, settle: float = 2.0) -> list[str]:
                     pass
 
     try:
-        for i in range(1, 255):
+        for n, ip in enumerate(ips, 1):
             try:
-                sock.sendto(_HELLO, (f'{prefix}.{i}', _ATEM_PORT))
+                sock.sendto(_HELLO, (ip, _ATEM_PORT))
             except OSError:
                 pass
-            if i % 16 == 0:
+            if n % 16 == 0:
                 drain()
                 time.sleep(0.002)
         deadline = time.time() + max(0.2, settle)
@@ -242,17 +308,48 @@ def sweep_subnet(subnet: str, *, settle: float = 2.0) -> list[str]:
     finally:
         sock.close()
 
-    return sorted(responders, key=lambda s: int(s.rsplit('.', 1)[1]))
+    return sorted(responders, key=lambda s: tuple(int(o) for o in s.split('.')))
+
+
+def _hosts_for(subnet: str | None):
+    """The list of host IPs to sweep. A 3-octet prefix like ``192.168.81``
+    means that /24; a full CIDR like ``192.168.80.0/22`` means that
+    network; None means the host's own network (real prefix, clamped to
+    _MAX_SWEEP_HOSTS)."""
+    import ipaddress
+    if subnet:
+        subnet = subnet.strip().rstrip('.')
+        try:
+            if '/' in subnet:
+                net = ipaddress.IPv4Network(subnet, strict=False)
+            else:
+                parts = subnet.split('.')
+                if len(parts) == 3 and all(p.isdigit() and 0 <= int(p) <= 255 for p in parts):
+                    net = ipaddress.IPv4Network(f'{subnet}.0/24')
+                else:
+                    return []
+        except ValueError:
+            return []
+    else:
+        net = local_network()
+        if net is None:
+            return []
+        # Too wide to auto-sweep — clamp to the host's /24.
+        if net.num_addresses > _MAX_SWEEP_HOSTS:
+            ip = _primary_ipv4()
+            net = ipaddress.IPv4Network(f'{ip}/24', strict=False)
+    return [str(h) for h in net.hosts()]
 
 
 def scan_atems(subnet: str | None = None) -> dict:
-    """Run a subnet sweep and fold in any mDNS-known names. Returns
+    """Sweep a subnet and fold in any mDNS-known names. Returns
     ``{'subnet', 'atems': [{'ip', 'name', 'model', 'source'}]}``. When
-    ``subnet`` is None the host's own /24 is used."""
-    subnet = subnet or local_subnet()
-    if not subnet:
-        return {'subnet': None, 'atems': []}
-    ips = sweep_subnet(subnet)
+    ``subnet`` is None the host's own network (real prefix) is used."""
+    hosts = _hosts_for(subnet)
+    if not hosts:
+        return {'subnet': subnet, 'atems': []}
+    label = subnet or local_subnet()
+    ips = sweep_ips(hosts)
     atems = []
     for ip in ips:
         name, model = _name_for_ip(ip)
@@ -262,4 +359,4 @@ def scan_atems(subnet: str | None = None) -> dict:
             'model': model,
             'source': 'mdns' if name else 'scan',
         })
-    return {'subnet': subnet, 'atems': atems}
+    return {'subnet': label, 'atems': atems}

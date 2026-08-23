@@ -65,18 +65,25 @@
                      Populated by atem_discovery.js; hidden entirely on a network
                      where nothing is found and no scan has run. -->
                 <div class="form-control" id="discoverySection">
-                    <label class="label">
+                    <label class="label gap-2">
                         <span class="label-text text-sm text-base-content/70">On Your Network</span>
-                        <button type="button" id="scanBtn"
-                            class="btn btn-xs btn-ghost gap-1"
-                            title="Scan this subnet for ATEMs that don't advertise over Bonjour">
-                            <i class="bi bi-search"></i> Scan subnet
-                        </button>
+                        <span class="flex items-center gap-1">
+                            <input type="text" id="scanSubnet"
+                                class="input input-xs input-bordered w-28 font-mono"
+                                placeholder="192.168.1"
+                                title="Subnet to scan (first three octets)">
+                            <button type="button" id="scanBtn"
+                                class="btn btn-xs btn-ghost gap-1"
+                                title="Rescan this subnet for ATEMs that don't advertise over Bonjour">
+                                <i class="bi bi-arrow-clockwise"></i> Rescan
+                            </button>
+                        </span>
                     </label>
-                    <div class="flex flex-wrap gap-2" id="discoveryList"></div>
+                    <div class="flex flex-wrap gap-2 max-h-56 overflow-y-auto" id="discoveryList"></div>
                     <p class="text-xs text-base-content/50 mt-1 hidden" id="discoveryEmpty">
-                        No ATEMs found yet — they appear automatically, or hit
-                        <span class="font-medium">Scan subnet</span>.
+                        Looking for ATEMs on your network… they appear here
+                        automatically. If one doesn't advertise, hit
+                        <span class="font-medium">Rescan</span>.
                     </p>
                 </div>
 

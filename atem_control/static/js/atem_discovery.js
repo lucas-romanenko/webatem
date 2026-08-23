@@ -1,11 +1,18 @@
 /**
  * ATEM network discovery — the "On your network" section of the Connect
- * page. Two sources, one unified list:
+ * page. Auto-discovery by default, two sources merged into one list:
  *
  *   - Passive mDNS (polled from /atem/api/discovered/): ATEMs that
- *     announce themselves over Bonjour. Zero switcher contact.
- *   - Opt-in subnet scan (/atem/api/scan/): a light hello-sweep of the
- *     server's own /24 for ATEMs that don't advertise.
+ *     announce themselves over Bonjour, with their names. Zero switcher
+ *     contact.
+ *   - Automatic subnet sweep (/atem/api/scan/): a light hello-sweep that
+ *     runs on load — no button press — so ATEMs that don't advertise
+ *     still show up. It sweeps the host's own /24 AND any subnet where
+ *     mDNS spots an ATEM (so a switcher seen on a different segment pulls
+ *     that segment in too). Half-open only: no session on any switcher.
+ *
+ * A sweep gives an IP; the name only exists after mDNS or a real connect,
+ * so sweep-only entries show their IP and resolve their name when clicked.
  *
  * WebATEM-owned (atem_connect.js is synced verbatim from the parent
  * project). Integrates only through that file's public globals
@@ -20,10 +27,12 @@
     var listEl = document.getElementById('discoveryList');
     var emptyEl = document.getElementById('discoveryEmpty');
     var scanBtn = document.getElementById('scanBtn');
+    var subnetInput = document.getElementById('scanSubnet');
 
     // ip -> {ip, name, model, source}. mDNS entries win over scan-only
     // ones (they carry a name), so a later scan never downgrades a name.
     var seen = {};
+    var localSubnet = null;
 
     function merge(atems) {
         var changed = false;
@@ -39,9 +48,7 @@
     }
 
     function ipSortKey(ip) {
-        return ip.split('.').map(function (o) {
-            return ('00' + o).slice(-3);
-        }).join('.');
+        return ip.split('.').map(function (o) { return ('00' + o).slice(-3); }).join('.');
     }
 
     function render() {
@@ -98,31 +105,46 @@
         fetch('/atem/api/discovered/', { cache: 'no-store' })
             .then(function (r) { return r.json(); })
             .then(function (data) {
-                if (data && data.atems && merge(data.atems)) render();
+                if (!data) return;
+                // Prefill the manual-scan field with the host's own subnet
+                // (used only for the opt-in "Scan subnet" fallback).
+                if (data.subnet && !localSubnet) {
+                    localSubnet = data.subnet;
+                    if (subnetInput && !subnetInput.value) subnetInput.value = localSubnet;
+                }
+                if (data.atems && data.atems.length && merge(data.atems)) render();
             })
             .catch(function () { /* transient; next poll retries */ });
     }
 
-    function runScan() {
+    // Opt-in sweep of a subnet — the fallback for ATEMs that don't
+    // advertise mDNS (rare). Finds them by IP; names still come from mDNS
+    // where available.
+    function manualScan() {
+        var subnet = (subnetInput && subnetInput.value.trim()) || localSubnet;
+        if (!subnet) return;
         scanBtn.disabled = true;
         var original = scanBtn.innerHTML;
-        scanBtn.innerHTML = '<span class="loading loading-spinner loading-xs"></span> Scanning…';
-        fetch('/atem/api/scan/', { cache: 'no-store' })
+        scanBtn.innerHTML = '<span class="loading loading-spinner loading-xs"></span>';
+        var restore = function () { scanBtn.disabled = false; scanBtn.innerHTML = original; };
+        fetch('/atem/api/scan/?subnet=' + encodeURIComponent(subnet), { cache: 'no-store' })
             .then(function (r) { return r.json(); })
             .then(function (data) {
                 if (data && data.atems) { merge(data.atems); render(); }
             })
             .catch(function () { /* ignore */ })
-            .finally(function () {
-                scanBtn.disabled = false;
-                scanBtn.innerHTML = original;
-            });
+            .finally(restore);
     }
 
-    if (scanBtn) scanBtn.addEventListener('click', runScan);
+    if (scanBtn) scanBtn.addEventListener('click', manualScan);
+    if (subnetInput) {
+        subnetInput.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') { e.preventDefault(); manualScan(); }
+        });
+    }
 
-    // Poll mDNS immediately (starts the listener server-side) and keep it
-    // fresh while the Connect page is open.
+    // Poll mDNS immediately (starts the listener + auto-sweeps) and keep
+    // it fresh while the Connect page is open.
     pollDiscovered();
     setInterval(pollDiscovered, 3000);
 })();
