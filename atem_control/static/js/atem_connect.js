@@ -63,7 +63,19 @@
     // filter match. Returns {ip} on success, or {error} for the status box.
     function resolveTarget(raw) {
         if (IP_SHAPE.test(raw)) return { ip: raw };
-        return { error: 'Enter a valid IP address (e.g. 192.168.1.100)' };
+        var matches = equipmentMatches(raw);
+        var exact = matches.filter(function (e) {
+            return e.name.toLowerCase() === raw.toLowerCase();
+        })[0];
+        if (exact) return { ip: exact.ip };
+        if (matches.length === 1) return { ip: matches[0].ip };
+        // A unique NAME hit wins over IP/location coincidences
+        var nameHits = matches.filter(function (e) { return nameMatchesAll(e, queryTokens(raw)); });
+        if (nameHits.length === 1) return { ip: nameHits[0].ip };
+        if (matches.length === 0) {
+            return { error: 'No ATEM matches "' + raw + '" - enter an IP address or equipment name' };
+        }
+        return { error: 'Multiple ATEMs match "' + raw + '" - pick one from the list' };
     }
 
     function hideSuggestions() {
@@ -173,7 +185,7 @@
 
         var rawTarget = document.getElementById('ipAddress').value.trim();
         if (!rawTarget) {
-            showStatus('Please enter an IP address', 'error');
+            showStatus('Please enter an IP address or equipment name', 'error');
             return;
         }
 

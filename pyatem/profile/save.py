@@ -116,7 +116,7 @@ def _build_mix_effect_block(blocks: ET.Element, mx: dict, me: int,
         prev = ET.SubElement(block, 'Preview')
         _set_attrs(prev, input=preview_source(mx, me))
 
-    # Next transition selection — TrSS is keyed per M/E, read
+    # Next transition selection — TrSS is keyed per M/E (Stage 4A), read
     # via the me index.
     if me_opts.next_transition:
         sel = transition_selection(mx, me)
@@ -948,7 +948,7 @@ def download_media_pool_images(
     download is skipped entirely. ``cache_put(slot, hash_hex,
     png_bytes)`` is called after each successful fresh download.
     Callers that don't care about caching leave both as ``None``.
-    The library doesn't own the cache — the application caller uses a
+    The library doesn't own the cache — the AV Server caller uses a
     per-request ``dict[hash_hex, bytes]`` to dedupe slots that share
     the same MPfe hash within a single save.
 

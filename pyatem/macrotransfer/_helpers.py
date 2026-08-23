@@ -188,9 +188,10 @@ def _d_signed_fixed_value(params, divisor):
 # =============================================================================
 # Tier 1 / 2 / 3 ops added 2026-04-30 — comprehensive coverage of the macro-
 # recordable surface on the 1 M/E Constellation HD. Wire formats verified by
-# recording each op via Software Control on a production ATEM and aligning
-# the resulting bytecode against the corresponding XML <Op> children
-# (the "Lots" XML capture, 2026-04-30).
+# recording each op via Software Control on .85 and aligning the resulting
+# bytecode against the corresponding XML <Op> children. See
+# tools/profile_research/Lots_2026-04-30_09-21-08.xml for the source data
+# and /tmp/align_xml_bytecode.py for the alignment tool.
 #
 # Layout helpers used below:
 #   me_marker_u16:      [u8 me, u8 family_marker, u16 LE value]      4 bytes
@@ -360,8 +361,8 @@ _WIPE_PATTERN_TO_INT = {v: k for k, v in _WIPE_PATTERN_NAMES.items()}
 # DVE transition pattern → wire u8 (op TransitionDVEPattern, 0x0034).
 #
 # RECONCILED 2026-06-03 to the hardware-confirmed enum. The macro op stores
-# the SAME wire byte as the live transition-dve.style — verified with a
-# live DVE probe (slot 10: macro byte == live style ==
+# the SAME wire byte as the live transition-dve.style — verified via
+# av_server/tools/macro_dve_probe.py (slot 10: macro byte == live style ==
 # 16, which the switcher labels SqueezeTopLeft). So this MUST match
 # pyatem.profile._enums.DVE_EFFECT_NAMES. The previous table's Swoosh/Spin/
 # Squeeze/Push entries were inherited from a since-removed transition enum

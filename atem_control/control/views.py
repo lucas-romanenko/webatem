@@ -56,11 +56,15 @@ def atem_status(request):
                 try:
                     # Ref-count the pool entry while we read state so a
                     # concurrent release can't tear the socket down under us.
+                    # Identity-guarded release (SH-7): if OUR entry is evicted
+                    # (worker death) and replaced while we read, a bare
+                    # release_instance(ip) would steal a reference from the
+                    # fresh entry's live holders.
                     instance = ATEMInstanceManager.get_instance(ip)
                     try:
                         state = build_full_state(instance['connection'])
                     finally:
-                        ATEMInstanceManager.release_instance(ip)
+                        ATEMInstanceManager.release_instance(ip, instance=instance)
 
                     if state.get('is_connected'):
                         response_data['instances'][ip].update({

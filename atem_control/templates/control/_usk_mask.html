@@ -1,0 +1,123 @@
+{% comment %}
+USK mask section — enable checkbox + Top/Bottom/Left/Right numeric entries
+with caret nudges (wire ranges: top/bottom 0..38, left/right 0..52).
+Shared verbatim by the Luma, Chroma and Pattern panels: the USK mask is
+per-keyer state, not per-key-type, so all three panels drive the same
+set_usk_mask_* verbs on the same fields. No parameters; k = 0-based keyer
+index in scope from the USK accordion x-for. (The DVE panel's mask block is
+NOT this one — it drives set_usk_dve_* on the dve_* fields.)
+{% endcomment %}
+<div class="space-y-3">
+<div class="flex items-center gap-2">
+<input 
+type="checkbox" 
+class="checkbox checkbox-sm"
+:checked="$store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.mask_enabled || false"
+@change="$store.atem.setUSKMaskEnabled(k, $event.target.checked)">
+<span class="text-sm font-medium">Mask</span>
+</div>
+
+<div class="grid grid-cols-2 gap-x-6 gap-y-3 pl-6"
+:class="!($store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.mask_enabled) ? 'opacity-50 pointer-events-none' : ''">
+
+<!-- Top -->
+<div class="flex items-center justify-between">
+<label class="text-sm opacity-70 mr-3">Top:</label>
+<div class="flex items-center gap-1">
+<input 
+type="number" 
+class="input input-bordered input-sm w-20 text-center font-mono text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" 
+:value="($store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.mask_top ?? 9).toFixed(2)"
+@change="$store.atem.setUSKMaskTop(k, $event.target.value)"
+step="0.01"
+min="-9" 
+max="9">
+<div class="flex flex-col">
+<button class="btn btn-ghost btn-xs p-0 h-4 min-h-0" 
+@click="$store.atem.setUSKMaskTop(k, Math.min(9, ($store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.mask_top ?? 9) + 0.1))">
+<i class="bi bi-caret-up-fill text-sm"></i>
+</button>
+<button class="btn btn-ghost btn-xs p-0 h-4 min-h-0" 
+@click="$store.atem.setUSKMaskTop(k, Math.max(-9, ($store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.mask_top ?? 9) - 0.1))">
+<i class="bi bi-caret-down-fill text-sm"></i>
+</button>
+</div>
+</div>
+</div>
+
+<!-- Bottom -->
+<div class="flex items-center justify-between">
+<label class="text-sm opacity-70 mr-3">Bottom:</label>
+<div class="flex items-center gap-1">
+<input 
+type="number" 
+class="input input-bordered input-sm w-20 text-center font-mono text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" 
+:value="($store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.mask_bottom ?? -9).toFixed(2)"
+@change="$store.atem.setUSKMaskBottom(k, $event.target.value)"
+step="0.01"
+min="-9" 
+max="9">
+<div class="flex flex-col">
+<button class="btn btn-ghost btn-xs p-0 h-4 min-h-0" 
+@click="$store.atem.setUSKMaskBottom(k, Math.min(9, ($store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.mask_bottom ?? -9) + 0.1))">
+<i class="bi bi-caret-up-fill text-sm"></i>
+</button>
+<button class="btn btn-ghost btn-xs p-0 h-4 min-h-0" 
+@click="$store.atem.setUSKMaskBottom(k, Math.max(-9, ($store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.mask_bottom ?? -9) - 0.1))">
+<i class="bi bi-caret-down-fill text-sm"></i>
+</button>
+</div>
+</div>
+</div>
+
+<!-- Left -->
+<div class="flex items-center justify-between">
+<label class="text-sm opacity-70 mr-3">Left:</label>
+<div class="flex items-center gap-1">
+<input 
+type="number" 
+class="input input-bordered input-sm w-20 text-center font-mono text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" 
+:value="($store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.mask_left ?? -16).toFixed(2)"
+@change="$store.atem.setUSKMaskLeft(k, $event.target.value)"
+step="0.01"
+min="-16" 
+max="16">
+<div class="flex flex-col">
+<button class="btn btn-ghost btn-xs p-0 h-4 min-h-0" 
+@click="$store.atem.setUSKMaskLeft(k, Math.min(16, ($store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.mask_left ?? -16) + 0.1))">
+<i class="bi bi-caret-up-fill text-sm"></i>
+</button>
+<button class="btn btn-ghost btn-xs p-0 h-4 min-h-0" 
+@click="$store.atem.setUSKMaskLeft(k, Math.max(-16, ($store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.mask_left ?? -16) - 0.1))">
+<i class="bi bi-caret-down-fill text-sm"></i>
+</button>
+</div>
+</div>
+</div>
+
+<!-- Right -->
+<div class="flex items-center justify-between">
+<label class="text-sm opacity-70 mr-3">Right:</label>
+<div class="flex items-center gap-1">
+<input 
+type="number" 
+class="input input-bordered input-sm w-20 text-center font-mono text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" 
+:value="($store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.mask_right ?? 16).toFixed(2)"
+@change="$store.atem.setUSKMaskRight(k, $event.target.value)"
+step="0.01"
+min="-16" 
+max="16">
+<div class="flex flex-col">
+<button class="btn btn-ghost btn-xs p-0 h-4 min-h-0" 
+@click="$store.atem.setUSKMaskRight(k, Math.min(16, ($store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.mask_right ?? 16) + 0.1))">
+<i class="bi bi-caret-up-fill text-sm"></i>
+</button>
+<button class="btn btn-ghost btn-xs p-0 h-4 min-h-0" 
+@click="$store.atem.setUSKMaskRight(k, Math.max(-16, ($store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.mask_right ?? 16) - 0.1))">
+<i class="bi bi-caret-down-fill text-sm"></i>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>

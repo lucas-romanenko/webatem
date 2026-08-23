@@ -18,9 +18,9 @@ For the underlying XML and bytecode wire-format details, see:
 
 Save and restore a complete ATEM switcher configuration to a single file
 that is **byte-identical compatible with Blackmagic ATEM Software
-Control's "Save Switcher State"** command. A profile saved by this
-application opens cleanly in Software Control; a profile saved by
-Software Control loads cleanly into this application.
+Control's "Save Switcher State"** command. A profile saved by AV Server
+opens cleanly in Software Control; a profile saved by Software Control
+loads cleanly into AV Server.
 
 This is — to our knowledge — the first publicly-implemented support for
 the `<Profile>` format outside of Blackmagic's own tools.
@@ -249,7 +249,7 @@ print(result.skipped)     # ['program_preview: gated off (...)', ...]
 print(result.errors)      # ['fairlight: ValueError: ...']
 
 # Section descriptors (for building UI)
-# Note: these live in the application layer rather than pyatem —
+# Note: these live in the AV Server application rather than pyatem —
 # the descriptor shape is UI scaffolding for the section-selection
 # modal, not part of the save/restore feature.
 from atem_control.profile.dialog import (
@@ -346,8 +346,8 @@ human-readable `error` field.
 
 ## Frontend
 
-Lives in `atem_control/static/js/atem_profile.js`. Public surface on
-`window.AtemProfile`:
+Lives in `atem_control/static/js/atem_profile.js` (~445
+lines). Public surface on `window.AtemProfile`:
 
 | Function | Purpose |
 |---|---|
@@ -359,8 +359,8 @@ Lives in `atem_control/static/js/atem_profile.js`. Public surface on
 | `loadProfileFiles(opts)` | Open file picker(s) |
 | Layout helpers | `sectionsInGroup`, `sectionsInMeTab`, `meTabs` for Alpine `x-for` iteration |
 
-The dialog markup lives in `atem_control/templates/control.html`.
-It uses Alpine.js directives — no heavy framework.
+The dialog markup lives in `atem_control/templates/control.html`
+(lines 1814–1970). It uses Alpine.js directives — no heavy framework.
 
 The earlier session-2 File System Access API path (direct folder
 read/write) was removed: Chrome refuses `showDirectoryPicker` access
@@ -385,8 +385,7 @@ Reference XML: `everything_2026-04-27_18-16-51.xml` (Constellation HD,
 v2.1). The round-trip on this file is **byte-identical** at 71,987
 characters and is the format-compliance pin.
 
-Live-ATEM smoke / verification scripts used during development (not
-included in this repository):
+Live-ATEM smoke / verification scripts live in `av_server/tools/`:
 
 - `profile_macro_verify.py` — runs `Profile.from_atem`, reports
   per-op-id histogram + any `Unknown_0x` artifacts.
@@ -418,9 +417,9 @@ appear in `ApplyResult.skipped` with the reason `"… ops not implemented
   parsed (visible in mixerstate); send-side wire commands haven't been
   reverse-engineered. Master fader, per-strip fader/gain/mix/EQ, and
   master EQ all work.
-- **SuperSource** — the format supports it; the application doesn't
-  render a dialog cell for it because the deployed switchers don't have
-  it. Would need a topology-driven dialog.
+- **SuperSource** — the format supports it; AV Server doesn't render a
+  dialog cell for it because production switchers don't have it. Would
+  need a topology-driven dialog.
 - **Multi-M/E** — same. Today the M/E box is hardcoded for "M/E 1".
 
 ### Cross-model assumptions
@@ -434,7 +433,7 @@ the supported set.
 
 ### Resolution mismatch (latent)
 
-`atem_control/media_pool/views.py` always resizes uploads to 1920×1080. If the
+`content_change/views/upload.py` always resizes to 1920×1080. If the
 target ATEM runs anything other than 1080p, profile-driven media-pool
 restore will fail validation. All production switchers run 1080p so
 this isn't fired today.
@@ -455,8 +454,8 @@ this isn't fired today.
 3. Add a `<flag>` field on `SaveOptions` defaulting `True`.
 4. Wire it into `Profile.from_atem` after the existing build calls.
 5. Add a section to `describe_save_sections` in
-   `atem_control/profile/dialog.py` so the save modal renders a
-   checkbox.
+   `atem_control/profile/dialog.py` so the AV Server save
+   modal renders a checkbox.
 6. Add a parametrized round-trip test in
    `tests/unit/test_profile_granular.py`.
 
@@ -487,9 +486,9 @@ The discovery workflow (proven across 99 ops added in one pass on
 
 1. Have an operator record a comprehensive macro on a real ATEM with
    Software Control, exporting the XML.
-2. Record the same single-field operation in isolation into a test
-   slot, download the bytecode, and inspect (the op-code discovery
-   workflow).
+2. Use `av_server/tools/macro_opcode_discovery.py` to record the same
+   single-field operation in isolation into a test slot, download the
+   bytecode, and inspect.
 3. Or, with a comprehensive XML in hand, walk the XML's `<Op>` children
    in parallel with the bytecode bytes — every position-aligned pair
    gives `op_code → xml_id` and the param bytes derive the encoding.
@@ -528,11 +527,11 @@ requires reverse-engineering the **send** packets:
 |---|---|
 | `<Profile>` XML schema | [`PROFILE_FORMAT.md`](PROFILE_FORMAT.md) |
 | Macro wire protocol & bytecode format | [`MACRO_FORMAT.md`](MACRO_FORMAT.md) |
-| Profile module source | [`../profile/`](../profile/) |
-| Macro module source | [`../macrotransfer/`](../macrotransfer/) |
-| Django views | [`../../atem_control/profile/views.py`](../../atem_control/profile/views.py), [`../../atem_control/profile/export.py`](../../atem_control/profile/export.py) |
-| Django URLs | [`../../atem_control/urls.py`](../../atem_control/urls.py) |
-| Frontend JS | [`../../atem_control/static/js/atem_profile.js`](../../atem_control/static/js/atem_profile.js) |
-| Dialog template | [`../../atem_control/templates/control.html`](../../atem_control/templates/control.html) |
-| Tests | [`../../tests/unit/test_profile_*.py`](../../tests/unit/), [`../../tests/unit/test_apply_macros.py`](../../tests/unit/test_apply_macros.py), [`../../tests/unit/test_macro_*.py`](../../tests/unit/) |
-| Live-ATEM smoke / discovery scripts | development-time scripts, not included in this repository |
+| Profile module source | [`profile.py`](profile.py) |
+| Macro module source | [`macrotransfer.py`](macrotransfer.py) |
+| Django views | [`../atem_control/profile/views.py`](../atem_control/profile/views.py), [`../atem_control/profile/export.py`](../atem_control/profile/export.py) |
+| Django URLs | [`../atem_control/urls.py`](../atem_control/urls.py) |
+| Frontend JS | [`../atem_control/static/js/atem_profile.js`](../atem_control/static/js/atem_profile.js) |
+| Dialog template | [`../atem_control/templates/control.html`](../atem_control/templates/control.html) (lines 1814–1970) |
+| Tests | [`../tests/unit/test_profile_*.py`](../tests/unit/), [`../tests/unit/test_apply_macros.py`](../tests/unit/test_apply_macros.py), [`../tests/unit/test_macro_*.py`](../tests/unit/) |
+| Live-ATEM smoke / discovery scripts | [`../av_server/tools/`](../av_server/tools/) |

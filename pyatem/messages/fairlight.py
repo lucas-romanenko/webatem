@@ -398,9 +398,10 @@ class FairlightMasterCompressorPropertiesCommand(Send):
     The value sits in the low 2 bytes (6-7) with the sign extension in 4-5;
     packing it as s16@6 leaves 4-5 zero so the ATEM reads a large positive
     and clamps a negative threshold to 0 (threshold range is -60..0, so it
-    ALWAYS hit the bug). Confirmed + fix validated live 2026-06-09 with a
-    round-trip smoke test (set -22.5 → read -22.5 with i32@4;
-    → read 0 with the old s16@6).
+    ALWAYS hit the bug). Confirmed + fix validated live 2026-06-09 by
+    av_server/tools/roundtrip_smoke.py (set -22.5 → read -22.5 with i32@4;
+    → read 0 with the old s16@6). See pyatem docs and the
+    project_fairlight_cfsp_i32_pattern note.
     """
     CODE = 'CMCP'
 
@@ -465,8 +466,8 @@ class FairlightMasterLimiterPropertiesCommand(Send):
 
     Threshold is the same sign-extended i32@4 as the master compressor
     (CMCP) above — NOT s16@6. A negative threshold otherwise clamps to 0.
-    Confirmed + fix validated live 2026-06-09 with a round-trip
-    smoke test.
+    Confirmed + fix validated live 2026-06-09 by
+    av_server/tools/roundtrip_smoke.py.
     """
     CODE = 'CMLP'
 
@@ -1596,7 +1597,7 @@ def fairlight_solo(mx) -> dict:
     stereo source reports a ``{channel}.{subchannel}`` strip id; otherwise
     it's ``{channel}.0``.
 
-    Fix (2026-06-10): previously looked up ``any_soloed`` / ``source``
+    IQ-1 FIX (2026-06-10): previously looked up ``any_soloed`` / ``source``
     / ``is_split`` — names the Recv doesn't expose — so every
     getattr-with-default fired and the reader returned the empty form for
     any real input (the solo indicator was permanently "nothing soloed").

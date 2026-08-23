@@ -8,8 +8,8 @@ connection) drops the cached client and reconnects once, transparently; a
 protocol-level ``HyperdeckError`` (e.g. "timeline empty") is a real response and
 propagates unchanged.
 
-Fix (2026-07-06): decks are near-single-controller devices — a cached
-9993 session held forever starves the uploader and every other tool.
+SH-20 FIX (2026-07-06): decks are near-single-controller devices — a cached
+9993 session held forever starves the uploader container and every other tool.
 Cached decks are now released two ways:
 
   * Idle eviction — every ``with_deck`` call records ``_LAST_USED[ip]`` and
@@ -52,7 +52,7 @@ def _lock_for(ip):
 def _connect(ip):
     hd = Hyperdeck(ip, connect_timeout=CONNECT_TIMEOUT, read_timeout=READ_TIMEOUT)
     hd.connect()
-    # Fix (2026-07-06): remote_enable can raise HyperdeckError, which
+    # SH-20 FIX (2026-07-06): remote_enable can raise HyperdeckError, which
     # with_deck's OSError handler does not catch — pre-fix, every failed
     # setup (~1 Hz while the modal polls) abandoned a connected socket.
     try:
@@ -127,7 +127,7 @@ def with_deck(ip, fn):
 
 
 def _close_all_decks_at_exit():
-    """Interpreter-exit safety net (2026-07-06): close every cached
+    """Interpreter-exit safety net (SH-20 FIX 2026-07-06): close every cached
     deck session. ``Hyperdeck.close()`` sends a polite ``quit`` before closing
     the socket, so the deck sees a clean controller departure instead of an
     abandoned session. Mirrors ``pyatem.pool._close_all_sessions_at_exit`` —

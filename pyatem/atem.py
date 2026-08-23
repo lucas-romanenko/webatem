@@ -33,7 +33,7 @@ ship an ``atem.pyi`` stub if that becomes a friction point.
 from typing import Optional
 
 from pyatem._state import build_full_state, display_fps
-from pyatem.connection import ATEMConnection
+from pyatem.connection import ATEMConnection, ConnectionDeadError
 from pyatem.helpers import format_rate
 from pyatem.messages import (
     color_generator as _m_color_generator,
@@ -155,9 +155,10 @@ class ATEM:
         shape as a regular missing-attribute error).
 
         Conn is resolved at call-time inside the returned closure, so a
-        ``close()`` between attribute lookup and invocation surfaces as
-        ``ConnectionDeadError`` from the connection layer rather than a
-        silently-stale connection.
+        ``close()`` between attribute lookup and invocation raises
+        ``ConnectionDeadError`` (guarded below — ``close()`` nulls
+        ``_conn``, which would otherwise surface as a confusing
+        ``AttributeError`` on ``None``).
         """
         op = _OPERATIONS.get(name)
         if op is None:
@@ -166,7 +167,11 @@ class ATEM:
             )
 
         def _forward(*args, **kwargs):
-            return op(self._conn, *args, **kwargs)
+            conn = self._conn
+            if conn is None:
+                raise ConnectionDeadError(
+                    f"ATEM({self._ip}) is closed")
+            return op(conn, *args, **kwargs)
 
         _forward.__name__ = name
         _forward.__qualname__ = f"{type(self).__name__}.{name}"

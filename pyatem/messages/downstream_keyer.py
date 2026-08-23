@@ -463,12 +463,12 @@ def configure_dsk_gain(conn, *, clip=None, gain=None, pre_multiplied=None,
     """Set multiple DSK gain fields atomically in one CDsG packet. Each
     kwarg is optional; only non-None kwargs land in the field mask.
 
-    Fix (2026-06-02): clip/gain now use ``percent_to_tenths``
+    IQ-3 FIX (2026-06-02): clip/gain now use ``percent_to_tenths``
     (×10, clamp 0..1000) — consistent with the single setters
     ``set_dsk_clip`` / ``set_dsk_gain``. Previously this used
     ``percent_to_thousandths`` (×100), which the ATEM clamped to 100%
-    for any value ≳10%. Exercised by an overlay keyer setup
-    (e.g. ``configure_dsk_gain(clip=22, gain=30)``)."""
+    for any value ≳10%. Exercised by the downtime-overlay keyer setup
+    (``configure_dsk_gain(clip=22, gain=30)``)."""
     conn.send(DkeyGainCommand(
         index=int(dsk_idx),
         premultiplied=None if pre_multiplied is None else bool(pre_multiplied),

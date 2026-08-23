@@ -5,58 +5,15 @@ or AtemProtocol and return the right thing for the caller's purpose
 (mixerstate dict for reads, send-capable conn for writes, optional
 protocol for raw transfers).
 
-Plus ``_set_attrs`` for adding XML attributes in BMD's formatted style
-and ``_wait_for_state_settled`` for polling the handshake's late
-arrivals before snapshotting.
+Plus ``_set_attrs`` for adding XML attributes in BMD's formatted style.
+(The state-dump settle wait moved to ``pyatem.ready.wait_state_settled``
+— it's a readiness concern, not a profile one, and av_server callers
+needed it without reaching into profile internals.)
 """
 
-import time as _time
 import xml.etree.ElementTree as ET
 
 from pyatem.profile._xml import _fmt
-
-
-def _wait_for_state_settled(atem, timeout: float = 3.0) -> None:
-    """Wait for the ATEM's initial state dump to look complete.
-
-    pyatem.ready.wait_ready returns when ``video-mode`` arrives — but the
-    state dump continues for another ~1s with the per-feature packets
-    (program-bus-input, aux-output-source, transition-mix, key-on-air,
-    fairlight-master-properties, ...). We need them all populated for
-    from_atem to capture meaningful state.
-
-    Strategy: poll mixerstate.keys() until either (a) one of a small
-    set of indicator keys all appear or (b) the key count has stopped
-    growing for ~300ms. Cap at ``timeout`` seconds.
-    """
-    import time as _time
-
-    mx = _resolve_mixerstate(atem)
-    indicators = (
-        'program-bus-input', 'preview-bus-input', 'transition-settings',
-        'aux-output-source', 'key-on-air', 'transition-mix',
-        # Fairlight packets arrive late in the dump on Constellation HD —
-        # without these the master-out and per-strip sections of the
-        # profile come out empty. The strip properties dict can stay empty
-        # (no strips configured), but the audio-input dict at least lists
-        # the available sources, and the master-properties packet is
-        # always present once Fairlight is up.
-        'fairlight-audio-input', 'fairlight-master-properties',
-    )
-    deadline = _time.monotonic() + timeout
-    last_count = len(mx)
-    last_change = _time.monotonic()
-    while _time.monotonic() < deadline:
-        if all(k in mx for k in indicators):
-            return
-        _time.sleep(0.05)
-        cur = len(mx)
-        if cur != last_count:
-            last_count = cur
-            last_change = _time.monotonic()
-        elif _time.monotonic() - last_change > 0.5:
-            # No new keys for 500ms — call the dump settled.
-            return
 
 
 def _resolve_mixerstate(atem) -> dict:

@@ -1,5 +1,5 @@
                 <!-- Transition Controls -->
-                <div class="card bg-base-200 shadow-lg">
+                <div class="card bg-base-200">
                     <div class="card-body">
                         <h2 class="card-title mb-4">
                             <i class="bi bi-shuffle text-primary"></i>
@@ -7,10 +7,10 @@
                         </h2>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
                             <div class="flex gap-3">
-                                <button class="btn btn-error flex-1" @click="$store.atem.send('cut')">
+                                <button class="btn btn-pgm flex-1 font-extrabold tracking-wider" @click="$store.atem.send('cut')">
                                     CUT
                                 </button>
-                                <button class="btn btn-warning flex-1" @click="$store.atem.send('auto')">
+                                <button class="btn btn-warning flex-1 font-extrabold tracking-wider" @click="$store.atem.send('auto')">
                                     AUTO
                                 </button>
                             </div>

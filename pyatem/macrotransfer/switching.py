@@ -79,7 +79,7 @@ def _d_transition_source(params, mx):
 # --- Fade-to-black enable (FEna recording capture) ---
 
 # Wire layout: u8 mixEffectBlockIndex, u8 enabled, u16 padding.
-# Verified on a live ATEM by recording FEna(enable=True/False) into a
+# Verified live on .85 by recording FEna(enable=True/False) into a
 # free macro slot and inspecting the captured bytecode. Each FEna
 # emit produces multiple op-0x0202 entries; the decoder treats each
 # as one <Op> and round-trips byte-for-byte.
@@ -102,7 +102,7 @@ def _d_ftb_enabled(params, mx):
 # --- Video mode ---
 
 # Wire layout: u8 mode index (matches VideoModeField), 3 bytes pad.
-# Verified on a live ATEM (recorded CVdM at current mode → bytecode op
+# Verified live on .85 (recorded CVdM at current mode → bytecode op
 # 0x000c with params `<u8 mode><3 pad>`).
 #
 # Note: op-code 0x000c also surfaces as an auto-prologue at the head

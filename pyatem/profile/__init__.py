@@ -25,7 +25,11 @@ Public surface::
     profile = Profile.from_file('/tmp/state.xml')
     with ATEM(ip) as atem:
         result = profile.apply(atem)            # leaves Program/Preview alone
-        result = profile.apply(atem, ApplyOptions(restore_program_preview=True))
+        # Program/Preview gating is per-M/E (there is no
+        # restore_program_preview field):
+        opts = ApplyOptions()
+        opts.mes[0].program = opts.mes[0].preview = True
+        result = profile.apply(atem, opts)
 
 See ``pyatem/docs/PROFILE_FORMAT.md`` for the format reference.
 
@@ -70,8 +74,8 @@ from pyatem.profile._common import (
     _resolve_connection,
     _resolve_mixerstate,
     _resolve_protocol_or_none,
-    _wait_for_state_settled,
 )
+from pyatem.ready import wait_state_settled
 from pyatem.profile._enums import (
     PROFILE_MAJOR_VERSION,
     PROFILE_MINOR_VERSION,
@@ -199,7 +203,7 @@ class Profile:
         another second or two. Block briefly here until the dump looks
         settled so the resulting profile reflects the full state.
         """
-        _wait_for_state_settled(atem)
+        wait_state_settled(atem)
 
         opts = options or SaveOptions()
 
@@ -257,8 +261,10 @@ class Profile:
         """Serialize as XML matching ATEM Software Control's output style:
         4-space indent, self-closing tags without leading space, UTF-8
         XML declaration."""
-        # Make a shallow copy so we can mutate indent without disturbing
-        # callers who hold references.
+        # NOTE: this is NOT a copy — _clone_for_serialize returns the
+        # profile's own root, so ET.indent mutates our tree's whitespace
+        # in place. Deliberate: nothing depends on pre-serialize
+        # whitespace, and profiles are large (media pool images).
         tree_root = self._clone_for_serialize()
         ET.indent(tree_root, space='    ')
         body = ET.tostring(tree_root, encoding='unicode',

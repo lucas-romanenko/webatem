@@ -1,6 +1,6 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 # Copyright 2021 - 2022, Martijn Braam and the OpenAtem contributors
 # SPDX-License-Identifier: LGPL-3.0-only
-# Modified 2025 - 2026, Lucas Romanenko for WebATEM — see NOTICE.md
 import queue
 import socket
 import os
@@ -40,7 +40,7 @@ class SocketQueue(queue.Queue):
 
     def close(self):
         """Free the socketpair FDs. Idempotent. Without this the pair was
-        GC-only — every leaked protocol pinned 2 FDs (2026-07-06)."""
+        GC-only — every leaked protocol pinned 2 FDs (L4, 2026-07-06)."""
         for s in (self._putsocket, self._getsocket):
             try:
                 s.close()

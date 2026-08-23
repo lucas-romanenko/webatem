@@ -10,18 +10,19 @@ import json
 import logging
 import asyncio
 import os
+import threading
 import time
 from channels.generic.websocket import AsyncWebsocketConsumer
 from asgiref.sync import sync_to_async
 from atem_control.media_pool import watcher as media_pool_service
 from pyatem._state import ATEMStateMixin
 from pyatem.messages.fairlight import enable_fairlight_levels
-from pyatem.messages.system_info import device_name, product_name
 from pyatem.pool import ATEMInstanceManager
 from atem_control.control.commands import dispatch as dispatch_command
 from atem_control.control.logging import ATEMConnectionLoggingMixin
 from atem_control.activity import ActivityLog
 from atem_control.activity import arecord_activity
+from atem_control.netutil import is_valid_ip
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,21 @@ logger = logging.getLogger(__name__)
 # event loop (single ASGI worker, by design — see README), so dict ops are
 # race-free.
 _meter_subscribers: dict[str, int] = {}
+
+# Live operator control sessions per ATEM IP — the username of each connected
+# control page (one list entry per open session; the same user in two tabs
+# appears twice). The pool ref-count ALSO counts the media-pool watcher +
+# captures, so it can't tell us WHO is on a switcher — this can. Touched from
+# executor threads (sync_to_async acquire/release) AND read from the request
+# thread, so it needs a lock (unlike _meter_subscribers, event-loop only).
+_control_sessions_lock = threading.Lock()
+_control_sessions: dict[str, list] = {}
+
+
+def active_control_sessions() -> dict:
+    """Snapshot ``{ip: [usernames]}`` — one entry per live control session."""
+    with _control_sessions_lock:
+        return {ip: list(users) for ip, users in _control_sessions.items() if users}
 
 
 class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketConsumer):
@@ -131,15 +147,30 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
         self._pool_entry = instance
         self.connection = instance['connection']
         self.current_ip = ip_address
+        user = self.scope.get('user') if getattr(self, 'scope', None) else None
+        self._session_user = getattr(user, 'username', None) or 'unknown'
+        with _control_sessions_lock:
+            _control_sessions.setdefault(ip_address, []).append(self._session_user)
 
     def _release_pool_ref(self):
         """Release our pool ref (if any). Safe to call repeatedly."""
         ip = self.current_ip
         entry = self._pool_entry
+        user = getattr(self, '_session_user', None)
         self.current_ip = None
         self.connection = None
         self._pool_entry = None
+        self._session_user = None
         if ip:
+            with _control_sessions_lock:
+                users = _control_sessions.get(ip)
+                if users:
+                    try:
+                        users.remove(user)
+                    except ValueError:
+                        users.pop()   # username drifted — drop one anyway
+                    if not users:
+                        _control_sessions.pop(ip, None)
             # Fix (2026-07-06): identity-guarded release — if our entry
             # was evicted (worker death) and another holder created a fresh
             # one, releasing by IP alone would steal the replacement's ref
@@ -208,7 +239,7 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
             logger.error(f"Error stopping monitoring: {e}", exc_info=True)
 
         try:
-            await sync_to_async(self._release_pool_ref)()
+            await sync_to_async(self._release_pool_ref, thread_sensitive=False)()
         except Exception as e:
             logger.error(f"Error releasing pool ref: {e}", exc_info=True)
 
@@ -272,7 +303,10 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
         # Handler runs synchronously (it only enqueues — no network I/O on
         # this thread), but wrap in sync_to_async to stay consistent with
         # the async consumer model and in case handlers grow to read state.
-        ok, err = await sync_to_async(dispatch_command)(self.connection, command, data)
+        # KI#13: dispatch is pure pyatem (no ORM) — off the shared
+        # thread-sensitive lane so one slow call elsewhere can't queue
+        # every operator's commands behind it.
+        ok, err = await sync_to_async(dispatch_command, thread_sensitive=False)(self.connection, command, data)
 
         if not ok:
             logger.warning(f"Command {command} failed: {err}")
@@ -351,17 +385,8 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
         # No name database in this build — sessions are labeled by IP.
         return None
 
-    def _state_with_name(self):
-        """Full state snapshot plus the switcher's self-assigned name (the
-        one set in ATEM Setup; defaults to the model string). The frontend
-        header shows it next to the IP."""
-        state = self.build_full_state(self.connection)
-        try:
-            mx = self.connection.mixerstate
-            state['atem_name'] = device_name(mx) or product_name(mx)
-        except Exception:
-            state['atem_name'] = ''
-        return state
+    # (build_full_state itself carries atem_name since the WhoI reader was
+    # upstreamed — the old _state_with_name wrapper is gone.)
 
     async def _flush_pending_sliders(self):
         """On disconnect, emit any slider whose drag never settled so the
@@ -393,6 +418,16 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
             })
             return
 
+        # A WebSocket-supplied IP goes straight to the pyatem UDP socket; a
+        # hostname would be DNS-resolved and a bad value scanned (audit SEC-6).
+        if not is_valid_ip(ip_address):
+            await self.send_json({
+                'type': 'connection_status',
+                'connected': False,
+                'message': 'Invalid ATEM IP address.',
+            })
+            return
+
         # Clean up existing connection
         if self.current_ip:
             await self.stop_monitoring()
@@ -404,9 +439,9 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
             # refcount (SFLN never re-armed for anyone) and left
             # _audio_subscribed True so the new ATEM's subscribe no-oped.
             self._unsubscribe_audio_meters()
-            await sync_to_async(self._release_pool_ref)()
+            await sync_to_async(self._release_pool_ref, thread_sensitive=False)()
 
-        await sync_to_async(self._acquire_pool_ref)(ip_address)
+        await sync_to_async(self._acquire_pool_ref, thread_sensitive=False)(ip_address)
 
         success = False
         for attempt in range(3):
@@ -577,7 +612,7 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
 
                 # Get current state
                 t0 = time.monotonic()
-                current_state = await sync_to_async(self._state_with_name)()
+                current_state = await sync_to_async(self.build_full_state, thread_sensitive=False)(self.connection)
                 t_build = time.monotonic() - t0
 
                 # ATEM-side reachability transition: pyatem's protocol clears
@@ -732,7 +767,7 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
                 })
                 return
 
-            state = await sync_to_async(self._state_with_name)()
+            state = await sync_to_async(self.build_full_state, thread_sensitive=False)(self.connection)
 
             if state.get('is_connected'):
                 await self.send_json({
@@ -787,7 +822,7 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
         # handlers firing into it. Setting _mediapool_ip right after the
         # acquire also means a later failure (group_add / snapshot send)
         # still gets the watcher ref released by _unsubscribe_media_pool.
-        snapshot = await sync_to_async(media_pool_service.acquire)(ip_address)
+        snapshot = await sync_to_async(media_pool_service.acquire, thread_sensitive=False)(ip_address)
         self._mediapool_ip = ip_address
 
         if self.channel_layer is not None:
@@ -811,7 +846,7 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
                     media_pool_service.group_name(ip), self.channel_name
                 )
         finally:
-            await sync_to_async(media_pool_service.release)(ip)
+            await sync_to_async(media_pool_service.release, thread_sensitive=False)(ip)
 
     # =========================================================================
     # Audio meter subscription
@@ -1051,8 +1086,8 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
         # Re-arm any thumb-less slots first: opening the modal must always
         # converge to a fully-loaded pool, even if earlier downloads were
         # exhausted against a foreign lock-holder or a dropped task.
-        await sync_to_async(media_pool_service.requeue_missing)(ip)
-        snapshot = await sync_to_async(media_pool_service.get_snapshot)(ip)
+        await sync_to_async(media_pool_service.requeue_missing, thread_sensitive=False)(ip)
+        snapshot = await sync_to_async(media_pool_service.get_snapshot, thread_sensitive=False)(ip)
         await self.send_json({'type': 'media_pool_snapshot', 'data': snapshot})
 
     async def handle_media_pool_delete(self, data):
@@ -1074,10 +1109,10 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
             return
         try:
             logger.info(f"Media pool delete requested: slot {slot} on {self.current_ip}")
-            await sync_to_async(self.connection.clear_still)(slot)
+            await sync_to_async(self.connection.clear_still, thread_sensitive=False)(slot)
             # Force the watcher to drop any cached thumb for this slot, so the
             # next poll re-broadcasts the cleared (isUsed=False) state.
-            await sync_to_async(media_pool_service.note_upload_finished)(
+            await sync_to_async(media_pool_service.note_upload_finished, thread_sensitive=False)(
                 self.current_ip, slot
             )
             await arecord_activity(

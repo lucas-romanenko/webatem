@@ -30,8 +30,8 @@ class HyperdeckSettingsField(Recv):
     ====== ==== ====== ===========
 
     Layout verified live 2026-05-29 against an ATEM with a deck bound at
-    192.168.1.11 on input 4:
-    ``RXMS[0] = 00 00 | 00 00 | c0 a8 01 0b | 00 04 | ...``.
+    192.168.82.192 on input 4:
+    ``RXMS[0] = 00 00 | 00 00 | c0 a8 52 c0 | 00 04 | ...``.
     """
     CODE = 'RXMS'
     PRETTY = 'hyperdeck-settings'
@@ -112,6 +112,38 @@ def set_hyperdeck_settings(conn, *, slot, network_address=None,
     conn.send(HyperdeckSettingsCommand(
         slot=slot, network_address=network_address,
         switcher_input=switcher_input))
+
+
+def plan_binding_push(mx, deck_ip, switcher_input, *, exclude_slots=()):
+    """Decide the CXMS write (if any) that binds ``deck_ip`` to
+    ``switcher_input``: returns ``(slot, needs_write)``.
+
+    Reads the current RXMS bindings from ``mx`` (mixerstate). Reuses the
+    slot already holding ``deck_ip`` if there is one, else picks the first
+    unconfigured slot not in ``exclude_slots`` (callers assigning several
+    decks in one pass track slots they just claimed there — the RXMS echo
+    hasn't landed yet). ``slot`` is ``None`` when no slot is available;
+    ``needs_write`` is False when the binding is already correct.
+
+    This is the ONE slot-selection/drift decision — the uploader (bare
+    ``AtemProtocol``) and the hyperdeck Equipment sync (pooled
+    ``ATEMConnection``) both plan here and send with their own mechanics;
+    the two used to carry drifting copies of this logic.
+    """
+    hd_state = mx.get('hyperdeck-settings') or {}
+    slot_ids = sorted(hd_state.keys()) if hd_state else list(range(10))
+    binds = {s: hyperdeck_settings(mx, s) for s in slot_ids}
+    slot = next((s for s, b in binds.items()
+                 if b['configured'] and b['network_address'] == deck_ip), None)
+    if slot is None:
+        slot = next((s for s, b in binds.items()
+                     if not b['configured'] and s not in exclude_slots), None)
+    if slot is None:
+        return None, False
+    cur = binds[slot]
+    needs_write = (cur['network_address'] != deck_ip
+                   or int(cur['input'] or 0) != int(switcher_input))
+    return slot, needs_write
 
 
 # -----------------------------------------------------------------------------

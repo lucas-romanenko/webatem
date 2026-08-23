@@ -21,10 +21,10 @@ Contents:
                           safe_int, md5_hex.
   - Scale primitives:     percent_from_thousandths, unit_from_thousandths,
                           value_from_thousandths, value_from_tenths,
-                          percent_from_unit. Several may be dead code
-                          after the feature-first migration moved
-                          consumers onto DSL ``scale=``; queued for a
-                          separate audit.
+                          percent_from_unit. All actively used by
+                          messages/ readers (verified 2026-08-19) —
+                          the DSL ``scale=`` covers Send/Recv fields,
+                          not reader-side conversions.
   - Navigation:           _kv, _bare. Walk mx[key][i1][i2]... safely.
   - Fairlight tables:     _MIX_STATE_NAMES, _EQ_BAND_FILTER_NAMES,
                           _EQ_FREQ_RANGE_NAMES.
@@ -106,9 +106,9 @@ def md5_hex(raw: Any, default: str = '') -> str:
 # =============================================================================
 # Scale primitives
 # -----------------------------------------------------------------------------
-# Most of these may be dead code after the feature-first migration moved
-# consumers onto DSL ``scale=`` on Send/Recv class fields. A separate
-# cleanup pass can remove the unused ones.
+# All actively used by messages/ readers (verified 2026-08-19): the DSL
+# ``scale=`` covers Send/Recv wire fields, while these convert on the
+# reader side. Not dead code — do not queue them for removal.
 # =============================================================================
 
 
@@ -152,7 +152,7 @@ def value_from_thousandths(wire: Any, default: float = 0.0, places: int = 2) -> 
       - color-correction (brightness, contrast, red, green, blue): 3
       - saturation: 3
       - chroma key 5 fields (foreground, background, key_edge, spill,
-        flare_suppression — pending scale audit): TBD on empirical verify;
+        flare_suppression — pending Bug A): TBD on empirical verify;
         likely 3 if the frontend display multiplies unit by 100
 
     PRECISION RULE: when the frontend displays the result as percent
@@ -205,8 +205,8 @@ def percent_to_tenths(v) -> int:
     where ATEM's wire scale is ×10 of percent (DVE-transition / USK
     luma / stinger clip/gain). NOTE: ``set_usk_pattern_size`` and
     siblings use ``percent_to_thousandths`` (×100) because their wire
-    field is u16 0..10000 — that is correct, NOT a bug (investigated and
-    ruled a false positive; do not "fix" them to ×10)."""
+    field is u16 0..10000 — that is correct, NOT a bug (IQ-4 was ruled
+    a false positive; do not "fix" them to ×10). See CLAUDE.md."""
     return max(0, min(1000, int(round(float(v) * 10))))
 
 
@@ -309,8 +309,8 @@ def _bare(mx: dict, key: str, attr: Optional[str] = None, default: Any = None):
     Used for: fade-to-black-enabled, macro-play-status. These are keys
     where pyatem's upstream decoder didn't register an index-struct, so
     each incoming packet overwrites the previous state in-place.
-    (transition-settings moved off this list when TrSS became keyed
-    per M/E.)
+    (transition-settings moved off this list in Stage 4A — TrSS is keyed
+    per M/E now.)
     """
     node = mx.get(key)
     if node is None:
@@ -541,7 +541,7 @@ from pyatem.messages.switching import (  # noqa: E402
     aux_source, preview_source, program_source,
 )
 from pyatem.messages.system_info import (  # noqa: E402
-    available_video_modes, video_mode,
+    available_video_modes, device_name, product_name, video_mode,
 )
 from pyatem.messages.transition import (  # noqa: E402
     active_transition_rate, dip_rate, dip_source, dve_clip,
@@ -642,10 +642,10 @@ class ATEMStateMixin:
         self._fps = display_fps(mx)
 
         state = {'is_connected': True}
-        # Per-M/E state lives under mes[me] (control-topology refactor);
-        # every M/E is populated since the multi-M/E flip. The entry
-        # shapes are byte-identical to the earlier flat
-        # program/preview/transition/usk/ftb keys.
+        # Per-M/E state lives under mes[me] (Stage 3C of the
+        # control-topology refactor); every M/E is populated since the
+        # Stage 4A multi-M/E flip. The entry shapes are byte-identical to
+        # the pre-3C flat program/preview/transition/usk/ftb keys.
         state['mes'] = [{
             'program': program_source(mx, me),
             'preview': preview_source(mx, me),
@@ -686,6 +686,12 @@ class ATEMStateMixin:
         # refactor). Counts only — source/input data stays in
         # state['sources'] / state['inputLabels'] above.
         state['topology'] = self._build_topology(mx)
+
+        # The switcher's self-assigned name (ATEM Setup, via WhoI), falling
+        # back to the model string. Upstreamed from the WebATEM extraction
+        # 2026-08-23 — a NEW top-level key, so it is pre-declared in the
+        # store's initial state literal (the updateState merge-whitelist).
+        state['atem_name'] = device_name(mx) or product_name(mx)
 
         return state
 

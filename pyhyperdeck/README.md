@@ -1,12 +1,8 @@
 # pyhyperdeck
 
 A small in-tree library for controlling Blackmagic **HyperDeck Studio**-class
-units over the network. Vendored alongside the Django app: no PyPI release,
-no `setup.py`.
-
-pyhyperdeck is original work written for this project — it follows the
-*layout* of the neighbouring `pyatem` library but is not derived from its
-code. It is MIT-licensed under the repository root `LICENSE`.
+units over the network. Modeled on the `pyatem` / `pyultimatte` pattern:
+vendored alongside the Django app, no PyPI release, no `setup.py`.
 
 ## What it covers
 
@@ -25,7 +21,7 @@ across the lineup.
 
 The Ethernet protocol itself is fully documented by BMD in
 `HyperDeckEthernetProtocol.pdf` (December 2024 revision). pyhyperdeck
-exposes a curated subset focused on what this application actually needs.
+exposes a curated subset focused on what the AV Server actually needs.
 
 ## Quickstart
 
@@ -33,7 +29,7 @@ exposes a curated subset focused on what this application actually needs.
 from pyhyperdeck import Hyperdeck, upload_clip
 
 # Control via 9993
-with Hyperdeck('192.168.1.10') as hd:
+with Hyperdeck('192.168.82.191') as hd:
     print(hd.model, hd.protocol_version)
     for clip in hd.disk_list():
         print(clip.clip_id, clip.name, clip.duration)
@@ -43,7 +39,7 @@ with Hyperdeck('192.168.1.10') as hd:
     hd.play(loop=True, single_clip=True)
 
 # File upload via FTP
-result = upload_clip('192.168.1.10', '/local/path/intro.mp4')
+result = upload_clip('192.168.82.191', '/local/path/intro.mp4')
 print(f'{result.throughput_mb_s:.1f} MB/s into slot {result.slot_dir}')
 ```
 
@@ -70,7 +66,7 @@ unit's greeting (`500 connection info:` block), caching `model` and
 safe to call directly if you don't want the `with` block.
 
 ```python
-hd = Hyperdeck('192.168.1.10')
+hd = Hyperdeck('192.168.82.191')
 hd.connect()
 try:
     ...
@@ -222,7 +218,7 @@ CWDs into it before uploading.
 ```python
 from pyhyperdeck import upload_clip
 
-result = upload_clip('192.168.1.10', '/local/clip.mp4')
+result = upload_clip('192.168.82.191', '/local/clip.mp4')
 print(result.name)              # 'clip.mp4'
 print(result.size)              # bytes
 print(result.duration_seconds)  # wall-clock upload time
@@ -230,13 +226,13 @@ print(result.slot_dir)          # '1'
 print(result.throughput_mb_s)   # bench unit hit 47.6 MB/s on a 50MB clip
 
 # Explicit slot — skip auto-detect:
-upload_clip('192.168.1.10', '/local/clip.mp4', slot=2)
+upload_clip('192.168.82.191', '/local/clip.mp4', slot=2)
 
 # Progress reporting (called after each chunk with running byte count):
 def on_progress(bytes_so_far):
     print(f'{bytes_so_far:,} bytes uploaded')
 
-upload_clip('192.168.1.10', '/local/clip.mp4',
+upload_clip('192.168.82.191', '/local/clip.mp4',
             progress_callback=on_progress)
 ```
 
@@ -299,7 +295,7 @@ suite for the pattern.
 
 ## What's intentionally NOT in the API
 
-These exist in the protocol but aren't exposed because this application
+These exist in the protocol but aren't exposed because the AV Server
 doesn't need them yet. Add when the feature lands:
 
 - `playrange:` family (in/out point timeline ranges)

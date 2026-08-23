@@ -5,7 +5,7 @@
          channel-strip layout of ATEM Software Control's audio tab.
          Per-strip controls (volume / mix-type / pan / input gain) and the
          master strip are wired to the websocket commands defined in
-         atem_control/control/commands.py. Real-time meters arrive via
+         atem_control/commands.py. Real-time meters arrive via
          dedicated 'audio_meter_strip' / 'audio_meter_master' messages
          (~25 Hz) and are painted via direct DOM writes — see
          AudioMeters in atem_control.js.

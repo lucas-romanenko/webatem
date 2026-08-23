@@ -13,7 +13,7 @@ quick page transitions a window to reuse the existing socket.
 IMPORTANT — single-Uvicorn-worker invariant: the instance dict is
 process-local. Multiple Uvicorn workers would each get independent copies,
 break reference counting and create duplicate ATEM connections. See
-the "Single worker, by design" note in the repository README.
+CLAUDE.md in the app repo for the rationale.
 
 Threading contract
 ==================
@@ -225,7 +225,7 @@ class ATEMInstanceManager:
             if instance['ref_count'] <= 0:
                 # Double release. Decrementing below zero would arm a
                 # second grace timer and could steal a ref a concurrent
-                # holder just took through the 0-window (2026-07-06).
+                # holder just took through the 0-window (L2, 2026-07-06).
                 logger.error(
                     f"Double release for {ip_address} "
                     f"(ref_count={instance['ref_count']}) — ignoring")

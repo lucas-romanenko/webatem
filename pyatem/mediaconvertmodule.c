@@ -1,7 +1,9 @@
 /*
 Copyright 2021 - 2022, Martijn Braam and the OpenAtem contributors
 SPDX-License-Identifier: LGPL-3.0-only
-Modified 2025 - 2026, Lucas Romanenko for WebATEM — see NOTICE.md
+Hardened 2026: input-length validation, zero-length handling, buffer
+release on every exit path, Py_ssize_t counters (upstreamed from the
+WebATEM extraction 2026-08-23).
 */
 #define PY_SSIZE_T_CLEAN
 #define RLE_HEADER 0xFEFEFEFEFEFEFEFE

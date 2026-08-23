@@ -1,5 +1,15 @@
 /* ATEM Control CSS - Complete Version with Rate Countdown */
 
+/* Section titles — small uppercase tracked labels (design 4a: PROGRAM /
+   PREVIEW / KEYS / …). Colour comes from each title's existing semantic
+   class (text-error Program, text-success Preview, etc.). */
+.atem-main-content .card-title {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+}
+
 /* =================================================================
    T-Bar System - Only thing that really needs custom CSS
 ================================================================= */
@@ -10,16 +20,16 @@
     margin: 0 auto;
 }
 
+/* Design 4a fader: the track is a slot on the --input well with an
+   --input-line hairline; the handle is machined dark metal (fixed colours —
+   it's device chrome, like a physical fader, not a palette surface). */
 .tbar-track-vertical {
     position: relative;
     width: 2rem;
     height: 100%;
-    background: linear-gradient(180deg, 
-        rgba(156, 163, 175, 0.3) 0%, 
-        rgba(156, 163, 175, 0.2) 50%, 
-        rgba(156, 163, 175, 0.3) 100%);
-    border-radius: 1rem;
-    border: 2px solid rgba(255, 255, 255, 0.2);
+    background: var(--input);
+    border-radius: 3px;
+    border: 1px solid var(--input-line);
     cursor: pointer;
     user-select: none;
     margin: 0 auto;
@@ -28,36 +38,34 @@
 .tbar-handle-vertical {
     position: absolute;
     top: 0%;
-    left: -0.25rem;
-    width: 2.5rem;
-    height: 1.5rem;
-    background: #ffffff;
-    border: 2px solid #374151;
-    border-radius: 0.375rem;
+    left: -0.3125rem;
+    width: 2.625rem;
+    height: 1.375rem;
+    background: linear-gradient(180deg, #3A3E43, #1E2023);
+    border: 1px solid var(--chrome);
+    border-radius: 3px;
     cursor: grab;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.55);
     transition: none;
     z-index: 10;
     transform: translateY(-50%);
 }
 
 .tbar-handle-vertical:hover {
-    background: #f3f4f6;
-    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+    background: linear-gradient(180deg, #464B51, #26282B);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.6);
 }
 
 .tbar-handle-vertical.tbar-dragging {
     cursor: grabbing;
-    background: #e5e7eb;
-    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.5);
+    background: linear-gradient(180deg, #464B51, #26282B);
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.65);
     transform: translateY(-50%) scale(1.1);
 }
 
 .tbar-handle-inner-vertical {
     width: 100%;
     height: 100%;
-    background: linear-gradient(135deg, #ffffff, #e5e7eb);
-    border-radius: 0.25rem;
     position: relative;
 }
 
@@ -67,11 +75,11 @@
     top: 50%;
     left: 50%;
     width: 0.125rem;
-    height: 0.75rem;
-    background: #6b7280;
+    height: 0.625rem;
+    background: rgba(246, 246, 246, 0.22);
     transform: translate(-50%, -50%);
     border-radius: 0.0625rem;
-    box-shadow: 0.25rem 0 0 #6b7280, -0.25rem 0 0 #6b7280;
+    box-shadow: 0.25rem 0 0 rgba(246, 246, 246, 0.22), -0.25rem 0 0 rgba(246, 246, 246, 0.22);
 }
 
 .tbar-progress-vertical {
@@ -79,8 +87,8 @@
     top: 0;
     left: 0;
     width: 100%;
-    background: linear-gradient(180deg, rgba(59, 130, 246, 0.5), rgba(59, 130, 246, 0.8));
-    border-radius: 1rem;
+    background: linear-gradient(180deg, oklch(var(--p) / 0.5), oklch(var(--p) / 0.8));
+    border-radius: 3px;
     opacity: 0;
     transition: opacity 0.2s ease;
     pointer-events: none;
@@ -103,28 +111,28 @@
    Rate Countdown System - RESTORED
 ================================================================= */
 .rate-countdown-active {
-    border-color: #3b82f6 !important;
-    background-color: #eff6ff !important;
-    color: #1d4ed8 !important;
+    border-color: oklch(var(--in)) !important;
+    background-color: oklch(var(--in) / 0.15) !important;
+    color: oklch(var(--in)) !important;
     font-weight: 600 !important;
 }
 
 .rate-countdown-ending {
     animation: countdown-pulse 0.5s ease-in-out infinite alternate;
-    border-color: #f59e0b !important;
-    background-color: #fef3c7 !important;
-    color: #92400e !important;
-    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.3) !important;
+    border-color: oklch(var(--wa)) !important;
+    background-color: oklch(var(--wa) / 0.15) !important;
+    color: oklch(var(--wa)) !important;
+    box-shadow: 0 0 0 2px oklch(var(--wa) / 0.3) !important;
 }
 
 @keyframes countdown-pulse {
     0% {
         transform: scale(1);
-        box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.3);
+        box-shadow: 0 0 0 2px oklch(var(--wa) / 0.3);
     }
     100% {
         transform: scale(1.02);
-        box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.6);
+        box-shadow: 0 0 0 4px oklch(var(--wa) / 0.6);
     }
 }
 
@@ -157,6 +165,48 @@
 /* =================================================================
    Button Styling and Feedback
 ================================================================= */
+
+/* Lit bus / key buttons — backlit hardware look. A lit panel button reads
+   as an illuminated cap: a top edge highlight, a lit-from-within wash, a
+   hot close bloom and a wide soft bloom in the tally colour. Targets the
+   active-state utility combos the JS emits (bg-red-600 program/ON AIR/FTB,
+   bg-green-600 preview); these compound selectors outrank the shadow-*
+   utilities, so the Tailwind shadow is replaced, not stacked. */
+.source-btn.bg-red-600,
+.control-btn.bg-red-600 {
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.25),
+        inset 0 0 12px rgba(255, 255, 255, 0.15),
+        0 0 10px 2px rgba(239, 68, 68, 0.55),
+        0 0 26px 6px rgba(239, 68, 68, 0.30);
+}
+.source-btn.bg-green-600 {
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.25),
+        inset 0 0 12px rgba(255, 255, 255, 0.15),
+        0 0 10px 2px rgba(34, 197, 94, 0.55),
+        0 0 26px 6px rgba(34, 197, 94, 0.30);
+}
+/* Selected next-transition buttons (BKGD / KEY1-4) — same treatment in the
+   warning colour, via the role so the bloom follows the theme (#FFD34D on
+   dark, #9A6700 on light). The big AUTO/momentary buttons lack .control-btn
+   and stay flat on purpose — only lit states glow. */
+.control-btn.btn-warning {
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.25),
+        inset 0 0 12px rgba(255, 255, 255, 0.15),
+        0 0 10px 2px oklch(var(--wa) / 0.55),
+        0 0 26px 6px oklch(var(--wa) / 0.30);
+}
+/* On-air ring + bloom for media pool tiles (player tiles, slot tiles) —
+   tally red, replacing the old ring-error + arbitrary --er shadow combo.
+   One class does ring AND glow so it can't fight Tailwind's ring vars. */
+.ring-pgm-glow {
+    box-shadow:
+        0 0 0 2px var(--pgm-red),
+        0 0 12px color-mix(in srgb, var(--pgm-red) 60%, transparent);
+}
+
 .source-btn {
     transition: all 0.2s ease;
 }
@@ -199,33 +249,6 @@
 }
 
 /* =================================================================
-   Dark Mode T-Bar Support
-================================================================= */
-@media (prefers-color-scheme: dark) {
-    .tbar-track-vertical {
-        border-color: rgba(255, 255, 255, 0.3);
-    }
-    
-    .tbar-handle-vertical {
-        background: #1f2937;
-        border-color: #4b5563;
-    }
-    
-    .tbar-handle-vertical:hover {
-        background: #111827;
-    }
-    
-    .tbar-handle-inner-vertical {
-        background: linear-gradient(135deg, #374151, #1f2937);
-    }
-    
-    .tbar-handle-inner-vertical::after {
-        background: #9ca3af;
-        box-shadow: 0.25rem 0 0 #9ca3af, -0.25rem 0 0 #9ca3af;
-    }
-}
-
-/* =================================================================
    Accessibility
 ================================================================= */
 @media (prefers-reduced-motion: reduce) {
@@ -253,23 +276,24 @@
 /* USK1 Pattern Grid Styles - Separate from wipe patterns */
 .usk-pattern-button {
     aspect-ratio: 1;
-    border: 2px solid rgb(75 85 99);
+    border: 2px solid oklch(var(--b3));
     border-radius: 4px;
-    background: rgb(31 41 55);
+    background: oklch(var(--b1));
     padding: 4px;
     transition: all 0.2s ease;
     cursor: pointer;
 }
 
 .usk-pattern-button:hover {
-    border-color: rgb(59 130 246);
-    background: rgb(55 65 81);
+    border-color: oklch(var(--p));
+    background: oklch(var(--b3));
 }
 
+/* Selection is primary, not green — green means preview only. */
 .usk-pattern-button.usk-active {
-    border-color: rgb(34 197 94);
-    background: rgb(34 197 94 / 0.1);
-    box-shadow: 0 0 0 2px rgb(34 197 94 / 0.3);
+    border-color: oklch(var(--p));
+    background: oklch(var(--p) / 0.1);
+    box-shadow: 0 0 0 2px oklch(var(--p) / 0.3);
 }
 
 /* =================================================================
@@ -324,23 +348,23 @@
 
 .wipe-pattern-button {
     aspect-ratio: 1;
-    border: 2px solid rgb(75 85 99);
+    border: 2px solid oklch(var(--b3));
     border-radius: 4px;
-    background: rgb(31 41 55);
+    background: oklch(var(--b1));
     padding: 4px;
     transition: all 0.2s ease;
     cursor: pointer;
 }
 
 .wipe-pattern-button:hover {
-    border-color: rgb(59 130 246);
-    background: rgb(55 65 81);
+    border-color: oklch(var(--p));
+    background: oklch(var(--b3));
 }
 
 .wipe-pattern-button.active {
-    border-color: rgb(59 130 246);
-    background: rgb(59 130 246 / 0.1);
-    box-shadow: 0 0 0 2px rgb(59 130 246 / 0.3);
+    border-color: oklch(var(--p));
+    background: oklch(var(--p) / 0.1);
+    box-shadow: 0 0 0 2px oklch(var(--p) / 0.3);
 }
 
 .wipe-icon {
@@ -349,15 +373,15 @@
 }
 
 .pattern-bg {
-    fill: rgb(75 85 99);
+    fill: oklch(var(--b3));
 }
 
 .pattern-fill {
-    fill: rgb(156 163 175);
+    fill: oklch(var(--bc) / 0.5);
 }
 
 .wipe-pattern-button.active .pattern-fill {
-    fill: rgb(59 130 246);
+    fill: oklch(var(--p));
 }
 
 .wipe-pattern-button:focus,
@@ -365,8 +389,8 @@
 .wipe-pattern-button:visited,
 .wipe-pattern-button:focus-within,
 .wipe-pattern-button:target {
-    border: 2px solid rgb(75 85 99) !important;
-    background: rgb(31 41 55) !important;
+    border: 2px solid oklch(var(--b3)) !important;
+    background: oklch(var(--b1)) !important;
     box-shadow: none !important;
     outline: none !important;
 }
@@ -376,9 +400,9 @@
 .wipe-pattern-button.active:visited,
 .wipe-pattern-button.active:focus-within,
 .wipe-pattern-button.active:target {
-    border-color: rgb(59 130 246) !important;
-    background: rgb(59 130 246 / 0.1) !important;
-    box-shadow: 0 0 0 2px rgb(59 130 246 / 0.3) !important;
+    border-color: oklch(var(--p)) !important;
+    background: oklch(var(--p) / 0.1) !important;
+    box-shadow: 0 0 0 2px oklch(var(--p) / 0.3) !important;
     outline: none !important;
 }
 
@@ -417,7 +441,7 @@
     border-radius: 1px;
     transition: background 0.15s;
 }
-.audio-on-bar.is-on  { background: oklch(var(--er)); }
+.audio-on-bar.is-on  { background: var(--pgm-red); }  /* live-to-air = tally red, not UI error */
 .audio-on-bar.is-afv { background: oklch(var(--wa)); }
 
 /* Round knob — indicator rotates via CSS var --angle, driven by AudioKnob.
@@ -696,7 +720,7 @@
     border-right: 1px solid oklch(var(--b3) / 0.5);
 }
 .audio-strip-card:hover { background: oklch(var(--b2) / 0.7); }
-.audio-strip-card.is-on  { background: oklch(var(--er) / 0.04); }
+.audio-strip-card.is-on  { background: color-mix(in srgb, var(--pgm-red) 4%, transparent); }
 .audio-strip-card.is-afv { background: oklch(var(--wa) / 0.04); }
 
 .audio-master-card {

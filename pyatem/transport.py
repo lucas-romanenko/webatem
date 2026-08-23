@@ -1,6 +1,6 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 # Copyright 2021 - 2022, Martijn Braam and the OpenAtem contributors
 # SPDX-License-Identifier: LGPL-3.0-only
-# Modified 2025 - 2026, Lucas Romanenko for WebATEM — see NOTICE.md
 import collections
 import errno
 import logging
@@ -21,7 +21,7 @@ from pyatem._transfer import TransferQueueFlushed
 # anything else (EBADF from a deliberate close, etc.) still terminates the
 # thread. A thread killed by one transient error left a zombie connection —
 # worker parked forever, is_connected True, send() silently dropping
-# (session-hygiene audit, 2026-07-06).
+# (SH-3, session-hygiene audit 2026-07-06).
 TRANSIENT_SEND_ERRNOS = frozenset({
     errno.ENETUNREACH,   # VPN/route flap
     errno.EHOSTUNREACH,  # ICMP host-unreachable burst (ATEM rebooting)
@@ -202,6 +202,18 @@ class BaseProtocol:
         raise NotImplementedError()
 
     def queue_packet(self, packet):
+        # send_queue is a bounded deque: appending at maxlen silently
+        # discards the OLDEST queued packet — for reliable transfer chunks
+        # that's data corruption. FTCD budgets keep it far below the cap in
+        # practice, so overflow is a bug worth a loud line, not silence.
+        if self.send_queue.maxlen is not None and \
+                len(self.send_queue) == self.send_queue.maxlen:
+            # getattr: BaseProtocol has no self.log (UdpProtocol sets it).
+            log = getattr(self, 'log', None) or logging.getLogger(__name__)
+            log.error(
+                'send_queue overflow (maxlen=%d) — dropping oldest queued '
+                'packet; the in-flight transfer is likely corrupt',
+                self.send_queue.maxlen)
         self.send_queue.append(packet)
 
     def queue_trigger(self):
@@ -218,9 +230,6 @@ class BaseProtocol:
             return True
         return False
 
-    def get_link_quality(self):
-        return 100
-
 
 class UdpProtocol(BaseProtocol):
     STATE_CLOSED = 0
@@ -234,7 +243,7 @@ class UdpProtocol(BaseProtocol):
     FLAG_REQUEST_RETRANSMISSION = 8
     FLAG_ACK = 16
 
-    # Retransmission window: how far back (in 16-bit
+    # Retransmission window (Known Issue #24): how far back (in 16-bit
     # sequence numbers) the retransmission_buffer reaches. Requests
     # further back than this are unserviceable — the ATEM's own reliable
     # window is far smaller, so a request outside it means the session
@@ -254,7 +263,7 @@ class UdpProtocol(BaseProtocol):
     # and re-requests from wherever it is still missing, which paces the
     # recovery naturally. Hard backstop so no single request — however
     # malformed — can ever flood the switcher (an unpaced full-session
-    # replay is exactly what wedged a production ATEM live on 2026-06-12).
+    # replay is exactly what wedged the .85 ATEM live on 2026-06-12).
     RETRANSMIT_MAX_BURST = 128
 
     def __init__(self, ip, port=9910, timeout=5, *, aggressive_drain=False):
@@ -280,7 +289,7 @@ class UdpProtocol(BaseProtocol):
         self.local_sequence_number = 0
         self.remote_sequence_number = 0
 
-        # Contiguous-ACK high-water mark. The ATEM sends
+        # Contiguous-ACK high-water mark (Known Issue #22 fix). The ATEM sends
         # its initial state as a burst of reliable, sequenced packets and
         # retransmits anything we don't ACK. We must ACK only the highest
         # *gap-free* sequence so a dropped packet in the middle of the burst is
@@ -378,8 +387,8 @@ class UdpProtocol(BaseProtocol):
         # into callers hung forever (observed 2026-07-02: upload jobs stuck
         # in 'processing' until the reaper + a replica restart). The
         # sentinel makes loop() surface a disconnect immediately. EBADF
-        # after a deliberate close lands here too — what used to be a
-        # stderr traceback is now one log line.
+        # after a deliberate close lands here too — the old KI #5 stderr
+        # traceback is now one log line.
         try:
             self._udp_thread_loop()
         except Exception as e:
@@ -420,7 +429,7 @@ class UdpProtocol(BaseProtocol):
                             # not kill the transport thread: a dead thread
                             # leaves a zombie connection whose worker
                             # blocks forever while is_connected stays True
-                            # and send() silently drops (observed 2026-07-06).
+                            # and send() silently drops (SH-3, 2026-07-06).
                             # Drop the packet — reliable traffic is
                             # recovered by the retransmit machinery (the
                             # ATEM requests the sequence gap; we serve it
@@ -436,11 +445,6 @@ class UdpProtocol(BaseProtocol):
                 else:
                     self.thread_recv_queue.put(None)
                     raise RuntimeError("Unexpected result from select()")
-
-    def get_link_quality(self):
-        if self.packet_success == 0:
-            return 100
-        return 100 - (self.packet_errors / self.packet_success * 100)
 
     def _send_packet(self, packet):
         self.thread_queue.put(packet)
@@ -512,8 +516,8 @@ class UdpProtocol(BaseProtocol):
             # at every wrap (once per ~6 still transfers), triggering a
             # 20k-packet retransmission storm that stalled transfers ~40s.
             self.local_sequence_number = (self.local_sequence_number + 1) % 0x8000
-            # Buffer ONLY sequence-consuming packets for retransmission.
-            # Buffering unconditionally — as this did
+            # Buffer ONLY sequence-consuming packets for retransmission
+            # (Known Issue #24). Buffering unconditionally — as this did
             # historically — let every outgoing ACK overwrite the buffer
             # entry of the newest reliable packet (ACKs don't advance
             # local_sequence_number), so a retransmit request for that
@@ -545,7 +549,20 @@ class UdpProtocol(BaseProtocol):
             self.state = UdpProtocol.STATE_CLOSED
             self.connect()
             return
-        packet = Packet.from_bytes(data)
+        # The socket is unconnected, so ANY host on the VLAN can hit our
+        # ephemeral port. Before this guard, one foreign/garbage datagram
+        # raised out of Packet.from_bytes and killed the transport thread —
+        # dropping the operator's live session (pool eviction recovered it,
+        # but the session still died). Filter by peer and drop malformed
+        # datagrams instead.
+        if address[0] != self.ip:
+            self.log.debug(f"Ignoring datagram from foreign peer {address[0]}")
+            return
+        try:
+            packet = Packet.from_bytes(data)
+        except (ValueError, struct.error) as e:
+            self.log.warning(f"Ignoring malformed datagram from {address[0]}: {e}")
+            return
 
         if packet.flags & UdpProtocol.FLAG_RETRANSMISSION:
             # Retransmitted packets are the RECOVERY working (in-order
@@ -569,7 +586,7 @@ class UdpProtocol(BaseProtocol):
         if packet.flags & UdpProtocol.FLAG_REQUEST_RETRANSMISSION:
             # The ATEM missed one of our reliable packets and is asking
             # for everything from ``remote_sequence_number`` onward. Not
-            # honouring this (the pre-fix behaviour)
+            # honouring this (the pre-fix behaviour, Known Issue #24)
             # silently dropped the commands AND left the ATEM holding a
             # permanently gapped inbound stream — observed live wedging
             # the switcher's network engine until power cycle.
@@ -666,7 +683,7 @@ class UdpProtocol(BaseProtocol):
         return packet
 
     def _update_ack_number(self, packet):
-        """Advance the contiguous-ACK high-water mark.
+        """Advance the contiguous-ACK high-water mark (Known Issue #22).
 
         We ACK only the highest *gap-free* sequence: if a reliable packet in
         the middle of the ATEM's burst was dropped, the ACK stalls before the
@@ -692,7 +709,7 @@ class UdpProtocol(BaseProtocol):
     def _retransmit_from(self, request_seq):
         """Resend every buffered packet from ``request_seq`` through the
         latest sent sequence, in order, marked FLAG_RETRANSMISSION
-        (the outbound twin of ``_update_ack_number``).
+        (Known Issue #24 — the outbound twin of ``_update_ack_number``).
 
         The ATEM requests retransmission from the first sequence it is
         missing; per the protocol's go-back-N semantics everything from
@@ -764,6 +781,14 @@ class UdpProtocol(BaseProtocol):
             raise RuntimeError("Trying to open an connection that's already open")
 
         if not self.thread.is_alive():
+            # A Thread object can only be start()ed ONCE. If the UDP thread
+            # already ran and died, start() raises "threads can only be
+            # started once" — so this branch could never actually restart a
+            # dead transport. Build a fresh Thread in that case (ident is
+            # None only for a never-started thread).
+            if self.thread.ident is not None:
+                self.thread = threading.Thread(
+                    None, self._udp_thread, "atem-udp", daemon=True)
             self.thread.start()
 
         # Reset internal state
@@ -808,7 +833,7 @@ class UdpProtocol(BaseProtocol):
                 # BETWEEN loop() returns. Swallowing these made a connect to
                 # an unreachable ATEM un-timeout-able and un-killable —
                 # hung uploader replicas + orphaned worker threads
-                # (session-hygiene audit, 2026-07-06).
+                # (SH-1, session-hygiene audit 2026-07-06).
                 return None
             if packet is None and self.state == UdpProtocol.STATE_SYN_SENT:
                 # No response in connect, retry connection
@@ -853,7 +878,7 @@ class UdpProtocol(BaseProtocol):
                         ack.label = 'initial ack after connection'
                         self._send_packet(ack)
                     # Retransmission requests are handled at the socket
-                    # layer in _receive_packet_low;
+                    # layer in _receive_packet_low (Known Issue #24 fix);
                     # no other control packets need action here.
 
                     # Send queued up bulk traffic after the ack

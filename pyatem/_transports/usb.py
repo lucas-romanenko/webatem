@@ -4,7 +4,7 @@ USB transport for the Atem Mini line.
 
 Implements the same surface as ``UdpProtocol`` — ``connect()``,
 ``receive_packet()``, ``send_packet()``, etc. — over libusb via pyusb.
-This application's production deployments don't use this; the module is
+AV Server's production deployments don't use this; the module is
 imported lazily by ``AtemProtocol.__init__`` only when the caller
 passes ``usb=<port>``.
 """

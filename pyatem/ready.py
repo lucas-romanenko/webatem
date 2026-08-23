@@ -67,10 +67,10 @@ def wait_ready(
 
     # The handler must come off on EVERY exit path — wait_ready runs per
     # connect attempt, and a leaked closure per attempt accumulates on
-    # long-lived protocols (session-hygiene audit, 2026-07-06).
+    # long-lived protocols (L1, session-hygiene audit 2026-07-06).
     try:
-        deadline = time.time() + timeout
-        while time.time() < deadline:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
             if stop_event is not None and stop_event.is_set():
                 raise WaitAborted("stop_event set before ready")
             try:
@@ -104,8 +104,8 @@ def _pump_for(
     stop_event: Optional[threading.Event],
 ) -> None:
     """Keep calling ``protocol.loop()`` for ``duration`` seconds."""
-    deadline = time.time() + duration
-    while time.time() < deadline:
+    deadline = time.monotonic() + duration
+    while time.monotonic() < deadline:
         if stop_event is not None and stop_event.is_set():
             return
         try:
@@ -113,3 +113,57 @@ def _pump_for(
         except Exception as e:
             logger.debug("_pump_for: protocol.loop() error: %s", e)
         time.sleep(pump_interval)
+
+
+def wait_state_settled(atem, timeout: float = 3.0) -> None:
+    """Wait for the ATEM's initial state dump to look COMPLETE (a stronger
+    condition than ``wait_ready``).
+
+    ``wait_ready`` returns when ``video-mode`` arrives — but the state dump
+    continues for another ~1s with the per-feature packets
+    (program-bus-input, aux-output-source, transition-mix, key-on-air,
+    fairlight-master-properties, ...). Callers that snapshot or reconcile
+    against the full state (profile save, HyperDeck binding sync) need
+    them all populated.
+
+    Strategy: poll mixerstate keys until either (a) a small set of
+    indicator keys all appear or (b) the key count has stopped growing
+    for ~500ms. Cap at ``timeout`` seconds.
+
+    Accepts an ``ATEM`` facade, ``ATEMConnection``, or ``AtemProtocol``
+    (anything exposing ``mixerstate``, directly or via ``.raw``).
+    """
+    if hasattr(atem, 'mixerstate'):
+        mx = atem.mixerstate
+    elif hasattr(atem, 'raw') and hasattr(atem.raw, 'mixerstate'):
+        mx = atem.raw.mixerstate
+    else:
+        raise TypeError(
+            f"wait_state_settled expected ATEM/ATEMConnection/AtemProtocol, "
+            f"got {type(atem).__name__}")
+
+    indicators = (
+        'program-bus-input', 'preview-bus-input', 'transition-settings',
+        'aux-output-source', 'key-on-air', 'transition-mix',
+        # Fairlight packets arrive late in the dump on Constellation HD —
+        # without these the master-out and per-strip sections of a profile
+        # come out empty. The strip properties dict can stay empty (no
+        # strips configured), but the audio-input dict at least lists the
+        # available sources, and the master-properties packet is always
+        # present once Fairlight is up.
+        'fairlight-audio-input', 'fairlight-master-properties',
+    )
+    deadline = time.monotonic() + timeout
+    last_count = len(mx)
+    last_change = time.monotonic()
+    while time.monotonic() < deadline:
+        if all(k in mx for k in indicators):
+            return
+        time.sleep(0.05)
+        cur = len(mx)
+        if cur != last_count:
+            last_count = cur
+            last_change = time.monotonic()
+        elif time.monotonic() - last_change > 0.5:
+            # No new keys for 500ms — call the dump settled.
+            return

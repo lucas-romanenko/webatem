@@ -1,6 +1,6 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 # Copyright 2021 - 2022, Martijn Braam and the OpenAtem contributors
 # SPDX-License-Identifier: LGPL-3.0-only
-# Modified 2025 - 2026, Lucas Romanenko for WebATEM — see NOTICE.md
 import logging
 import struct
 
@@ -155,7 +155,7 @@ class AtemProtocol:
                 # transfer_requested made the first post-reconnect transfer
                 # queue behind a corpse for a full caller timeout, and
                 # stale locks[] skipped the PLCK the new session needs
-                # (session-hygiene audit, 2026-07-06).
+                # (SH-16, session-hygiene audit 2026-07-06).
                 self._reset_transfer_lane()
             self.connected = False
             return
@@ -181,7 +181,7 @@ class AtemProtocol:
             # nothing: the session stayed ESTABLISHED with a gutted
             # mixerstate the ATEM never re-dumps. Say goodbye and
             # re-handshake so a fresh full state dump arrives
-            # (session-hygiene audit, 2026-07-06).
+            # (L3, session-hygiene audit 2026-07-06).
             self.log.error(
                 'Protocol corruption — forcing a clean session reconnect')
             self._raise('disconnected')
@@ -209,9 +209,6 @@ class AtemProtocol:
             return
         del self.callbacks[event][callback_id]
 
-    def get_link_quality(self):
-        return self.transport.get_link_quality()
-
     def _raise(self, event, *args, **kwargs):
         # Iterate a SNAPSHOT: handlers routinely off() themselves from the
         # caller thread the moment their event fires (download-done wakes
@@ -219,7 +216,7 @@ class AtemProtocol:
         # live dict raced that off() into "dictionary changed size during
         # iteration", aborting save_field_data BETWEEN FTDC's queue-pop and
         # _transfer_trigger — a silently stranded media-store lock on the
-        # shared session (session-hygiene audit, 2026-07-06). A
+        # shared session (SH-4, session-hygiene audit 2026-07-06). A
         # handler exception must not poison the packet loop either.
         handlers = self.callbacks.get(event)
         if not handlers:
@@ -300,7 +297,7 @@ class AtemProtocol:
             if self.transfer is None:
                 # Straggler chunk after abort_transfers / lane reset — the
                 # packet is already ACKed, so raising here would also drop
-                # any state fields bundled in it (2026-07-06).
+                # any state fields bundled in it (SH-15, 2026-07-06).
                 self.log.debug('FTDa with no transfer in flight — ignoring')
                 return
             if contents.transfer == self.transfer.tid:
@@ -308,9 +305,16 @@ class AtemProtocol:
                 self.transfer_buffer.append(contents.data)
                 self.transfer_buffer_bytes += len(contents.data)
                 if self.transfer_packets % 20 == 0:
-                    total_size = self.mixerstate['video-mode'].get_pixels() * 4
-                    transfer_progress = self.transfer_buffer_bytes / total_size
-                    self._raise('transfer-progress', self.transfer.store, self.transfer.slot, transfer_progress)
+                    # Progress is advisory and only meaningful for STILL
+                    # downloads (fraction of a frame). Macro-store (0xffff)
+                    # downloads have no frame size, and a raw KeyError on a
+                    # missing video-mode would abort save_field_data
+                    # mid-packet, dropping fields bundled behind the FTDa.
+                    vm = self.mixerstate.get('video-mode')
+                    if vm is not None and self.transfer.store != 0xffff:
+                        total_size = vm.get_pixels() * 4
+                        transfer_progress = self.transfer_buffer_bytes / total_size
+                        self._raise('transfer-progress', self.transfer.store, self.transfer.slot, transfer_progress)
                 # The 0 should be the transfer slot, but it seems it's always 0 in practice
                 self.send_commands([TransferAckCommand(self.transfer.tid, 0)])
             else:
@@ -330,7 +334,7 @@ class AtemProtocol:
                 return
             if contents.transfer != self.transfer.tid:
                 # A stale or foreign transfer id must not fail OUR
-                # in-flight transfer (2026-07-06).
+                # in-flight transfer (SH-15, 2026-07-06).
                 self.log.debug(
                     f'FTDE for transfer {contents.transfer}, ours is '
                     f'{self.transfer.tid} — ignoring')
@@ -360,6 +364,14 @@ class AtemProtocol:
                     self.transfer_buffer = []
                     self.transfer_buffer_bytes = 0
                     self._release_then_continue(store)
+                # Tell subscribers (macrotransfer's upload waiter) the real
+                # cause. Before this, the event was handled entirely
+                # in-branch and NEVER raised — a fatal macro-upload
+                # rejection surfaced as a bland 10 s TimeoutError instead
+                # of "ATEM rejected macro upload (status=…)". Raised only
+                # for FATAL statuses; the 1/5 lock-dance recoveries above
+                # stay internal.
+                self._raise('file-transfer-error', contents)
             return
         elif key == 'file-transfer-data-complete':
             self.log.debug('Transfer complete')
@@ -380,7 +392,7 @@ class AtemProtocol:
             # MUST run even if event delivery blows up, or the lane wedges
             # with the store lock held and nothing in flight — the
             # empty-queue unlock inside the trigger is what releases the
-            # ATEM's media lock (session-hygiene audit, 2026-07-06).
+            # ATEM's media lock (SH-4, session-hygiene audit 2026-07-06).
             try:
                 if self.transfer.upload:
                     self._raise('upload-done', store, self.transfer.slot)
@@ -414,8 +426,11 @@ class AtemProtocol:
             else:
                 # TODO: Implement proxy download
                 pass
-            # Start next transfer in the queue
-            self._transfer_trigger(self.transfer.store)
+            # Start next transfer in the queue. contents.store, NOT
+            # self.transfer.store — the TCP-proxy upload path never sets
+            # self.transfer (it's None here), so the old line was a
+            # guaranteed AttributeError on this (unused-in-production) path.
+            self._transfer_trigger(contents.store)
             return
 
         if key in self.FIELDNAME_UNIQUE:
@@ -647,6 +662,11 @@ class AtemProtocol:
 
     def _queue_flushed(self):
         self.log.info('Queue flushed')
+        if self.transfer is None:
+            # Straggler flush sentinel after abort_transfers nulled the
+            # task (same guard FTDa/FTDE already carry — SH-15 family).
+            self.log.debug('Queue flushed with no transfer in flight — ignoring')
+            return
         if len(self.transfer.data):
             self._queue_chunks()
             return

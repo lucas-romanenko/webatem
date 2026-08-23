@@ -399,7 +399,7 @@ def _e_flykey_run_to_infinity(attrs):
     return bytes([me, keyer, loc_int & 0xFF, 0x02])
 
 def _e_key_type(attrs):
-    # byte 3 is uninitialized memory in SC's emit; fresh live recordings
+    # byte 3 is uninitialized memory in SC's emit; fresh .85 recordings
     # show 0x03 consistently. ATEM ignores it.
     type_name = attrs.get('type', 'Luma')
     type_int = (_USK_TYPE_TO_INT.get(type_name, 0)
@@ -431,7 +431,7 @@ def _e_key_mask_enable(attrs):
             + _bool_byte(attrs['enable']) + b'\x00')
 
 def _e_key_fly_enable(attrs):
-    # byte 3 = 0x03 in fresh live recordings (uninitialized memory).
+    # byte 3 = 0x03 in fresh .85 recordings (uninitialized memory).
     return (bytes([int(attrs.get('mixEffectBlockIndex', 0)),
                    int(attrs['keyIndex'])])
             + _bool_byte(attrs['enable']) + b'\x03')
@@ -445,7 +445,7 @@ _LUMA_CLIP_GAIN_DIVISOR = 65536.0
 # u16 at offset 2 of the params block is uninitialized memory in
 # Software Control's bytecode emit (like the FadeToBlackEnabled mEBI
 # byte). Observed values: 0x0000 from older recordings (slot 0 'Deal
-# Cam' fixture), 0x000c from fresh live recordings (Lots XML). Match
+# Cam' fixture), 0x000c from fresh .85 recordings (Lots XML). Match
 # the live default so most round-trips are byte-identical; either
 # value is functionally equivalent (ATEM ignores it).
 
@@ -476,7 +476,7 @@ def _e_luma_key_pre_multiply(attrs):
 # DVE / fly key fixed-value scalar ops. XML form maps to wire via
 # divisor 65536 (size 0..2 / position ±16 / mask edges ±9 or ±16).
 # Marker u16 at params offset 2 is uninitialized memory in Software
-# Control's emit; 0x000c matches fresh live recordings.
+# Control's emit; 0x000c matches fresh .85 recordings.
 
 _DVE_DIVISOR = 65536.0
 

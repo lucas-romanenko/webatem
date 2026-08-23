@@ -137,7 +137,7 @@
 
     // ---------- Dialog open helpers ----------
 
-    // Captured at open time: the IP the dialog's descriptor was
+    // Captured at open time (L25): the IP the dialog's descriptor was
     // fetched against, and the dialog's Alpine scope (for forceClose).
     // Only one dialog can be open at a time; both are refreshed on every
     // open, so staleness after a normal close is harmless.
@@ -389,7 +389,7 @@
     // ---------- Run-the-dialog handlers ----------
 
     async function runDialog(ip, alpine) {
-        // The descriptor + selections were fetched against the IP
+        // L25: the descriptor + selections were fetched against the IP
         // captured at open time — prefer it over the click-time store
         // read so an in-page ATEM switch with the dialog open can't
         // apply one ATEM's selections to another.
@@ -401,7 +401,7 @@
     }
 
     // Close the dialog from outside its Alpine scope. Called by
-    // ATEMControl.connect() on an in-page ATEM switch: the open
+    // ATEMControl.connect() on an in-page ATEM switch (L25): the open
     // dialog's descriptor/selections target the previous ATEM.
     function forceClose() {
         if (_dialogAlpine) {
@@ -479,7 +479,7 @@
         }
     }
 
-    // Cancel an in-flight save's media-pool capture. Fire-and-forget
+    // L10: cancel an in-flight save's media-pool capture. Fire-and-forget
     // POST carrying the same session id; the backend stops at the next slot
     // boundary and the save's own response then returns the partial ZIP.
     async function cancelSave(alpine) {

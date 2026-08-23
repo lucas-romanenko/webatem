@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-3.0-only
 """pyhyperdeck.upload — FTP file upload to a HyperDeck Studio HD-class unit.
 
 The HTTP REST API for clip upload landed in firmware 8.x but only on

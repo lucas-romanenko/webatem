@@ -140,8 +140,9 @@ class DeviceIdentityField(Recv):
     ====== ==== ====== ===========
 
     Captured 2026-08-04 from an ATEM 1 M/E Constellation HD (176 bytes
-    total). Not all firmware sends this packet — readers must fall back
-    to ``product-name``.
+    total; upstreamed from the WebATEM extraction 2026-08-23). Not all
+    firmware sends this packet — readers must fall back to
+    ``product-name``.
     """
     CODE = 'WhoI'
     PRETTY = 'device-identity'

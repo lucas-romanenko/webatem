@@ -2,9 +2,9 @@
 Dialog descriptors — describe which sections are available for save /
 restore on a given switcher / in a given profile, with topology gating
 and per-section ``supported`` flags reflecting the apply implementation
-status. Drives the section-selection modal in the app frontend.
+status. Drives the section-selection modal in the AV Server frontend.
 
-Lives in the application layer rather than pyatem/profile/ because the descriptor
+Lives in the app rather than pyatem/profile/ because the descriptor
 shape (``group``, ``me_tab``, ``checked``, ``supported``, ``reason``,
 tooltip text) is UI scaffolding for the section-selection modal, not
 part of the save/restore feature itself.

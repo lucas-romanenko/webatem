@@ -1,21 +1,21 @@
 <!-- app/atem_control/templates/connect.html - Clean version with only button loading -->
 {% extends "base.html" %}
-{% load static %}
+{% load static static_v %}
 
 {% block title %}Connect to ATEM{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{% static 'css/atem_connect.css' %}">
+<link rel="stylesheet" href="{% static_v 'css/atem_connect.css' %}">
 {% endblock %}
 
 {% block content %}
 <div class="min-h-[calc(100vh-12rem)] flex items-start justify-center p-4 pt-24">
-    <div class="card w-full max-w-md bg-base-200 shadow-xl">
+    <div class="card w-full max-w-md bg-base-200">
         <div class="card-body">
             <!-- Header -->
             <div class="text-center mb-6">
                 <h1
-                    class="text-4xl font-bold mb-2 bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+                    class="text-4xl font-bold mb-2 text-base-content">
                     ATEM Control</h1>
                 <p class="text-base-content/70">Connect to your ATEM video switcher</p>
             </div>
@@ -78,5 +78,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'js/atem_connect.js' %}?v=1.0.1"></script>
+<script src="{% static_v 'js/atem_connect.js' %}"></script>
 {% endblock %}

@@ -36,6 +36,8 @@ from atem_control.profile.export import (
 from atem_control.activity import ActivityLog
 from atem_control.activity import record_activity
 from atem_control.uploader import execute_upload
+from atem_control.ip_upload_lock import hold_ip_upload_lock
+from atem_control.netutil import is_valid_ip
 
 logger = logging.getLogger(__name__)
 
@@ -103,8 +105,8 @@ def profile_save_dialog_init(request):
     Query: ?ip=<ip>
     """
     ip = (request.GET.get('ip') or '').strip()
-    if not ip:
-        return JsonResponse({'error': 'ip query param required'}, status=400)
+    if not is_valid_ip(ip):
+        return JsonResponse({'error': 'a valid ip query param is required'}, status=400)
     try:
         with ATEM(ip) as atem:
             if not atem.connected:
@@ -148,8 +150,8 @@ def profile_save(request):
                                      ``X-Capture-Session`` header.
     """
     ip = (request.GET.get('ip') or '').strip()
-    if not ip:
-        return JsonResponse({'error': 'ip query param required'}, status=400)
+    if not is_valid_ip(ip):
+        return JsonResponse({'error': 'a valid ip query param is required'}, status=400)
 
     sections: dict = {}
     legacy_get = False
@@ -250,8 +252,8 @@ def profile_load_xml(request):
         profile : the .xml file (required)
     """
     ip = (request.POST.get('ip') or '').strip()
-    if not ip:
-        return JsonResponse({'error': 'ip is required'}, status=400)
+    if not is_valid_ip(ip):
+        return JsonResponse({'error': 'a valid ip is required'}, status=400)
 
     upload = request.FILES.get('profile')
     if upload is None:
@@ -307,8 +309,8 @@ def profile_load(request):
                   upload_errors: [...]}}
     """
     ip = (request.POST.get('ip') or '').strip()
-    if not ip:
-        return JsonResponse({'error': 'ip is required'}, status=400)
+    if not is_valid_ip(ip):
+        return JsonResponse({'error': 'a valid ip is required'}, status=400)
 
     upload = request.FILES.get('profile')
     if upload is None:
@@ -391,7 +393,13 @@ def profile_load(request):
 
                 if items:
                     try:
-                        results = execute_upload(items, skip_tally=True)
+                        # Serialize against scheduled jobs + overlay presses on
+                        # this ATEM: execute_upload opens the uploader's own
+                        # aggressive-drain socket, and two of those to one
+                        # switcher is the documented degradation mode (audit
+                        # UP-1). All items here share this single IP.
+                        with hold_ip_upload_lock(ip):
+                            results = execute_upload(items, skip_tally=True)
                         for r in results:
                             if r.success:
                                 image_report['uploaded'] += 1

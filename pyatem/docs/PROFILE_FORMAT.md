@@ -1009,7 +1009,7 @@ mapping.)
 
 ## Section selection
 
-The application ships a Software Control–style section-selection dialog
+The AV Server ships a Software Control–style section-selection dialog
 on top of `Profile.from_atem` (save) and `Profile.apply` (load). The
 underlying API:
 
@@ -1052,7 +1052,7 @@ underlying API:
   full-fidelity profile on the reference XML.
 - `atem_control.profile.dialog.describe_save_sections(atem)` /
   `describe_load_sections(profile)` — return the JSON section
-  descriptor the save/load modal renders. This lives in the
+  descriptor the AV Server save/load modal renders. This lives in the
   application rather than pyatem itself — the descriptor shape is UI
   scaffolding (``group``, ``me_tab``, ``checked``, ``supported``,
   ``reason``), not part of the save/restore feature. Sections are a flat list; each

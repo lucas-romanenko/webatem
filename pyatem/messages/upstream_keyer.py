@@ -888,14 +888,14 @@ def configure_usk_luma(conn, keyer, *, clip=None, gain=None,
     in the CKLm packet's field mask, leaving other fields on the ATEM
     unchanged.
 
-    Fix (2026-06-02): clip/gain now use ``percent_to_tenths``
+    IQ-2 FIX (2026-06-02): clip/gain now use ``percent_to_tenths``
     (×10, clamp 0..1000) — consistent with the single setters
     ``set_usk_luma_clip`` / ``set_usk_luma_gain``. The wire field is
     u16 0..1000 (tenths of a percent), so e.g. clip=22 → wire 220 =
     22.0%. Previously this used ``percent_to_thousandths`` (×100), which
     sent 2200 → the ATEM clamped to 1000 = 100%, so any value ≳10%
-    landed at max. This is the path an overlay keyer setup exercises
-    (e.g. ``configure_usk_luma(clip=22, gain=30)``)."""
+    landed at max. This is the path the downtime-overlay keyer setup
+    uses (``configure_usk_luma(clip=22, gain=30)``)."""
     conn.send(KeyPropertiesLumaCommand(
         index=me, keyer=int(keyer),
         premultiplied=None if pre_multiplied is None else bool(pre_multiplied),
@@ -957,7 +957,7 @@ def usk_luma(mx, me, k):
 # contrast/saturation/red/green/blue) share a ×1000 wire scale (display
 # unit × 1000 → wire). Earlier code used percent_to_thousandths (×100)
 # which was off by 10×; fix verified empirically against ATEM Software
-# Control 2026-05-04.
+# Control 2026-05-04 (Bug B).
 
 # Sample size spec range — clamped on writes so an out-of-spec
 # operator-typed value snaps to the smallest visible cursor box.
@@ -1113,7 +1113,7 @@ def usk_chroma(mx, me, k):
     just the advanced data, so legacy-named keys we still need to emit
     for the frontend get sensible defaults.
 
-    Wire scales (per the earlier scale fix 2026-05-04, verified against
+    Wire scales (per earlier Bug B fix 2026-05-04, verified against
     ATEM Software Control):
         foreground / background / key_edge / spill / flare → ×1000
         brightness / contrast / saturation / red / green / blue → ×1000
@@ -1529,7 +1529,7 @@ def usk_dve(mx, me, k):
 #   size / symmetry / softness:   u16 0..10000 (frontend 0..100 → ×100)
 #   position_x / position_y:      u16 0..10000 (frontend 0..1.0 → ×10000)
 #
-# RESOLVED / NON-BUG — set_usk_pattern_size pattern-size scale.
+# RESOLVED / NON-BUG (IQ-4) — set_usk_pattern_size pattern-size scale.
 # Investigated 2026-06-10 and confirmed self-consistent vs ATEM Software
 # Control; do NOT "fix" this to ×10. Detail below:
 #
@@ -1541,12 +1541,12 @@ def usk_dve(mx, me, k):
 #   0..100 percent. The round-trip is self-consistent and externally
 #   matches ATEM Software Control's display for these three fields.
 #
-#   The historical "10× workaround" refers to a state where the write
-#   side was ×10 of the eventual wire ×100, and the read side
-#   compensated with another ×10. Both sides now use ×100 directly.
-#   Preserving the current behaviour is the rule; no fix needed at
-#   this site — worth confirming the workaround stays fully retired
-#   and is not re-introduced elsewhere.
+#   The "10× workaround" name in CLAUDE.md refers to a historical state
+#   where the write side was ×10 of the eventual wire ×100, and the
+#   read side compensated with another ×10. Both sides now use ×100
+#   directly. Preserving the current behaviour is the rule; no fix
+#   needed at this site — kept on the investigation list to confirm
+#   the workaround is fully retired and not re-introduced elsewhere.
 
 # -----------------------------------------------------------------------------
 # Operations

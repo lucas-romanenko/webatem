@@ -228,8 +228,8 @@ class DveSettingsCommand(Send):
     ====== ==== ====== ===========
     0      2    u16    Mask
     2      1    u8     M/E index
-    3      1    u8     Rate (frames)
-    4      1    ?      padding
+    3      1    u8     Logo-wipe rate (frames)
+    4      1    u8     Rate (frames)
     5      1    u8     DVE style
     6      2    u16    Fill source
     8      2    u16    Key source
@@ -243,9 +243,19 @@ class DveSettingsCommand(Send):
     19     1    ?      padding
     ====== ==== ====== ===========
 
-    Mask bits: 0 rate, 2 style, 3 fill_source, 4 key_source, 5 key_enable,
-               6 key_premultiplied, 7 key_clip, 8 key_gain, 9 key_invert,
-               10 reverse, 11 flipflop. (Bit 1 unused.)
+    Mask bits: 0 logo_rate, 1 rate, 2 style, 3 fill_source, 4 key_source,
+               5 key_enable, 6 key_premultiplied, 7 key_clip, 8 key_gain,
+               9 key_invert, 10 reverse, 11 flipflop.
+
+    WIRE-FORMAT CORRECTION (2026-08-22, verified against ASC on the 1 M/E
+    Constellation HD): upstream pyatem (and this fork until today) put
+    ``rate`` at byte 3 / mask bit 0 and called byte 4 padding and bit 1
+    unused. Byte 3 / bit 0 is actually the DVE LOGO-WIPE rate — a real,
+    ASC-invisible-by-default register that echoes into TDvP byte 1 — so
+    every rate write round-tripped perfectly through our own reader while
+    ASC (which drives byte 4 / bit 1, echoing TDvP byte 2) never saw it,
+    and vice versa. Found live: "DVE rate dead both ways while wipe works".
+    Do not "fix" this back to match upstream.
     """
     CODE = 'CTDv'
     SIZE = 20
@@ -253,7 +263,8 @@ class DveSettingsCommand(Send):
     MASK_TYPE = u16  # bits 8-11 (key_gain, key_invert, reverse, flipflop) in high byte
 
     index             = u8     (at=2)
-    rate              = u8     (at=3, mask_bit=0)
+    logo_rate         = u8     (at=3, mask_bit=0)
+    rate              = u8     (at=4, mask_bit=1)
     style             = u8     (at=5, mask_bit=2)
     fill_source       = u16    (at=6, mask_bit=3)
     key_source        = u16    (at=8, mask_bit=4)
@@ -265,15 +276,15 @@ class DveSettingsCommand(Send):
     reverse           = boolean(at=17, mask_bit=10)
     flipflop          = boolean(at=18, mask_bit=11)
 
-    def __init__(self, index, rate=None, style=None, fill_source=None,
-                 key_source=None, key_enable=None, key_premultiplied=None,
-                 key_clip=None, key_gain=None, key_invert=None,
-                 reverse=None, flipflop=None):
+    def __init__(self, index, rate=None, logo_rate=None, style=None,
+                 fill_source=None, key_source=None, key_enable=None,
+                 key_premultiplied=None, key_clip=None, key_gain=None,
+                 key_invert=None, reverse=None, flipflop=None):
         super().__init__(
-            index=index, rate=rate, style=style, fill_source=fill_source,
-            key_source=key_source, key_enable=key_enable,
-            key_premultiplied=key_premultiplied, key_clip=key_clip,
-            key_gain=key_gain, key_invert=key_invert,
+            index=index, rate=rate, logo_rate=logo_rate, style=style,
+            fill_source=fill_source, key_source=key_source,
+            key_enable=key_enable, key_premultiplied=key_premultiplied,
+            key_clip=key_clip, key_gain=key_gain, key_invert=key_invert,
             reverse=reverse, flipflop=flipflop,
         )
 
@@ -303,7 +314,7 @@ class TransitionSettingsField(Recv):
     """
     CODE = 'TrSS'
     PRETTY = 'transition-settings'
-    # Control-topology refactor: keyed per M/E. The wire format
+    # Stage 4A (control-topology refactor): keyed per M/E. The wire format
     # always carried the M/E index at byte 0; without a KEY_FORMAT the
     # packet was stored bare and the last-arriving M/E overwrote the
     # others — invisible on 1-M/E units, wrong on Constellations.
@@ -492,8 +503,8 @@ class TransitionDveField(Recv):
     Offset Size Type   Description
     ====== ==== ====== ===========
     0      1    u8     M/E index
-    1      1    u8     Rate (frames)
-    2      1    ?      padding
+    1      1    u8     Logo-wipe rate (frames)
+    2      1    u8     Rate (frames)
     3      1    u8     DVE style
     4      2    u16    Fill source
     6      2    u16    Key source
@@ -506,13 +517,20 @@ class TransitionDveField(Recv):
     16     1    bool   Flip flop
     17     3    ?      padding
     ====== ==== ====== ===========
+
+    WIRE-FORMAT CORRECTION (2026-08-22): byte 1 is the LOGO-WIPE rate,
+    byte 2 (upstream calls it unknown) is THE transition rate — ASC's
+    DVE rate box moves byte 2, captured live on the 1 M/E Constellation
+    HD. See the matching note on DveSettingsCommand; do not revert to
+    the upstream layout.
     """
     CODE = 'TDvP'
     PRETTY = 'transition-dve'
     KEY_FORMAT = struct.Struct('>B')
 
     index             = u8     (at=0)
-    rate              = u8     (at=1)
+    logo_rate         = u8     (at=1)
+    rate              = u8     (at=2)
     style             = u8     (at=3)
     fill_source       = u16    (at=4)
     key_source        = u16    (at=6)
@@ -686,7 +704,7 @@ def set_next_transition_layers(conn, *, background=False,
 
 
 def transition_style(mx, me=0):
-    # transition-settings is keyed per M/E (TrSS carries
+    # transition-settings is keyed per M/E since Stage 4A (TrSS carries
     # the M/E index at byte 0; see TransitionSettingsField.KEY_FORMAT).
     return safe_int(_kv(mx, 'transition-settings', me, attr='style'), 0)
 
@@ -889,7 +907,7 @@ def set_dve_clip(conn, clip, me=0):
     """DVE-tx clip wire is ×10 of percent — same family as USK luma /
     stinger clip/gain. Bucket B because of the clamp 0..1000.
     Earlier code used percent_to_thousandths (×100) and had frontend
-    writes landing 100× too low; verified empirically 2026-05-04."""
+    writes landing 100× too low; verified empirically Bug D 2026-05-04."""
     conn.send(DveSettingsCommand(index=me, key_clip=percent_to_tenths(clip)))
 
 
@@ -943,7 +961,7 @@ def dve_enable_key(mx, me=0):
 def dve_clip(mx, me=0):
     """Wire is ×10 of percent — same family as USK luma / stinger clip/gain.
     Earlier code used percent_from_thousandths (÷100), which had frontend
-    showing 10× too low; verified empirically 2026-05-04."""
+    showing 10× too low; verified empirically Bug D 2026-05-04."""
     return value_from_tenths(_kv(mx, 'transition-dve', me, attr='key_clip'), 0.0)
 
 
@@ -999,10 +1017,11 @@ def set_stinger_rate(conn, rate_str, me=0):
 
 
 def set_stinger_source(conn, source, me=0):
-    """``source`` is a media-player SLOT INDEX (u8, 1..4 on the wire) —
-    NOT a frontend source ID. Open question: the corresponding reader
-    default returns 3010 (MP1's source ID), which lives in a different
-    ID space; never feed a reader-defaulted value back into this op."""
+    """``source`` is a media-player SLOT NUMBER (u8, 1..4) — the same
+    space the incoming TStP frame and the ``stinger_source`` reader use
+    (IQ-5, resolved 2026-08-19: the reader used to default to 3010, MP1's
+    frontend source ID, which is a different space and can't even fit the
+    u8 wire field). Reader values round-trip into this op safely."""
     conn.send(StingerSettingsCommand(index=me, mediaplayer=int(source)))
 
 
@@ -1060,11 +1079,13 @@ def stinger_rate(mx, me=0):
 
 
 def stinger_source(mx, me=0):
-    """The wire field is ``mediaplayer``. Default 3010 = MP1 (the field
-    contains a real source ID, not a 0-indexed player; 3010 is the MP1
-    video source ID on ATEM Constellation HD)."""
+    """The wire field is ``mediaplayer`` — a u8 media-player SLOT NUMBER
+    (1..4), same space as ``set_stinger_source``. Default 1 = MP1.
+    (IQ-5, resolved 2026-08-19: the old default 3010 was MP1's frontend
+    SOURCE ID — a different space that a u8 frame can't even carry, and it
+    broke the UI's selected-option display when the entry was absent.)"""
     return safe_int(
-        _kv(mx, 'transition-stinger', me, attr='mediaplayer'), 3010)
+        _kv(mx, 'transition-stinger', me, attr='mediaplayer'), 1)
 
 
 def stinger_clip_duration(mx, me=0):
