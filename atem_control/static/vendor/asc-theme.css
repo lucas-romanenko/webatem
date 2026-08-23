@@ -24,3 +24,16 @@
     border-color: #17181A !important;
     color: #FFFFFF !important;
 }
+
+/* --------------------------------------------------------------------------
+   Tokens the synced upstream styles consume (defined by the monorepo's
+   theme there, missing here — an undefined var() falls back to
+   transparent/white and produced an invisible T-bar track and a white
+   halo on the quick-connect group). Subtle white overlays, so they sit
+   right on any dark gray.
+   -------------------------------------------------------------------------- */
+:root {
+    --line:       rgba(255, 255, 255, 0.06);   /* card / hairline borders */
+    --input:      rgba(255, 255, 255, 0.05);   /* input wells, T-bar track */
+    --input-line: rgba(255, 255, 255, 0.12);   /* input borders */
+}
