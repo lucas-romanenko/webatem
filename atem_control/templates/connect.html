@@ -61,6 +61,25 @@
                 </div>
                 {% endif %}
 
+                <!-- On your network: mDNS-discovered ATEMs + opt-in subnet scan.
+                     Populated by atem_discovery.js; hidden entirely on a network
+                     where nothing is found and no scan has run. -->
+                <div class="form-control" id="discoverySection">
+                    <label class="label">
+                        <span class="label-text text-sm text-base-content/70">On Your Network</span>
+                        <button type="button" id="scanBtn"
+                            class="btn btn-xs btn-ghost gap-1"
+                            title="Scan this subnet for ATEMs that don't advertise over Bonjour">
+                            <i class="bi bi-search"></i> Scan subnet
+                        </button>
+                    </label>
+                    <div class="flex flex-wrap gap-2" id="discoveryList"></div>
+                    <p class="text-xs text-base-content/50 mt-1 hidden" id="discoveryEmpty">
+                        No ATEMs found yet — they appear automatically, or hit
+                        <span class="font-medium">Scan subnet</span>.
+                    </p>
+                </div>
+
                 <button type="submit" class="btn btn-primary w-full" id="connectBtn">
                     <i class="bi bi-plug mr-2"></i>
                     Connect to ATEM
@@ -79,4 +98,5 @@
 
 {% block extra_js %}
 <script src="{% static_v 'js/atem_connect.js' %}"></script>
+<script src="{% static_v 'js/atem_discovery.js' %}"></script>
 {% endblock %}

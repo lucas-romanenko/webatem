@@ -13,6 +13,8 @@ urlpatterns = [
     path('control/',                    control_views.atem_control, name='control'),
     path('api/status/',                 control_views.atem_status, name='atem_status'),
     path('api/lookup-name/',            control_views.atem_lookup_name, name='atem_lookup_name'),
+    path('api/discovered/',             control_views.atem_discovered, name='atem_discovered'),
+    path('api/scan/',                   control_views.atem_scan, name='atem_scan'),
     path('media-pool-upload/',          media_pool_views.media_pool_upload, name='media_pool_upload'),
     path('profile/save_dialog_init/',   profile_views.profile_save_dialog_init,
          name='profile_save_dialog_init'),

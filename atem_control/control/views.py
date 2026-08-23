@@ -11,10 +11,12 @@ import logging
 
 from django.http import JsonResponse
 from django.shortcuts import render
+from django.views.decorators.http import require_GET
 
 from pyatem._state import build_full_state
 from pyatem.pool import ATEMInstanceManager
 
+from atem_control import discovery
 from atem_control.models import get_recent_atems
 
 logger = logging.getLogger(__name__)
@@ -110,6 +112,37 @@ def atem_lookup_name(request):
             'name': None
         })
 
-    # No name database in this build — the page shows the bare IP.
+    # No equipment database in this build, but mDNS discovery may know a
+    # friendly name for this IP — use it so the control page titles the
+    # switcher rather than showing a bare address.
+    name, _model = discovery._name_for_ip(ip_address)
+    if name:
+        return JsonResponse({'found': True, 'name': name})
     return JsonResponse({'found': False, 'name': None})
+
+
+@require_GET
+def atem_discovered(request):
+    """ATEMs seen on the network via passive mDNS/Bonjour listening.
+
+    Lazily starts the mDNS browser on first call; the registry fills over
+    the next second or two as announcements arrive, so the Connect page
+    polls this. Sends nothing to any switcher.
+    """
+    available = discovery.ensure_mdns_started()
+    return JsonResponse({
+        'available': available,
+        'atems': discovery.discovered_atems(),
+    })
+
+
+@require_GET
+def atem_scan(request):
+    """On-demand light subnet sweep for ATEMs that don't advertise over
+    mDNS. Optional ``?subnet=192.168.81`` overrides the host's own /24.
+    Half-open handshakes only — no session is established on any switcher.
+    """
+    subnet = request.GET.get('subnet', '').strip() or None
+    result = discovery.scan_atems(subnet)
+    return JsonResponse(result)
 

@@ -2,8 +2,14 @@ services:
   webatem:
     build: .
     image: webatem
-    ports:
-      - "${PORT:-8000}:8000"
+    # Host networking (not a bridge + port map) so LAN discovery works:
+    # the app must see the studio subnet directly to receive ATEM
+    # mDNS/Bonjour multicast and to hello-sweep the local /24. On a bridge
+    # network, multicast never arrives and a sweep would scan the docker
+    # subnet. The app binds host :8000 directly (set PORT via the
+    # entrypoint's env if 8000 is taken). Linux hosts only — host mode is
+    # a no-op on Docker Desktop for macOS/Windows; studio VMs are Linux.
+    network_mode: host
     environment:
       - SECRET_KEY=${SECRET_KEY:-}
       - DEBUG=${DEBUG:-False}
@@ -13,6 +19,7 @@ services:
       - TIME_ZONE=${TIME_ZONE:-UTC}
       - TIME_FORMAT_24HR=${TIME_FORMAT_24HR:-True}
       - APP_TITLE=${APP_TITLE:-WebATEM}
+      - PORT=${PORT:-8000}
     volumes:
       - webatem-data:/app/data
     restart: unless-stopped
