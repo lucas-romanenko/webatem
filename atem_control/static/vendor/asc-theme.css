@@ -1,0 +1,44 @@
+/* ==========================================================================
+   ASC-flat skin (operator request, 2026-08-23).
+
+   Dark stays dark and every color keeps its meaning — program red,
+   preview green, ON AIR red, KEY 1-4 / BKGD yellow. This sheet ONLY
+   flattens and squares, the way ATEM Software Control feels:
+
+     - buttons are near-square (2px), panels barely rounded (4px)
+     - tally is paint, not light: no glow blooms on lit buttons
+     - on-air rings on media tiles stay, as flat solid rings
+
+   Loaded last from base.html so it wins the cascade; layout, markup and
+   the synced upstream styles are untouched.
+   ========================================================================== */
+
+/* daisyUI radius tokens (components read these) */
+:root, [data-theme] {
+    --rounded-btn: 2px;
+    --rounded-box: 4px;
+    --rounded-badge: 2px;
+    --tab-radius: 2px;
+}
+
+/* Square the controls (utility classes hardcode radii, so override flat).
+   .rounded-full is deliberately untouched — indicator dots stay dots. */
+.btn, .source-btn, .badge, .input, .select, .textarea, .tab {
+    border-radius: 2px !important;
+}
+.card, .modal-box,
+.rounded-box, .rounded-lg, .rounded-xl, .rounded-2xl, .rounded-3xl {
+    border-radius: 4px !important;
+}
+
+/* Tally is paint, not light: the lit bus/key buttons carry
+   shadow-lg shadow-<color>/40 glow blooms — kill them on buttons only
+   (modal / dropdown elevation elsewhere is left alone). */
+.btn, .source-btn {
+    box-shadow: none !important;
+}
+
+/* Media-tile on-air ring: keep the solid ring, drop the bloom. */
+.ring-pgm-glow {
+    box-shadow: 0 0 0 2px var(--pgm-red, #d22730) !important;
+}
