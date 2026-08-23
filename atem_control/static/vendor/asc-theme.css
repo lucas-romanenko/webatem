@@ -42,3 +42,21 @@
 .ring-pgm-glow {
     box-shadow: 0 0 0 2px var(--pgm-red, #d22730) !important;
 }
+
+/* --------------------------------------------------------------------------
+   ASC grays, part 2 (operator feedback: the whole palette, not just shapes).
+   The daisyUI 'dark' theme is redefined to neutral ASC grays in
+   tailwind.config.js; the rules below cover what the theme tokens can't
+   reach: unlit source/control buttons must be SOLID raised gray blocks
+   like a control surface, never hollow outlines.
+   -------------------------------------------------------------------------- */
+.btn-outline {
+    background: linear-gradient(#3E4146, #34373B) !important;
+    border-color: #17181A !important;
+    color: #DDDFE2 !important;
+}
+.btn-outline:hover {
+    background: linear-gradient(#474A50, #3C3F44) !important;
+    border-color: #17181A !important;
+    color: #FFFFFF !important;
+}
