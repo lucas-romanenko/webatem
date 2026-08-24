@@ -1,0 +1,81 @@
+name: Desktop builds
+
+# Builds the self-contained WebATEM desktop launcher for each OS. Run it
+# by hand (Actions -> Desktop builds -> Run workflow) to get downloadable
+# binaries, or push a v* tag to attach them to a GitHub Release.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,  name: linux-x64,     bin: webatem,     asset: webatem-linux-x64 }
+          - { os: macos-13,       name: macos-intel,   bin: webatem,     asset: webatem-macos-intel }
+          - { os: macos-latest,   name: macos-arm64,   bin: webatem,     asset: webatem-macos-arm64 }
+          - { os: windows-latest, name: windows-x64,   bin: webatem.exe, asset: webatem-windows-x64.exe }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      # 1. Compile the Tailwind/daisyUI stylesheet (same output as the Docker
+      #    css stage) so collectstatic bundles it.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Build CSS
+        run: |
+          npm ci || npm install
+          npx tailwindcss -c tailwind.config.js -i styles/app.css \
+            -o atem_control/static/vendor/webatem.css --minify
+
+      # 2. Python + deps + PyInstaller.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -r requirements.txt pyinstaller
+
+      # 3. Compile the mediaconvert C extension with THIS OS's compiler
+      #    (clang / MSVC / gcc) — setuptools picks the right flags + suffix.
+      - name: Compile C extension
+        run: python setup.py build_ext --inplace
+
+      # 4. Bundle-time static (WhiteNoise serves the read-only tree).
+      - name: Collect static
+        env:
+          SECRET_KEY: build-only
+          DEBUG: 'False'
+        run: python manage.py collectstatic --noinput --clear
+
+      # 5. Freeze into one self-contained executable.
+      - name: PyInstaller
+        run: pyinstaller build/desktop/webatem.spec --distpath dist --workpath build/pyi -y
+
+      - name: Name the artifact
+        run: |
+          mkdir -p out
+          cp "dist/${{ matrix.bin }}" "out/${{ matrix.asset }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: out/${{ matrix.asset }}
+          if-no-files-found: error
+
+      # On a v* tag, attach the binaries to the Release.
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/${{ matrix.asset }}

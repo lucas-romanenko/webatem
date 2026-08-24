@@ -1,0 +1,26 @@
+# Reproducible Linux build of the WebATEM desktop binary (PoC / CI-Linux).
+# Builds FROM the runtime image (deps + compiled mediaconvert C extension +
+# compiled webatem.css already present), adds PyInstaller, and freezes
+# launcher.py into a single self-contained executable at /app/dist/webatem.
+#
+#   docker build -f build/desktop/Dockerfile.linux -t webatem-desktop-build .
+#   id=$(docker create webatem-desktop-build) && docker cp $id:/app/dist/webatem ./dist/
+#
+# (macOS / Windows binaries are built on their own OS runners in CI — this
+# file is the Linux arm and the recipe the CI mirrors.)
+FROM webatem
+USER root
+WORKDIR /app
+
+COPY launcher.py /app/launcher.py
+COPY build/desktop/webatem.spec /app/build/desktop/webatem.spec
+
+RUN apt-get update && apt-get install -y --no-install-recommends binutils \
+    && rm -rf /var/lib/apt/lists/*
+RUN pip install --no-cache-dir pyinstaller
+
+# Bundle-time static (WhiteNoise serves the read-only staticfiles/ tree).
+RUN SECRET_KEY=build-only DEBUG=False python manage.py collectstatic --noinput --clear
+
+RUN pyinstaller build/desktop/webatem.spec \
+        --distpath /app/dist --workpath /tmp/pyi -y

@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
 *.so
+*.pyd
 data/
 staticfiles/
 .env
@@ -11,3 +12,10 @@ db.sqlite3
 # Frontend build
 node_modules/
 atem_control/static/vendor/webatem.css
+
+# Desktop launcher build artifacts (PyInstaller)
+/dist/
+/out/
+/build/pyi/
+/build/lib.*/
+/build/temp.*/
