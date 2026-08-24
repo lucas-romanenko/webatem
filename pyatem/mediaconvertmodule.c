@@ -11,22 +11,27 @@ WebATEM extraction 2026-08-23).
 #include <Python.h>
 #include <math.h>
 
-const double bt709_coeff_r = 0.2126;
-const double bt709_coeff_g = 0.7152;
-const double bt709_coeff_b = 0.0722;
-const double bt709_coeff_ri = 1.0 - bt709_coeff_r;
-const double bt709_coeff_bi = 1.0 - bt709_coeff_b;
-const double bt709_coeff_bg = bt709_coeff_b / bt709_coeff_g;
-const double bt709_coeff_rg = bt709_coeff_r / bt709_coeff_g;
+/* #define (not `const`): a file-scope `const` initialized from another
+ * `const` is not a constant expression in C, so MSVC rejects the derived
+ * initializers below with C2099 (gcc/clang fold them as an extension).
+ * Macros expand to literal constant expressions every compiler accepts —
+ * needed for the WebATEM Windows desktop build's MSVC compile. Same values. */
+#define bt709_coeff_r 0.2126
+#define bt709_coeff_g 0.7152
+#define bt709_coeff_b 0.0722
+#define bt709_coeff_ri (1.0 - bt709_coeff_r)
+#define bt709_coeff_bi (1.0 - bt709_coeff_b)
+#define bt709_coeff_bg (bt709_coeff_b / bt709_coeff_g)
+#define bt709_coeff_rg (bt709_coeff_r / bt709_coeff_g)
 
-const int y_offset = 16 << 8;
-const int y_range = 219;
-const int cr_offset = 128 << 8;
-const int cr_range = 224;
-const int cr_middle = 224 / 2;
+#define y_offset (16 << 8)
+#define y_range 219
+#define cr_offset (128 << 8)
+#define cr_range 224
+#define cr_middle (224 / 2)
 
-const double bt709_ri_range = bt709_coeff_ri / cr_middle;
-const double bt709_bi_range = bt709_coeff_bi / cr_middle;
+#define bt709_ri_range (bt709_coeff_ri / cr_middle)
+#define bt709_bi_range (bt709_coeff_bi / cr_middle)
 
 void
 beputu64(uint64_t *dest, uint64_t v)
