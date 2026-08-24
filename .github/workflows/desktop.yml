@@ -16,10 +16,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-latest,  name: linux-x64,     bin: webatem,     asset: webatem-linux-x64 }
-          - { os: macos-13,       name: macos-intel,   bin: webatem,     asset: webatem-macos-intel }
-          - { os: macos-latest,   name: macos-arm64,   bin: webatem,     asset: webatem-macos-arm64 }
-          - { os: windows-latest, name: windows-x64,   bin: webatem.exe, asset: webatem-windows-x64.exe }
+          - { os: ubuntu-latest,  name: linux-x64,     asset: webatem-linux-x64 }
+          - { os: macos-13,       name: macos-intel,   asset: webatem-macos-intel.dmg }
+          - { os: macos-latest,   name: macos-arm64,   asset: webatem-macos-arm64.dmg }
+          - { os: windows-latest, name: windows-x64,   asset: webatem-windows-x64.exe }
     defaults:
       run:
         shell: bash
@@ -62,10 +62,30 @@ jobs:
       - name: PyInstaller
         run: pyinstaller build/desktop/webatem.spec --distpath dist --workpath build/pyi -y
 
-      - name: Name the artifact
+      # 6. Package per-OS: macOS -> ad-hoc-signed .app in a drag-to-Applications
+      #    .dmg; Windows -> the icon-embedded .exe; Linux -> the bare binary.
+      - name: Package
         run: |
           mkdir -p out
-          cp "dist/${{ matrix.bin }}" "out/${{ matrix.asset }}"
+          case "$RUNNER_OS" in
+            macOS)
+              # Ad-hoc sign so the app runs without the codesign dance (Apple
+              # Silicon refuses unsigned binaries). Not notarized — the first
+              # open still needs right-click Open / Open Anyway.
+              codesign --force --deep --sign - dist/WebATEM.app
+              codesign --verify --deep --strict dist/WebATEM.app && echo "ad-hoc signed OK"
+              mkdir -p dmgroot
+              cp -R dist/WebATEM.app dmgroot/
+              ln -s /Applications dmgroot/Applications
+              hdiutil create -volname WebATEM -srcfolder dmgroot -ov -format UDZO "out/${{ matrix.asset }}"
+              ;;
+            Windows)
+              cp dist/webatem.exe "out/${{ matrix.asset }}"
+              ;;
+            *)
+              cp dist/webatem "out/${{ matrix.asset }}"
+              ;;
+          esac
 
       - uses: actions/upload-artifact@v4
         with:

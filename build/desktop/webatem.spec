@@ -17,9 +17,22 @@ ROOT = os.path.abspath(os.path.join(SPECPATH, os.pardir, os.pardir))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
+IS_MAC = sys.platform == 'darwin'
+IS_WIN = sys.platform == 'win32'
+
 
 def rel(*parts):
     return os.path.join(ROOT, *parts)
+
+
+# Per-OS app icon. On Windows it's embedded in the .exe; on macOS it goes on
+# the .app bundle (below). A Linux ELF carries no icon.
+if IS_WIN:
+    ICON = rel('build', 'desktop', 'icon.ico')
+elif IS_MAC:
+    ICON = rel('build', 'desktop', 'icon.icns')
+else:
+    ICON = None
 
 
 datas = []
@@ -85,6 +98,27 @@ exe = EXE(
     debug=False,
     strip=False,
     upx=False,
-    console=True,
+    # macOS: windowed (no terminal) so the .app double-clicks like a real
+    # app. Windows/Linux: console so `WebATEM is running…` + Ctrl-C work.
+    console=not IS_MAC,
+    icon=ICON,
     disable_windowed_traceback=False,
 )
+
+# macOS: wrap the executable in a proper WebATEM.app bundle (icon in Finder
+# and the Dock; quit via the Dock icon). CI ad-hoc-signs it and packages a
+# drag-to-Applications .dmg.
+if IS_MAC:
+    app = BUNDLE(
+        exe,
+        name='WebATEM.app',
+        icon=rel('build', 'desktop', 'icon.icns'),
+        bundle_identifier='com.webatem.app',
+        info_plist={
+            'CFBundleName': 'WebATEM',
+            'CFBundleDisplayName': 'WebATEM',
+            'CFBundleShortVersionString': '1.0.0',
+            'NSHighResolutionCapable': True,
+            'LSApplicationCategoryType': 'public.app-category.video',
+        },
+    )
