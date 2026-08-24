@@ -4,6 +4,15 @@
 ATEMs on your network and gives you a full control surface — switching,
 keyers, audio, media pool, macros — at a URL, on any device.
 
+<p align="center">
+  <a href="https://github.com/lucas-romanenko/webatem/releases/latest/download/webatem-windows-x64.exe"><img src="https://img.shields.io/badge/Download-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows"></a>
+  &nbsp;
+  <a href="https://github.com/lucas-romanenko/webatem/releases/latest/download/webatem-macos-arm64.dmg"><img src="https://img.shields.io/badge/Download-macOS-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS"></a>
+  &nbsp;
+  <a href="https://github.com/lucas-romanenko/webatem/releases/latest/download/webatem-linux-x64"><img src="https://img.shields.io/badge/Download-Linux-E95420?style=for-the-badge&logo=linux&logoColor=white" alt="Download for Linux"></a>
+</p>
+<p align="center"><sub>Download it, open it, and your switchers appear. &nbsp;·&nbsp; Intel Mac? <a href="https://github.com/lucas-romanenko/webatem/releases/latest/download/webatem-macos-intel.dmg">Intel build</a> &nbsp;·&nbsp; The Linux build runs on desktop <b>and</b> headless servers.</sub></p>
+
 Two ways to run it, both simple:
 
 - **Just you, right now** → **download the app** for your Mac, Windows, or
@@ -21,17 +30,36 @@ lists them by name, exactly like ATEM Software Control.
 
 ## Get started
 
-### Option A — Download the app  *(easiest; one person, one machine)*
+### Option A — Download the app  *(easiest)*
 
-1. Grab your build from the [**Releases**](https://github.com/lucas-romanenko/webatem/releases) page:
-   - **macOS (Apple Silicon)** — `webatem-macos-arm64.dmg`
-   - **macOS (Intel)** — `webatem-macos-intel.dmg`
-   - **Windows** — `webatem-windows-x64.exe`
-   - **Linux** — `webatem-linux-x64`
+1. Click your platform's **Download** button at the top (or the
+   [Releases](https://github.com/lucas-romanenko/webatem/releases) page).
 2. Open it. It starts a local server, opens your browser, and lists the ATEMs
    on your network. Pick one and you're controlling it.
 
 That's the whole setup — nothing to install alongside it, no Python, no Docker.
+
+**On Linux — desktop or headless server.** The same `webatem-linux-x64` binary
+works both ways. Make it runnable and start it:
+
+```bash
+chmod +x webatem-linux-x64
+./webatem-linux-x64
+```
+
+On a desktop it opens your browser; on a **headless server** (no display) it
+skips that and just prints the address to open from another machine:
+
+```
+WebATEM is running.
+  On this machine:      http://127.0.0.1:8000/atem/
+  From another device:  http://192.168.1.50:8000/atem/
+```
+
+It listens on all interfaces, so browse to that `From another device` URL from
+anywhere on the network. Leave it running under `nohup`, `tmux`, or a systemd
+service to keep it up. (For a permanent multi-user install, Option B is
+cleaner.)
 
 <details>
 <summary><b>First-launch security prompt</b> (the app isn't code-signed yet)</summary>

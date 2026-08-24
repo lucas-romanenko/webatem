@@ -44,6 +44,27 @@ def _data_dir() -> Path:
     return path
 
 
+def _lan_ip():
+    """This machine's primary LAN IP (no packet sent — connect() just picks
+    the source address). None if it can't be determined."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(('8.8.8.8', 80))
+        return s.getsockname()[0]
+    except OSError:
+        return None
+    finally:
+        s.close()
+
+
+def _has_display() -> bool:
+    """True if a browser could plausibly be opened here. Desktop OSes always
+    qualify; on Linux it needs a display (a headless server has none)."""
+    if sys.platform == 'darwin' or os.name == 'nt':
+        return True
+    return bool(os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY'))
+
+
 def _wait_and_open(url: str, port: int) -> None:
     """Wait for uvicorn to accept connections, then open the browser once."""
     deadline = time.time() + 30
@@ -55,11 +76,10 @@ def _wait_and_open(url: str, port: int) -> None:
             time.sleep(0.25)
     else:
         return
-    if os.environ.get('WEBATEM_NO_BROWSER') != '1':
-        try:
-            webbrowser.open(url)
-        except Exception:
-            pass
+    try:
+        webbrowser.open(url)
+    except Exception:
+        pass
 
 
 def main() -> None:
@@ -76,15 +96,30 @@ def main() -> None:
     call_command('migrate', '--noinput', verbosity=0)
 
     port = int(os.environ.get('PORT', '8000'))
-    host = os.environ.get('HOST', '0.0.0.0')
-    url = f'http://127.0.0.1:{port}/atem/'
+    host = os.environ.get('HOST', '0.0.0.0')  # bind all — reachable from other devices too
+    local_url = f'http://127.0.0.1:{port}/atem/'
+    lan = _lan_ip()
+    lan_url = f'http://{lan}:{port}/atem/' if lan else None
 
-    threading.Thread(target=_wait_and_open, args=(url, port), daemon=True).start()
+    # Auto-open a browser only where there's a display and the user didn't
+    # opt out. On a headless server we just print where to point a browser.
+    want_browser = _has_display() and os.environ.get('WEBATEM_NO_BROWSER') != '1'
+    if want_browser:
+        threading.Thread(target=_wait_and_open, args=(local_url, port), daemon=True).start()
 
     from config.asgi import application
     import uvicorn
 
-    print(f'\n  WebATEM is running — open {url}\n  (Press Ctrl+C to quit.)\n', flush=True)
+    lines = ['', '  WebATEM is running.']
+    if want_browser:
+        lines.append(f'  Opening {local_url} …')
+    lines.append(f'  On this machine:      {local_url}')
+    if lan_url:
+        lines.append(f'  From another device:  {lan_url}')
+    lines.append('  (Press Ctrl+C to quit.)')
+    lines.append('')
+    print('\n'.join(lines), flush=True)
+
     uvicorn.run(application, host=host, port=port, log_level='info')
 
 

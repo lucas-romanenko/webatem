@@ -16,7 +16,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-latest,  name: linux-x64,     asset: webatem-linux-x64 }
+          # Build on the OLDEST supported Ubuntu so the binary's glibc floor
+          # is low enough to run on 22.04 LTS servers (and everything newer).
+          - { os: ubuntu-22.04,   name: linux-x64,     asset: webatem-linux-x64 }
           - { os: macos-13,       name: macos-intel,   asset: webatem-macos-intel.dmg }
           - { os: macos-latest,   name: macos-arm64,   asset: webatem-macos-arm64.dmg }
           - { os: windows-latest, name: windows-x64,   asset: webatem-windows-x64.exe }
