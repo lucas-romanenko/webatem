@@ -24,7 +24,9 @@ Two ways to run it, both simple:
 Either way, it **auto-discovers the ATEMs on your network** (Bonjour/mDNS) and
 lists them by name, exactly like ATEM Software Control.
 
-> 📸 *Screenshot/GIF coming here — control surface, media pool, keyers.*
+<p align="center">
+  <img src="docs/screenshot-control.png" alt="WebATEM control surface — program/preview buses, T-bar, keyers, transitions and macros" width="900">
+</p>
 
 ---
 
