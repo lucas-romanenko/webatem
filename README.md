@@ -179,6 +179,17 @@ transitions, video mode, input labels, outputs and HyperDecks:
   <img src="docs/screenshot-settings.png" alt="WebATEM settings panel — color generators and an upstream keyer expanded, showing HSL controls, fill-source dropdown and wipe patterns" width="900">
 </p>
 
+Full **Fairlight audio** — a per-strip mixer with input gain, EQ and dynamics
+curves, faders, pan and live meters, plus a writable 6-band parametric EQ with
+a live frequency-response graph:
+
+<p align="center">
+  <img src="docs/screenshot-audio.png" alt="WebATEM Fairlight audio mixer — 14 strips with input, EQ, dynamics, faders, pan and meters" width="900">
+</p>
+<p align="center">
+  <img src="docs/screenshot-eq.png" alt="WebATEM 6-band parametric EQ — frequency-response curve with per-band type, frequency, gain and Q" width="900">
+</p>
+
 ## Running it for real
 
 - **There is no login — by design.** Like the hardware panel, anyone who can
