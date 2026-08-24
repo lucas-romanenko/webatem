@@ -171,6 +171,14 @@ Linux box in the rack room, a phone at the camera position.
   all operators; state fan-out over WebSockets with adaptive polling
   (30 ms during transitions, relaxed when idle).
 
+Deep per-switcher settings live in the Settings panel — color generators,
+each upstream keyer (luma / chroma / pattern / DVE), downstream keyers,
+transitions, video mode, input labels, outputs and HyperDecks:
+
+<p align="center">
+  <img src="docs/screenshot-settings.png" alt="WebATEM settings panel — color generators and an upstream keyer expanded, showing HSL controls, fill-source dropdown and wipe patterns" width="900">
+</p>
+
 ## Running it for real
 
 - **There is no login — by design.** Like the hardware panel, anyone who can
