@@ -8,6 +8,11 @@ on:
     tags: ['v*']
   workflow_dispatch: {}
 
+# The tag build creates/updates a GitHub Release, which needs write access to
+# repo contents (the default GITHUB_TOKEN is read-only).
+permissions:
+  contents: write
+
 jobs:
   build:
     name: ${{ matrix.name }}
