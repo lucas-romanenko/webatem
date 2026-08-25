@@ -13,6 +13,12 @@ on:
 permissions:
   contents: write
 
+# Python version used for every desktop build. The Intel-Mac job installs the
+# universal2 python.org build at this exact version and runs it x86_64 under
+# Rosetta; the others get it from actions/setup-python.
+env:
+  PY_VERSION: '3.14.0'
+
 jobs:
   build:
     name: ${{ matrix.name }}
@@ -24,8 +30,12 @@ jobs:
           # Build on the OLDEST supported Ubuntu so the binary's glibc floor
           # is low enough to run on 22.04 LTS servers (and everything newer).
           - { os: ubuntu-22.04,   name: linux-x64,     asset: webatem-linux-x64 }
-          - { os: macos-13,       name: macos-intel,   asset: webatem-macos-intel.dmg }
-          - { os: macos-latest,   name: macos-arm64,   asset: webatem-macos-arm64.dmg }
+          # Both Mac binaries build on the Apple-Silicon runner: arm64 natively,
+          # and Intel (x86_64) under Rosetta 2. GitHub retired the standalone
+          # macos-13 Intel runners (they never scheduled — jobs queued 24h then
+          # cancelled), so this is the only reliable way to ship an Intel build.
+          - { os: macos-latest,   name: macos-arm64,   asset: webatem-macos-arm64.dmg, mac_arch: arm64 }
+          - { os: macos-latest,   name: macos-intel,   asset: webatem-macos-intel.dmg, mac_arch: x86_64 }
           - { os: windows-latest, name: windows-x64,   asset: webatem-windows-x64.exe }
     defaults:
       run:
@@ -34,7 +44,9 @@ jobs:
       - uses: actions/checkout@v4
 
       # 1. Compile the Tailwind/daisyUI stylesheet (same output as the Docker
-      #    css stage) so collectstatic bundles it.
+      #    css stage) so collectstatic bundles it. Node is architecture-neutral
+      #    here (it only emits CSS text), so the arm64 runner is fine for both
+      #    Mac builds.
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -44,38 +56,70 @@ jobs:
           npx tailwindcss -c tailwind.config.js -i styles/app.css \
             -o atem_control/static/vendor/webatem.css --minify
 
-      # 2. Python + deps + PyInstaller.
+      # 2a. Python for every build EXCEPT the Intel-Mac one: straight from
+      #     actions/setup-python. Records `PY=python` for the shared steps.
       - uses: actions/setup-python@v5
+        if: matrix.mac_arch != 'x86_64'
         with:
-          python-version: '3.14'
+          python-version: ${{ env.PY_VERSION }}
+      - name: Select interpreter (native)
+        if: matrix.mac_arch != 'x86_64'
+        run: echo "PY=python" >> "$GITHUB_ENV"
+
+      # 2b. Intel Mac: install the universal2 python.org build and drive it
+      #     x86_64 through Rosetta. Every downstream step then runs `$PY` in
+      #     x86_64 mode, so pip pulls x86_64 wheels, the C extension compiles
+      #     x86_64, and PyInstaller freezes an x86_64 binary — no fat/universal2
+      #     wheels required (Pillow ships none).
+      - name: Install x86_64 Python (Rosetta)
+        if: matrix.mac_arch == 'x86_64'
+        run: |
+          set -euxo pipefail
+          curl -fsSL -o /tmp/python.pkg \
+            "https://www.python.org/ftp/python/${PY_VERSION}/python-${PY_VERSION}-macos11.pkg"
+          sudo installer -pkg /tmp/python.pkg -target /
+          PYBIN="/Library/Frameworks/Python.framework/Versions/${PY_VERSION%.*}/bin/python3"
+          echo "PY=arch -x86_64 $PYBIN" >> "$GITHUB_ENV"
+          echo "ARCHFLAGS=-arch x86_64" >> "$GITHUB_ENV"
+          arch -x86_64 "$PYBIN" -c "import platform, sys; print('interp arch:', platform.machine(), sys.version)"
+
+      # 3. Deps + PyInstaller into that interpreter.
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip setuptools wheel
-          pip install -r requirements.txt pyinstaller
+          $PY -m pip install --upgrade pip setuptools wheel
+          $PY -m pip install -r requirements.txt pyinstaller
 
-      # 3. Compile the mediaconvert C extension with THIS OS's compiler
-      #    (clang / MSVC / gcc) — setuptools picks the right flags + suffix.
+      # 4. Compile the mediaconvert C extension with THIS build's compiler +
+      #    architecture (ARCHFLAGS forces x86_64 for the Rosetta build).
       - name: Compile C extension
-        run: python setup.py build_ext --inplace
+        run: $PY setup.py build_ext --inplace
 
-      # 4. Bundle-time static (WhiteNoise serves the read-only tree).
+      # 5. Bundle-time static (WhiteNoise serves the read-only tree).
       - name: Collect static
         env:
           SECRET_KEY: build-only
           DEBUG: 'False'
-        run: python manage.py collectstatic --noinput --clear
+        run: $PY manage.py collectstatic --noinput --clear
 
-      # 5. Freeze into one self-contained executable.
+      # 6. Freeze into one self-contained executable. `$PY -m PyInstaller` keeps
+      #    the freeze in the same interpreter/arch as everything above.
       - name: PyInstaller
-        run: pyinstaller build/desktop/webatem.spec --distpath dist --workpath build/pyi -y
+        run: $PY -m PyInstaller build/desktop/webatem.spec --distpath dist --workpath build/pyi -y
 
-      # 6. Package per-OS: macOS -> ad-hoc-signed .app in a drag-to-Applications
+      # 7. Package per-OS: macOS -> ad-hoc-signed .app in a drag-to-Applications
       #    .dmg; Windows -> the icon-embedded .exe; Linux -> the bare binary.
       - name: Package
         run: |
+          set -euxo pipefail
           mkdir -p out
           case "$RUNNER_OS" in
             macOS)
+              # Confirm the frozen binary is actually the arch we intended
+              # before we ship it under an arch-specific name.
+              got=$(lipo -archs dist/WebATEM.app/Contents/MacOS/webatem | tr -d '[:space:]')
+              want="${{ matrix.mac_arch }}"
+              echo "built arch: $got (want $want)"
+              [ "$got" = "$want" ] || { echo "::error::built $got but wanted $want"; exit 1; }
               # Ad-hoc sign so the app runs without the codesign dance (Apple
               # Silicon refuses unsigned binaries). Not notarized — the first
               # open still needs right-click Open / Open Anyway.
