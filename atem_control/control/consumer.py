@@ -15,9 +15,9 @@ import time
 from channels.generic.websocket import AsyncWebsocketConsumer
 from asgiref.sync import sync_to_async
 from atem_control.media_pool import watcher as media_pool_service
-from pyatem._state import ATEMStateMixin
-from pyatem.messages.fairlight import enable_fairlight_levels
-from pyatem.pool import ATEMInstanceManager
+from atemwire._state import ATEMStateMixin
+from atemwire.messages.fairlight import enable_fairlight_levels
+from atemwire.pool import ATEMInstanceManager
 from atem_control.control.commands import dispatch as dispatch_command
 from atem_control.control.logging import ATEMConnectionLoggingMixin
 from atem_control.activity import ActivityLog
@@ -101,6 +101,11 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
         self.monitoring_task = None
         self.is_monitoring = False
         self.last_known_state = {}
+        # One cleanup per session (2026-09-11): the polling loop's socket-gone
+        # path and Channels' ``disconnect()`` both reach ``_cleanup_session``
+        # for the same close; whichever arrives first runs it, the other
+        # returns. Reset when a session is (re)established in start_monitoring.
+        self._cleanup_started = False
 
         # Activity tracking
         self.last_command_time = 0
@@ -201,7 +206,22 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
         Fix (2026-07-06): shared by ``disconnect()``,
         ``_perform_disconnect`` and the monitor loop's crash path so every
         exit route gets the same per-step exception isolation — one failing
-        step must never skip the pool-ref release."""
+        step must never skip the pool-ref release.
+
+        Runs ONCE per session (2026-09-11). A server-side close (uvicorn's
+        keepalive ping timeout, an app-side close) reaches here twice at the
+        same instant: from the polling loop whose state send just failed,
+        and from Channels' ``disconnect()``. Two concurrent cleanups had the
+        disconnect side cancel the loop task mid-DB-write and surface
+        asgiref's "await wasn't used with future" as an error for a session
+        that was tearing down cleanly. The second caller now returns and
+        leaves the first to finish; every step below is safe to run from
+        either task."""
+        if self._cleanup_started:
+            logger.debug("Session cleanup already running (reason=%s); skipping", reason)
+            return
+        self._cleanup_started = True
+
         try:
             await self._log_disconnect(reason=reason)
         except asyncio.CancelledError:
@@ -283,9 +303,9 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
     # =========================================================================
 
     async def execute_command(self, command, data):
-        """Dispatch a frontend command through the pyatem-backed command map.
+        """Dispatch a frontend command through the atemwire-backed command map.
 
-        Each handler builds a pyatem ``Command`` and enqueues it on the
+        Each handler builds a atemwire ``Command`` and enqueues it on the
         ATEMConnection's worker thread (non-blocking). State echo is
         delivered by the polling loop, which is kept on a fast cadence
         (~80 ms) for RECENT_COMMAND_WINDOW seconds after each command —
@@ -303,7 +323,7 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
         # Handler runs synchronously (it only enqueues — no network I/O on
         # this thread), but wrap in sync_to_async to stay consistent with
         # the async consumer model and in case handlers grow to read state.
-        # KI#13: dispatch is pure pyatem (no ORM) — off the shared
+        # KI#13: dispatch is pure atemwire (no ORM) — off the shared
         # thread-sensitive lane so one slow call elsewhere can't queue
         # every operator's commands behind it.
         ok, err = await sync_to_async(dispatch_command, thread_sensitive=False)(self.connection, command, data)
@@ -316,12 +336,6 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
         # Activity log: discrete actions immediately, slider drags coalesced
         # into one settled row (see _record_atem_command).
         self._record_atem_command(command, data)
-
-        if command == 'cut':
-            await self.send_json({
-                'type': 'tbar_cut',
-                'timestamp': asyncio.get_event_loop().time(),
-            })
 
     # ---- Activity logging of control commands ----
 
@@ -418,7 +432,7 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
             })
             return
 
-        # A WebSocket-supplied IP goes straight to the pyatem UDP socket; a
+        # A WebSocket-supplied IP goes straight to the atemwire UDP socket; a
         # hostname would be DNS-resolved and a bad value scanned (audit SEC-6).
         if not is_valid_ip(ip_address):
             await self.send_json({
@@ -542,18 +556,32 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
             return
 
         self.is_monitoring = True
+        self._cleanup_started = False   # a live session again (in-page ATEM switch)
         self.last_change_time = asyncio.get_event_loop().time()
         self.monitoring_task = asyncio.create_task(self._monitor_loop())
 
     async def stop_monitoring(self):
         """Stop state polling."""
         self.is_monitoring = False
-        if self.monitoring_task:
-            self.monitoring_task.cancel()
-            try:
-                await self.monitoring_task
-            except asyncio.CancelledError:
-                pass
+        task, self.monitoring_task = self.monitoring_task, None
+        if task is None or task.done():
+            return
+        if task is asyncio.current_task():
+            # Called from inside the loop (inactivity timeout, socket-gone
+            # path): the loop exits on its own now that is_monitoring is
+            # False. Cancelling and awaiting ourselves only manufactured a
+            # CancelledError to swallow.
+            return
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:  # noqa: BLE001
+            # The loop logs its own failures; anything surfacing here is the
+            # cancellation itself (e.g. asgiref's "await wasn't used with
+            # future" when the task was parked in sync_to_async). Not an error.
+            logger.info("Monitor task ended while being stopped: %s", e)
 
     async def _monitor_loop(self):
         """
@@ -576,11 +604,11 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
             iteration = 0
             # ``was_atem_reachable`` tracks the upstream ATEM's reachability
             # — separate from ``self.is_connected`` (which reflects whether
-            # the pyatem worker thread is alive; the worker keeps retrying
+            # the atemwire worker thread is alive; the worker keeps retrying
             # SYN handshakes after a cable yank, so ``is_connected`` stays
             # True for a while even with no live ATEM). The real signal is
             # ``build_full_state`` returning ``is_connected: False``, which
-            # fires when pyatem's protocol layer cleared mixerstate after
+            # fires when atemwire's protocol layer cleared mixerstate after
             # giving up on the failed reconnects.
             #
             # Starts at ``None`` (unknown). The first observation seeds it
@@ -615,7 +643,7 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
                 current_state = await sync_to_async(self.build_full_state, thread_sensitive=False)(self.connection)
                 t_build = time.monotonic() - t0
 
-                # ATEM-side reachability transition: pyatem's protocol clears
+                # ATEM-side reachability transition: atemwire's protocol clears
                 # mixerstate when it gives up on reconnects, which makes
                 # build_full_state return ``{'is_connected': False}``.
                 # Treat that as "ATEM dropped mid-session" and notify the
@@ -659,11 +687,24 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
                 t_send = 0.0
                 if self._has_state_changed(current_state):
                     t1 = time.monotonic()
-                    await self.send_json({
-                        'type': 'atem_state',
-                        'state': current_state,
-                        'timestamp': asyncio.get_event_loop().time()
-                    })
+                    try:
+                        await self.send_json({
+                            'type': 'atem_state',
+                            'state': current_state,
+                            'timestamp': asyncio.get_event_loop().time()
+                        })
+                    except Exception as e:  # noqa: BLE001
+                        # The socket closed under us — uvicorn's keepalive
+                        # ping timeout (a browser that stopped answering for
+                        # 20 s) or a server-side close. Channels delivers
+                        # websocket.disconnect for the same close, so this is
+                        # an ordinary disconnect, not a server error: no
+                        # traceback (2026-09-11). Run the shared cleanup
+                        # ourselves too, in case that dispatch never comes;
+                        # whichever path gets there first wins.
+                        logger.info("ATEM state send failed, socket closed mid-poll: %s", e)
+                        await self._cleanup_session(reason='websocket_closed')
+                        return
                     t_send = time.monotonic() - t1
                     sent = True
                     self.last_known_state = current_state.copy()
@@ -740,17 +781,22 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
                     for dsk in state.get('dsks') or []))
 
     def _has_state_changed(self, current_state):
-        """Compare current state against last known state for relevant changes."""
+        """Full-state realtime surface: push whenever ANYTHING changed — no key
+        is privileged. The old ``important_keys`` whitelist silently dropped
+        changes to any top-level key it forgot (``macros`` / ``lastRunMacro`` /
+        ``videoMode`` / ``videoModes`` / the switcher ``atem_name``, and
+        historically ``hyperdecks``): a macro fired from ASC only reached the
+        control page on the next unrelated change or a page refresh. A full
+        value-compare fixes that.
+
+        No spam: ``build_full_state`` is stable when idle — live audio meters
+        ride a SEPARATE subscription (``audio_meter_batch``), not this state, and
+        transition position only moves DURING a transition (a wanted push).
+        The full compare also keeps the idle-backoff counter
+        (``consecutive_no_changes``) honest."""
         if not self.last_known_state:
             return True
-
-        important_keys = ['mes', 'dsks', 'colorGenerators', 'auxOutputs', 'audio', 'inputLabels', 'sources', 'topology']
-
-        for key in important_keys:
-            if current_state.get(key) != self.last_known_state.get(key):
-                return True
-
-        return False
+        return current_state != self.last_known_state
 
     # =========================================================================
     # WebSocket Helpers
@@ -865,7 +911,7 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
         per-IP subscriber refcount; send SFLN(enable=True) to the ATEM on
         the 0→1 transition so it starts streaming FMLv/FDLv packets.
 
-        Captures the current asyncio loop so the (sync) pyatem event
+        Captures the current asyncio loop so the (sync) atemwire event
         callbacks can hand events back to the consumer's loop via
         ``call_soon_threadsafe``.
         """
@@ -973,7 +1019,7 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
         self._audio_subscribed = False
 
     def _on_strip_meter(self, contents):
-        """Handler for FMLv events — runs on the pyatem worker thread.
+        """Handler for FMLv events — runs on the atemwire worker thread.
         Adds the latest payload for this strip into the per-tick batch
         (overwriting any previous payload for this strip already queued
         for the same tick) and arms the flush task if not already pending."""
@@ -998,7 +1044,7 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
             pass  # loop closed
 
     def _on_master_meter(self, contents):
-        """Handler for FDLv — runs on pyatem worker thread."""
+        """Handler for FDLv — runs on atemwire worker thread."""
         loop = self._meter_loop
         if loop is None or loop.is_closed():
             return

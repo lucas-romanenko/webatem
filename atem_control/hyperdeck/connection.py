@@ -27,7 +27,7 @@ import logging
 import threading
 import time
 
-from pyhyperdeck import Hyperdeck, HyperdeckError
+from hyperdeckwire import Hyperdeck, HyperdeckError
 
 logger = logging.getLogger(__name__)
 

@@ -24,7 +24,7 @@ import logging
 from types import SimpleNamespace
 from typing import Tuple, Optional
 
-from pyatem.messages import (
+from atemwire.messages import (
     color_generator, downstream_keyer, fade_to_black, fairlight, hyperdeck,
     input_video, macros, media, switching, transition, upstream_keyer,
 )
@@ -71,6 +71,10 @@ ATEM_COMMAND_MAP = {
     'set_preview': lambda c, d: ops.set_preview(c, source=d['source'], me=d.get('me', 0)),
     'cut': lambda c, d: ops.cut(c, me=d.get('me', 0)),
     'auto': lambda c, d: ops.auto(c, me=d.get('me', 0)),
+    # The T-bar (CTPs, 0..10000; the switcher mixes live at that position
+    # and completes the transition at 10000). Streamed during a drag.
+    'set_transition_position': lambda c, d: ops.set_transition_position(
+        c, position=d['position'], me=d.get('me', 0)),
 
     # Transition control
     'set_transition_style': lambda c, d: ops.set_transition_style(c, style=d['style'], me=d.get('me', 0)),

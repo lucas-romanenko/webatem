@@ -10,7 +10,7 @@ media-pool slot vs a deck's switcher input) and its own log label.
 import time
 from typing import Callable, Optional
 
-from pyatem.transport import Wakeup
+from atemwire.transport import Wakeup
 
 # Tally cycle-wait timings — single source of truth for every caller.
 TALLY_POLL_INTERVAL = 0.05
@@ -38,9 +38,21 @@ def ticked_pump(protocol, idle_sleep: float = 0.0) -> None:
     """
     idle = True
     try:
-        idle = protocol.transport.thread_recv_queue.qsize() == 0
+        q = protocol.transport.thread_recv_queue
+        # "Idle" cannot be judged by qsize(): on an ESTABLISHED session the
+        # ATEM's keepalive pings land in this queue every second, and
+        # ``receive_packet`` swallows those control packets with a
+        # ``continue`` — straight into another blocking ``get()``. So a
+        # queue that is never empty (always a ping in it) meant no sentinel
+        # was ever queued, and loop() ate ping after ping until some other
+        # session made the switcher emit a data packet — minutes, or never.
+        # Found live: a HyperDeck job stalled at its post-connect pump
+        # (2026-09-09), blocked 90 s until a second session connected.
+        # A Wakeup behind a SHORT queue costs one early return; a long queue
+        # is a real transfer and gets no sentinel (the 2026-07-02 lesson).
+        idle = q.qsize() <= 8
         if idle:
-            protocol.transport.thread_recv_queue.put(Wakeup())
+            q.put(Wakeup())
     except Exception:
         # No real transport (test fakes) — treat as idle so the pacing
         # sleep below still runs (tests drive a virtual clock through it).

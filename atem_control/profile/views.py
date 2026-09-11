@@ -6,7 +6,7 @@ Endpoints:
     POST /atem/profile/load_xml/         (multipart: profile=<xml file>)
     POST /atem/profile/load/             (multipart: ip + profile + sections + image_*)
 
-Domain logic lives in ``profile/export.py`` (save) and ``pyatem.profile``
+Domain logic lives in ``profile/export.py`` (save) and ``atemwire.profile``
 (load). The view functions here translate HTTP ↔ Python and render
 responses.
 """
@@ -21,8 +21,8 @@ from channels.layers import get_channel_layer
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.http import require_POST
 
-from pyatem import ATEM, ApplyOptions, Profile
-from pyatem.profile import SaveOptions
+from atemwire import ATEM, ApplyOptions, Profile
+from atemwire.profile import SaveOptions
 
 from atem_control.media_pool import watcher as _media_pool_service
 from atem_control.profile.dialog import (

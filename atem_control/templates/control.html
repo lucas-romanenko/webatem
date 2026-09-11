@@ -13,9 +13,10 @@
      @visibilitychange.window="if (document.hidden) $store.atem.unsubscribeAudioMeters(); else if (audioPanelOpen) $store.atem.subscribeAudioMeters()"
      @drop.window="dragOverSlotIdx = null; dragOverPlayerIdx = null"
      @dragend.window="dragOverSlotIdx = null; dragOverPlayerIdx = null">
-    <!-- Main ATEM Content (will be blurred when settings open) -->
+    <!-- Main ATEM Content. Overlays dim + blur it THROUGH their backdrop
+         (.atem-overlay-backdrop) — nothing filters this element itself. -->
     <div class="min-h-screen bg-base-100 p-4 relative atem-main-content"
-         :class="[$store.atem.bodyWarningClass, (settingsOpen || mediaPoolOpen) ? 'settings-blur-active' : '']">
+         :class="[$store.atem.bodyWarningClass]">
     <!-- Loading Overlay - shows until ATEM is fully connected with state.
          Disconnect handling is via redirect: on mid-session ATEM loss,
          inactivity timeout, or manual disconnect, the operator goes back
@@ -45,7 +46,10 @@
         <div class="mb-6" x-show="($store.atem.state.mes?.length ?? 1) > 1" x-cloak>
             <div class="card bg-base-200">
                 <div class="card-body py-3">
-                    <div class="flex items-center gap-3">
+                    {% comment %} flex-wrap: each M/E button is min-w-20, so a 4-M/E
+                    switcher ran the row off a phone screen and M/E 4 could not be
+                    reached at all. It wraps to a second line instead. {% endcomment %}
+                    <div class="flex flex-wrap items-center gap-3 gap-y-2">
                         <span class="text-sm font-semibold opacity-70">M/E</span>
                         <template x-for="(me, i) in $store.atem.state.mes" :key="i">
                             <button class="btn btn-sm min-w-20"
@@ -65,7 +69,7 @@
         <!-- --atem-btn: the ONE square-button size shared by Program/Preview/
              USK/DSK tracks, per breakpoint — every control square is the same
              size, scaling together with the screen. -->
-        <div class="grid grid-cols-1 lg:grid-cols-[3fr_auto_2fr] xl:grid-cols-[5fr_auto_4fr] 2xl:grid-cols-[auto_auto_minmax(0,1fr)] gap-6 lg:gap-8 [--atem-btn:2.25rem] sm:[--atem-btn:2.5rem] lg:[--atem-btn:3rem] xl:[--atem-btn:3.25rem] 2xl:[--atem-btn:4rem]">
+        <div class="grid grid-cols-1 lg:grid-cols-[3fr_auto_2fr] xl:grid-cols-[5fr_auto_4fr] 2xl:grid-cols-[auto_auto_minmax(0,1fr)] gap-6 lg:gap-8 [--atem-btn:2.75rem] lg:[--atem-btn:3rem] xl:[--atem-btn:3.25rem] 2xl:[--atem-btn:4rem]">
             
             <!-- Left: Sources and Controls -->
             <div class="space-y-6">
@@ -87,12 +91,22 @@
                              internals cluster; geometry comes from busGeom() per the
                              connected model's topology. Empty cells keep the two
                              rows' columns aligned. -->
-                        <div class="flex flex-col gap-0.5 [--bus-gap:0.25rem] 2xl:[--bus-gap:1.25rem]">
+                        {% comment %} Tracks are a fixed --atem-btn, never minmax(0,…):
+                        collapsing columns overlapped every label on a switcher with
+                        many inputs. The ASC row needs a control surface's width, which
+                        a phone has not got, so below sm .atem-bus-row wraps into as
+                        many lines as it needs, and .atem-bus-big wraps a BANKED
+                        switcher below lg too (a 4 M/E does not fit a tablet either).
+                        Rules in atem_control.css; the column template travels as
+                        --bus-tpl so a stylesheet can replace it. Desktop keeps this
+                        two-row shape exactly. {% endcomment %}
+                        <div class="atem-bus flex flex-col gap-0.5 [--bus-gap:0.25rem] 2xl:[--bus-gap:1.25rem]"
+                             :class="{ 'atem-bus-big': $store.atem.busBanked() }">
                             <template x-for="(row, ri) in $store.atem.busGeom().rows" :key="'r' + ri">
-                                <div class="grid gap-0.5"
-                                     :style="{ gridTemplateColumns: 'repeat(' + $store.atem.busGeom().camCols + ', minmax(0,var(--atem-btn))) var(--bus-gap) repeat(' + $store.atem.busGeom().midCols + ', minmax(0,var(--atem-btn))) var(--bus-gap) repeat(' + $store.atem.busGeom().xCols + ', minmax(0,var(--atem-btn)))' }">
+                                <div class="atem-bus-row grid gap-0.5"
+                                     :style="{ '--bus-tpl': 'repeat(' + $store.atem.busGeom().camCols + ', var(--atem-btn)) var(--bus-gap) repeat(' + $store.atem.busGeom().midCols + ', var(--atem-btn)) var(--bus-gap) repeat(' + $store.atem.busGeom().xCols + ', var(--atem-btn))' }">
                                     <template x-for="(s, ci) in row" :key="ri + '-' + ci + '-' + (s ? s.source : 'e')">
-                                        <div class="min-w-0">
+                                        <div class="min-w-0" :class="{ 'atem-bus-pad': !s }">
                                             <template x-if="s">
                                                 <button
                                                     :class="$store.atem.getSourceButtonClass('program', s.source)"
@@ -127,12 +141,22 @@
                              internals cluster; geometry comes from busGeom() per the
                              connected model's topology. Empty cells keep the two
                              rows' columns aligned. -->
-                        <div class="flex flex-col gap-0.5 [--bus-gap:0.25rem] 2xl:[--bus-gap:1.25rem]">
+                        {% comment %} Tracks are a fixed --atem-btn, never minmax(0,…):
+                        collapsing columns overlapped every label on a switcher with
+                        many inputs. The ASC row needs a control surface's width, which
+                        a phone has not got, so below sm .atem-bus-row wraps into as
+                        many lines as it needs, and .atem-bus-big wraps a BANKED
+                        switcher below lg too (a 4 M/E does not fit a tablet either).
+                        Rules in atem_control.css; the column template travels as
+                        --bus-tpl so a stylesheet can replace it. Desktop keeps this
+                        two-row shape exactly. {% endcomment %}
+                        <div class="atem-bus flex flex-col gap-0.5 [--bus-gap:0.25rem] 2xl:[--bus-gap:1.25rem]"
+                             :class="{ 'atem-bus-big': $store.atem.busBanked() }">
                             <template x-for="(row, ri) in $store.atem.busGeom().rows" :key="'r' + ri">
-                                <div class="grid gap-0.5"
-                                     :style="{ gridTemplateColumns: 'repeat(' + $store.atem.busGeom().camCols + ', minmax(0,var(--atem-btn))) var(--bus-gap) repeat(' + $store.atem.busGeom().midCols + ', minmax(0,var(--atem-btn))) var(--bus-gap) repeat(' + $store.atem.busGeom().xCols + ', minmax(0,var(--atem-btn)))' }">
+                                <div class="atem-bus-row grid gap-0.5"
+                                     :style="{ '--bus-tpl': 'repeat(' + $store.atem.busGeom().camCols + ', var(--atem-btn)) var(--bus-gap) repeat(' + $store.atem.busGeom().midCols + ', var(--atem-btn)) var(--bus-gap) repeat(' + $store.atem.busGeom().xCols + ', var(--atem-btn))' }">
                                     <template x-for="(s, ci) in row" :key="ri + '-' + ci + '-' + (s ? s.source : 'e')">
-                                        <div class="min-w-0">
+                                        <div class="min-w-0" :class="{ 'atem-bus-pad': !s }">
                                             <template x-if="s">
                                                 <button
                                                     :class="$store.atem.getSourceButtonClass('preview', s.source)"
@@ -209,7 +233,8 @@
                                 <h3 class="text-sm font-semibold mb-2 opacity-70">USKs</h3>
                                 <div class="space-y-2">
                                     <!-- USK On Air Row -->
-                                    <div class="grid grid-cols-[repeat(5,minmax(0,var(--atem-btn)))] gap-0.5">
+                                    <div class="grid gap-0.5"
+                                         :style="{ gridTemplateColumns: 'repeat(' + $store.atem.uskCols() + ', var(--atem-btn))' }">
                                         <div></div>
                                         <template x-for="(state, index) in $store.atem.state.mes[$store.atem.activeMe].usk.states" :key="index">
                                             <button
@@ -222,7 +247,8 @@
                                     </div>
 
                                     <!-- Transition Selection Row -->
-                                    <div class="grid grid-cols-[repeat(5,minmax(0,var(--atem-btn)))] gap-0.5">
+                                    <div class="grid gap-0.5"
+                                         :style="{ gridTemplateColumns: 'repeat(' + $store.atem.uskCols() + ', var(--atem-btn))' }">
                                         <button
                                             :class="$store.atem.getTransitionSelectionButtonClass('background')"
                                             @click="$store.atem.send('toggle_transition_background')"
@@ -319,7 +345,7 @@
         </div>
     </div>
     </div>
-    <!-- End of main ATEM content (gets blurred) -->
+    <!-- End of main ATEM content -->
 
 {% include 'control/_hyperdeck_panel.html' %}
 
@@ -331,7 +357,7 @@
          @keydown.escape.window="pendingVideoModeChange = null"
          @keydown.enter.window.prevent="if (pendingVideoModeChange) { const _toId = pendingVideoModeChange.toId; pendingVideoModeChange = null; ATEMControl.cmd('set_video_mode', { mode: _toId }); }">
         <!-- Backdrop -->
-        <div class="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        <div class="atem-overlay-backdrop absolute inset-0"
              @click="pendingVideoModeChange = null"
              x-transition:enter="transition-opacity ease-out duration-200"
              x-transition:enter-start="opacity-0"
@@ -399,26 +425,30 @@
 
 {% include 'control/_fairlight.html' %}
 
-    <!-- Settings Panel Overlay (OUTSIDE blurred content) -->
-    <div class="fixed inset-0 z-[200] pointer-events-none" x-show="settingsOpen" x-cloak>
-        <!-- Backdrop - dark overlay and click area -->
-        <div class="settings-backdrop absolute inset-0 pointer-events-auto" 
+    <!-- Settings Panel Overlay. Esc closes it; the listener is in the
+         CAPTURE phase so it runs before the video-mode confirm dialog's
+         bubble-phase Esc handler (earlier in the DOM) and still sees that
+         dialog open — Esc on the confirm closes only the confirm. -->
+    <div class="fixed inset-0 z-[200] pointer-events-none" x-show="settingsOpen" x-cloak
+         @keydown.escape.window.capture="if (pendingVideoModeChange === null) settingsOpen = false">
+        <!-- Backdrop: dims + blurs the page through it; click closes -->
+        <div class="atem-overlay-backdrop absolute inset-0 pointer-events-auto"
              @click="settingsOpen = false"
-             x-transition:enter="transition-opacity ease-out duration-300"
+             x-transition:enter="transition-opacity ease-out duration-200"
              x-transition:enter-start="opacity-0"
              x-transition:enter-end="opacity-100"
-             x-transition:leave="transition-opacity ease-in duration-200"
+             x-transition:leave="transition-opacity ease-in duration-150"
              x-transition:leave-start="opacity-100"
              x-transition:leave-end="opacity-0"></div>
-        
+
         <!-- Settings Panel -->
         <div class="settings-panel absolute right-0 top-0 h-full w-full max-w-md bg-base-200 shadow-2xl pointer-events-auto flex flex-col"
             @click.stop
             x-show="settingsOpen"
-            x-transition:enter="transition ease-out duration-300"
+            x-transition:enter="transition ease-out duration-200"
             x-transition:enter-start="transform translate-x-full"
             x-transition:enter-end="transform translate-x-0"
-            x-transition:leave="transition ease-in duration-200"
+            x-transition:leave="transition ease-in duration-150"
             x-transition:leave-start="transform translate-x-0"
             x-transition:leave-end="transform translate-x-full">
             
@@ -436,6 +466,7 @@
             <!-- Settings Content - FIXED: flex-1 min-h-0 for proper scrolling -->
             <div class="p-4 space-y-2 flex-1 min-h-0 overflow-y-auto pb-8" x-data="{
                 openSections: {
+                    switcherName: false,
                     colorGenerators: false,
                     videoMode: false,
                     inputLabels: false,
@@ -448,7 +479,9 @@
                 },
                 selectedTransitionTab: 'Mix'
             }">
-                
+
+                {% include 'control/_atem_info.html' %}
+
                 <!-- Color Generators - SIMPLE VERSION -->
                 <div class="border-b border-base-300">
                     <button 
@@ -458,14 +491,9 @@
                         <i class="bi bi-chevron-down transition-transform duration-200" 
                            :class="openSections.colorGenerators ? 'rotate-180' : ''"></i>
                     </button>
-                    <div x-show="openSections.colorGenerators" 
-                         x-transition:enter="transition ease-out duration-200"
-                         x-transition:enter-start="opacity-0 -translate-y-2"
-                         x-transition:enter-end="opacity-100 translate-y-0"
-                         x-transition:leave="transition ease-in duration-150"
-                         x-transition:leave-start="opacity-100 translate-y-0"
-                         x-transition:leave-end="opacity-0 -translate-y-2"
-                         class="px-4 pb-4">
+                    <div x-show="openSections.colorGenerators"
+                         x-collapse.duration.200ms
+                         class="px-4 acc-body">
                         <div class="space-y-4 text-sm">
                             
                             <!-- Color Selection: one button per generator, count
@@ -624,13 +652,8 @@
                            :class="openSections.inputLabels ? 'rotate-180' : ''"></i>
                     </button>
                     <div x-show="openSections.inputLabels"
-                         x-transition:enter="transition ease-out duration-200"
-                         x-transition:enter-start="opacity-0 -translate-y-2"
-                         x-transition:enter-end="opacity-100 translate-y-0"
-                         x-transition:leave="transition ease-in duration-150"
-                         x-transition:leave-start="opacity-100 translate-y-0"
-                         x-transition:leave-end="opacity-0 -translate-y-2"
-                         class="px-4 pb-4">
+                         x-collapse.duration.200ms
+                         class="px-4 acc-body">
                         <p class="text-xs text-base-content/60 mb-2">
                             Rename sources to your preferred names. Labels appear in every dropdown.
                             Tab between fields; changes save when you leave the field.
@@ -719,13 +742,8 @@
                            :class="openSections.videoMode ? 'rotate-180' : ''"></i>
                     </button>
                     <div x-show="openSections.videoMode"
-                         x-transition:enter="transition ease-out duration-200"
-                         x-transition:enter-start="opacity-0 -translate-y-2"
-                         x-transition:enter-end="opacity-100 translate-y-0"
-                         x-transition:leave="transition ease-in duration-150"
-                         x-transition:leave-start="opacity-100 translate-y-0"
-                         x-transition:leave-end="opacity-0 -translate-y-2"
-                         class="px-4 pb-4">
+                         x-collapse.duration.200ms
+                         class="px-4 acc-body">
                         <div class="space-y-2 text-sm">
                             <select class="select select-bordered select-sm w-full"
                                     :value="$store.atem.state?.videoMode?.id ?? -1"
@@ -766,8 +784,21 @@
          hostile equipment name can't break out of the inline block) -->
     {{ atem_equipment|json_script:"atem-equipment-data" }}
 
+    <!-- {deck_ip: name} for inventory HyperDecks, so Settings > HyperDecks can
+         label a bound slot with its equipment name (the ATEM only knows the IP). -->
+    {{ hyperdeck_names|json_script:"hyperdeck-names-data" }}
+    <script>
+        try {
+            window.ATEM_HYPERDECK_NAMES = JSON.parse(
+                document.getElementById('hyperdeck-names-data').textContent || '{}');
+        } catch (e) { window.ATEM_HYPERDECK_NAMES = {}; }
+    </script>
+
     <!-- Include Alpine.js and Custom JavaScript -->
     <script src="{% static_v 'js/atem_control_page.js' %}"></script>
+    <!-- @alpinejs/collapse: x-collapse height animation for the settings
+         accordion. Registers on alpine:init, so it must load BEFORE core. -->
+    <script defer src="{% static 'vendor/alpinejs-collapse-3.14.3.min.js' %}"></script>
     <script defer src="{% static 'vendor/alpine.min.js' %}"></script>
     <script src="{% static_v 'js/atem_control.js' %}"></script>
     <script src="{% static_v 'js/atem_realtime_slider.js' %}"></script>

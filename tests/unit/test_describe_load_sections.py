@@ -18,7 +18,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from pyatem.profile import Profile
+from atemwire.profile import Profile
 from atem_control.profile.dialog import describe_load_sections
 
 

@@ -64,7 +64,7 @@
                                 <span class="font-semibold hidden 2xl:inline">Profile</span>
                                 <i class="bi bi-chevron-down text-xs opacity-60"></i>
                             </button>
-                            <ul tabindex="0" class="dropdown-content menu p-2 shadow-lg bg-base-100 rounded-box w-56 z-30 mt-2">
+                            <ul tabindex="0" class="dropdown-content menu p-2 shadow-lg bg-base-100 rounded-box w-56 max-w-[calc(100vw-2rem)] z-30 mt-2">
                                 <li>
                                     <a href="javascript:void(0)"
                                        @click="window.AtemProfile.openSaveDialog($store.atem.currentIP, $data); document.activeElement.blur()">
@@ -87,15 +87,19 @@
                     </div>
                     
                     <!-- Right: Connection Controls -->
-                    <div class="flex justify-center lg:justify-end gap-3 items-center">
+                    {% comment %} flex-wrap + min-w-0: on a 320px phone the history
+                    button, the IP input, Connect and ✕ do not fit on one line, and the
+                    input would not shrink (a text input's automatic minimum is its size
+                    attribute), so ✕ hung 21px off the screen. {% endcomment %}
+                    <div class="flex flex-wrap justify-center lg:justify-end gap-3 items-center">
                         <!-- IP Input with Recent Dropdown + Connect Button Group -->
-                        <div class="flex relative">
+                        <div class="flex relative min-w-0 flex-1 lg:flex-none">
                             {% if recent_atems %}
                             <div class="dropdown dropdown-start">
                                 <button type="button" tabindex="0" class="h-12 px-3 border border-r-0 border-[var(--input-line)] rounded-l-lg bg-base-300 hover:bg-base-100 flex items-center justify-center cursor-pointer">
                                     <i class="bi bi-clock-history text-base-content/60 text-lg"></i>
                                 </button>
-                                <ul tabindex="0" class="dropdown-content menu p-2 shadow-lg bg-base-100 rounded-box w-64 z-[1] mt-2" onclick="event.stopPropagation()">
+                                <ul tabindex="0" class="dropdown-content menu p-2 shadow-lg bg-base-100 rounded-box w-[calc(100vw-6rem)] sm:w-64 z-[1] mt-2" onclick="event.stopPropagation()">
                                     {% for atem in recent_atems %}
                                     <li>
                                         <a 
@@ -121,7 +125,7 @@
                             {% endif %}
                             <input
                                 type="text"
-                                class="h-12 px-3 border border-[var(--input-line)] {% if recent_atems %}border-l-0{% else %}rounded-l-lg{% endif %} border-r-0 w-52 outline-none focus:outline-none focus:ring-0 bg-[var(--input)]"
+                                class="h-12 px-3 min-w-0 flex-1 border border-[var(--input-line)] {% if recent_atems %}border-l-0{% else %}rounded-l-lg{% endif %} border-r-0 w-52 outline-none focus:outline-none focus:ring-0 bg-[var(--input)]"
                                 placeholder="IP address"
                                 autocomplete="off"
                                 x-model="$store.atem.inputs.quickConnectIP"

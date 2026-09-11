@@ -2,31 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ------------------------------------------------------------------------
-   Broadcast program/tally red — deliberately separate from daisyUI's
-   `error` role: `error` is for UI errors and destructive actions, while
-   ON AIR / program surfaces (CUT, program tally, on-air rings and badges)
-   carry broadcast-convention red via these classes. Synced templates from
-   upstream use them (.btn-pgm family).
-   ------------------------------------------------------------------------ */
-:root {
-    --pgm-red:         #FF4557;
-    --pgm-red-content: #000000;
-}
-.btn-pgm {
-    background-color: var(--pgm-red);
-    border-color: var(--pgm-red);
-    color: var(--pgm-red-content);
-}
-.btn-pgm:hover {
-    background-color: var(--pgm-red);
-    border-color: var(--pgm-red);
-    filter: brightness(1.08);
-}
-.text-pgm { color: var(--pgm-red); }
-.bg-pgm   { background-color: var(--pgm-red); }
-.badge-pgm {
-    background: color-mix(in srgb, var(--pgm-red) 16%, transparent);
-    color: var(--pgm-red);
-    border-color: color-mix(in srgb, var(--pgm-red) 30%, transparent);
-}
+/* Everything visual beyond Tailwind/daisyUI utilities lives in
+   atem_control/static/css/theme.css (generated from the upstream theme sheet
+   by tools/sync_from_av_server.py) and loads AFTER the compiled sheet. */

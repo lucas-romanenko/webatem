@@ -54,7 +54,7 @@ class _FakeProtocol:
 def fake_pyatem(monkeypatch):
     """Stash a callable factory on the ``pyatem`` module. Tests configure
     it per-scenario via ``configure(...)``."""
-    import pyatem as real_pyatem
+    import atemwire as real_atemwire
 
     state = {
         'apply_raises': None,
@@ -99,8 +99,8 @@ def fake_pyatem(monkeypatch):
             inst._is_macros_only = True
             return inst
 
-    monkeypatch.setattr(real_pyatem, 'Profile', _FakeProfile, raising=False)
-    monkeypatch.setattr(real_pyatem, 'ApplyOptions', _FakeApplyOptions,
+    monkeypatch.setattr(real_atemwire, 'Profile', _FakeProfile, raising=False)
+    monkeypatch.setattr(real_atemwire, 'ApplyOptions', _FakeApplyOptions,
                         raising=False)
 
     def configure(*, apply_raises=None, apply_errors=(),
@@ -192,7 +192,7 @@ def test_apply_pumps_protocol_loop_during_apply(fake_pyatem, monkeypatch):
     proto = _FakeProtocol()
 
     # Patch the fake Profile.apply to sleep + return a clean result.
-    import pyatem as real_pyatem
+    import atemwire as real_atemwire
 
     class _SlowResult:
         applied = ['macros']
@@ -211,7 +211,7 @@ def test_apply_pumps_protocol_loop_during_apply(fake_pyatem, monkeypatch):
             time.sleep(0.2)
             return _SlowResult()
 
-    monkeypatch.setattr(real_pyatem, 'Profile', _SlowProfile, raising=False)
+    monkeypatch.setattr(real_atemwire, 'Profile', _SlowProfile, raising=False)
 
     apply_fn = _import_helper()
     logs = []
@@ -263,13 +263,13 @@ def test_execute_upload_macros_only_runs_apply_for_macro_only_ip(
         [],  # no image items
         skip_tally=True,
         macro_xml_path=xml_path,
-        macro_only_ips=['192.168.1.13'],
+        macro_only_ips=['192.168.81.84'],
     )
 
     # Exactly one per-IP call, for the macro-only IP, with no
     # slot_paths and the XML path forwarded.
     assert len(calls) == 1
-    assert calls[0]['ip'] == '192.168.1.13'
+    assert calls[0]['ip'] == '192.168.81.84'
     assert calls[0]['slot_paths'] == []
     assert calls[0]['macro_xml_path'] == xml_path
     # No image ItemResults to surface, no synthetic macro result added

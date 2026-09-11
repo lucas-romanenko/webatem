@@ -14,7 +14,7 @@ Every operator action on the control page flows through the consumer's
 ``summarize`` turns the command + its args into a readable one-liner,
 resolving source ids to their labels from mixerstate where relevant.
 """
-from pyatem.messages.input_video import input_label
+from atemwire.messages.input_video import input_label
 
 # Args that identify WHICH control (not its value) — used to build the
 # debounce key and the summary's instance prefix.
@@ -37,6 +37,7 @@ _CONTINUOUS_SUFFIXES = (
 )
 _CONTINUOUS_OVERRIDES = {
     'set_audio_compressor', 'set_audio_limiter', 'set_audio_expander',
+    'set_transition_position',   # the T-bar drag (CTPs stream)
 }
 _DISCRETE_OVERRIDES = {
     'set_stinger_clip',       # selects a clip index, not a drag
@@ -146,6 +147,8 @@ def summarize(command: str, data: dict, mixerstate=None) -> str:
         return f"Cut{me_suffix}"
     if command == 'auto':
         return f"Auto transition{me_suffix}"
+    if command == 'set_transition_position':
+        return f"T-bar → {round(_int(d.get('position')) / 100)}%{me_suffix}"
     if command == 'set_program':
         return f"Program → {src(d.get('source'))}{me_suffix}"
     if command == 'set_preview':

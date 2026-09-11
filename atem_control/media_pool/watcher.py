@@ -74,9 +74,9 @@ from PIL import Image
 # NB: we use atem_to_rgb, NOT atem_to_image. download_still already
 # RLE-decodes the transfer before returning, so we only need the YCbCr→RGBA
 # step. atem_to_image would double-decode.
-from pyatem.imaging import atem_to_rgb
-from pyatem.pool import ATEMInstanceManager
-from pyatem._state import decode_name, md5_hex
+from atemwire.imaging import atem_to_rgb
+from atemwire.pool import ATEMInstanceManager
+from atemwire._state import decode_name, md5_hex
 
 
 logger = logging.getLogger(__name__)

@@ -1,7 +1,7 @@
 """Profile save (export) — domain function behind /atem/profile/save/.
 
 ``export_profile_zip`` opens an ATEM connection, downloads the profile
-XML via ``pyatem.profile.Profile.from_atem``, optionally captures every
+XML via ``atemwire.profile.Profile.from_atem``, optionally captures every
 populated media-pool slot, and packages the result into a ZIP (or a
 bare XML download when there are no images to ship).
 
@@ -27,9 +27,9 @@ from typing import Callable, Optional
 from django.conf import settings
 from django.utils import timezone
 
-from pyatem import ATEM, Profile
-from pyatem.profile import SaveOptions, download_media_pool_images
-from pyatem.messages.media import mediaplayer_slot_info
+from atemwire import ATEM, Profile
+from atemwire.profile import SaveOptions, download_media_pool_images
+from atemwire.messages.media import mediaplayer_slot_info
 
 from atem_control.media_pool import watcher as _media_pool_service
 from atem_control.profile.dialog import (
@@ -103,7 +103,7 @@ class ATEMConnectError(RuntimeError):
     """Connection to the ATEM at the given IP failed.
 
     Raised by ``export_profile_zip`` so the HTTP wrapper can render 503
-    without needing knowledge of pyatem internals. The IP is in the
+    without needing knowledge of atemwire internals. The IP is in the
     message for the caller to forward.
     """
 

@@ -217,17 +217,20 @@ Browser (Alpine.js + WebSockets)
    │  ws/atem/ · HTTP
    ▼
 Django + Channels (single ASGI worker, uvicorn)
-   │  pooled UDP session per switcher (pyatem)
+   │  pooled UDP session per switcher (atemwire)
    ▼
 ATEM switchers (UDP 9910) · HyperDecks (TCP 9993 / FTP)
 ```
 
-- **`pyatem/`** — a substantially modified fork of the OpenAtem protocol
-  library: declarative wire-format DSL, hardened UDP transport (in-order
+- **[atemwire](https://github.com/lucas-romanenko/atemwire)** (PyPI) — the
+  ATEM protocol library, a substantially modified fork of Martijn Braam's
+  pyatem: declarative wire-format DSL, hardened UDP transport (in-order
   delivery, retransmit serving, clean session close), ref-counted connection
   pooling, native interleaved bulk transfers, macro bytecode transfer, and
   ASC-compatible profile save/restore. A small C extension does YCbCr↔RGB
-  conversion.
+  conversion. **[hyperdeckwire](https://github.com/lucas-romanenko/hyperdeckwire)**
+  (PyPI) drives the HyperDecks. Both are pinned in `requirements.txt`; a
+  library change is a release there and a pin bump here.
 - **`atem_control/`** — the Django app: the WebSocket consumer, a declarative
   command dispatch table, the media-pool watcher, LAN discovery, and the UI.
 - **`launcher.py` + `build/desktop/`** — the desktop app: a PyInstaller build
@@ -242,14 +245,16 @@ docker compose up -d --build                     # run the app
 docker compose exec webatem pytest tests/ -q     # run the test suite
 ```
 
-The suite (pyatem protocol, transport, DSL, macro codec, profile round-trip,
-connection-pool lifecycle, upload policy) runs against a fake protocol layer —
-no hardware needed. CI runs it on every push.
+The suite (the command dispatch table, the T-bar, the consumer's
+state-change and session-cleanup rules, upload policy, tally safety, profile
+dialogs, the media-pool thumbnail cache, LAN discovery identity, WebSocket
+origin checks) runs against fake protocol layers — no hardware needed. CI runs
+it on every push. The protocol libraries carry their own suites in their repos.
 
-**Bare-metal / build the desktop app:** Python 3.14, `npm install && npm run
-build:css` (the stylesheet — without it the app renders unstyled),
-`pip install -r requirements.txt`, `python setup.py build_ext --inplace`
-(the C extension), then `python launcher.py` (desktop) or
+**Bare-metal / build the desktop app:** Python 3.14 and a C compiler
+(atemwire builds its small extension during `pip install`), `npm install && npm
+run build:css` (the stylesheet — without it the app renders unstyled),
+`pip install -r requirements.txt`, then `python launcher.py` (desktop) or
 `python manage.py migrate && python manage.py runserver` (server). The per-OS
 downloadable binaries are built by the **Desktop builds** GitHub Actions
 workflow (`pyinstaller build/desktop/webatem.spec`).
@@ -257,12 +262,14 @@ workflow (`pyinstaller build/desktop/webatem.spec`).
 ## License
 
 - Application code: [MIT](LICENSE).
-- `pyatem/` is a fork of the [OpenAtem pyatem
-  library](https://git.sr.ht/~martijnbraam/pyatem) and remains
-  **LGPL-3.0-only** — see [pyatem/LICENSE](pyatem/LICENSE) and
-  [pyatem/NOTICE.md](pyatem/NOTICE.md).
-- Bundled frontend assets (Alpine.js, Bootstrap Icons, Tailwind/daisyUI) are
-  MIT — notices in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
+- The ATEM protocol library, [atemwire](https://github.com/lucas-romanenko/atemwire),
+  is a separate package (a fork of the [OpenAtem pyatem
+  library](https://git.sr.ht/~martijnbraam/pyatem)) and is **LGPL-3.0-only**;
+  WebATEM uses it as an installed dependency, unmodified.
+  [hyperdeckwire](https://github.com/lucas-romanenko/hyperdeckwire) is MIT.
+- Bundled frontend assets (Alpine.js and its collapse plugin, Bootstrap Icons,
+  Tailwind/daisyUI) are MIT and the Poppins font is OFL — notices in
+  [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
 
 Security posture and how to report vulnerabilities: [SECURITY.md](SECURITY.md).
 

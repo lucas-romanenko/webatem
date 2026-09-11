@@ -2,7 +2,7 @@
 
 One image, one slot, one ATEM, always skip tally. The upload runs on a
 background thread in THIS process via ``atem_control.uploader.execute_upload``
-(its own short-lived pyatem socket with ``aggressive_drain``), so the watcher
+(its own short-lived atemwire socket with ``aggressive_drain``), so the watcher
 lockout and the post-upload thumbnail refresh are direct in-process calls.
 
 Response contract (relied on by ``atem_control.js`` ``uploadSlot``):

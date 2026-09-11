@@ -1,16 +1,15 @@
 """
 pyatem-based media pool upload service.
 
-Entry point is ``execute_upload``, called from the media-pool upload view
-(``atem_control/media_pool/views.py``) and the profile-load image upload
-(``atem_control/profile/views.py``) to push stills into an ATEM media
-pool in-process.
+Used by the application's uploader worker (``run_uploader`` management
+command) and one-off callers (downtime-overlay button uploads, profile-
+load image upload) to push stills into an ATEM media pool in-process.
 Opens one short-lived AtemProtocol per unique IP, uses the transport's
 aggressive-drain mode for bulk-upload throughput (~3 s per 1080p still
 vs. ~25 s with ACK-paced sends), and verifies each upload via MPfe
 hash equality.
 
-Lives in the application layer rather than pyatem/ because tally cycle-wait,
+Lives in the app rather than pyatem/ because tally cycle-wait,
 PIL image prep, progress callbacks, and hash-verify policy are feature
 concerns, not protocol concerns. pyatem owns ``protocol.upload()``;
 everything around it is policy.
@@ -45,9 +44,9 @@ from dataclasses import dataclass
 from typing import Callable, List, Optional
 
 from PIL import Image, UnidentifiedImageError
-from pyatem.protocol import AtemProtocol
-from pyatem.imaging import rgb_to_atem
-from pyatem.ready import wait_ready
+from atemwire.protocol import AtemProtocol
+from atemwire.imaging import rgb_to_atem
+from atemwire.ready import wait_ready
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +66,7 @@ HASH_SETTLE_TIMEOUT = 10.0
 REUPLOAD_SETTLE = 1.0
 
 # Tally cycle-wait timings + the shared cold->hot->cold loop live in
-# ``atem_control.tally`` so the media-pool and HyperDeck paths can't drift.
+# ``content_change.tally`` so the media-pool and HyperDeck paths can't drift.
 from atem_control.tally import (
     ticked_pump,
     wait_for_safe_cycle,
@@ -99,6 +98,19 @@ class ItemResult:
 # Cancellation helper
 # ---------------------------------------------------------------------------
 
+class _OwnershipLost(BaseException):
+    """Raised by the cancel/ownership check when it can no longer confirm this
+    replica still owns the row it is uploading (e.g. its DB session — and with
+    it the session-level advisory lane lock — died mid-upload). It is a
+    BaseException on PURPOSE so it sails past every ``except Exception`` in the
+    upload path (which otherwise turns it into a failed ItemResult), unwinds
+    through the per-IP ``finally`` (so the ATEM session goodbye still fires),
+    and reaches run_uploader — which aborts the batch rather than keep pushing
+    frames to a switcher the reaper may already have handed to another replica
+    (UP-1). Sockets/locks are released on the way up; the row is left for the
+    reaper to re-queue for a clean single retry."""
+
+
 class _Canceller:
     """Wraps an optional callable that signals cancellation."""
 
@@ -110,6 +122,9 @@ class _Canceller:
             try:
                 if self._check():
                     return True
+            # _OwnershipLost is a BaseException, so it is NOT caught here — it
+            # propagates to abort the upload (see the class docstring). Only a
+            # genuine bug in the check is swallowed as "not cancelled".
             except Exception:
                 logger.exception("cancel check raised; treating as NOT cancelled")
         return False
@@ -232,7 +247,7 @@ def _wait_for_safe_upload_window(protocol, slot_0_indexed: int,
                                  observation: float = TALLY_OBSERVATION_SECONDS,
                                  timeout: float = TALLY_TIMEOUT) -> bool:
     """Cycle-wait for tally safety before overwriting a media-pool slot. Thin
-    wrapper over the shared ``wait_for_safe_cycle`` (``atem_control.tally``) with
+    wrapper over the shared ``wait_for_safe_cycle`` (content_change.tally) with
     the media-pool slot liveness predicate, so the cold->hot->cold loop is
     identical to the HyperDeck path."""
     slot_user = slot_0_indexed + 1
@@ -466,8 +481,8 @@ def _apply_macro_xml(protocol, macro_xml_path: str,
     name = os.path.basename(macro_xml_path)
     log_append(f"applying macros from {name}")
     try:
-        from pyatem import Profile, ApplyOptions
-        from pyatem.transport import Wakeup
+        from atemwire import Profile, ApplyOptions
+        from atemwire.transport import Wakeup
     except Exception as e:
         msg = f"macro apply: import failed: {e}"
         log_append(msg)
@@ -607,6 +622,13 @@ def _run_for_single_ip(ip_address: str,
 
         width, height = video_mode.get_resolution()
         log_append(f"video mode: {width}x{height} on {ip_address}")
+        # A sighting for the equipment row (best-effort, never raises): the
+        # content-change form validates stills against what was last seen here.
+        try:
+            from atem_control.sightings import record_video_mode
+            record_video_mode(ip_address, video_mode.get_label())
+        except Exception:
+            logger.debug('video-mode sighting skipped for %s', ip_address, exc_info=True)
 
         for idx, (slot, image_path) in enumerate(slot_paths):
             if canceller.is_set():
@@ -771,7 +793,7 @@ def _close_protocol(protocol: AtemProtocol) -> None:
         protocol.transport.sock.close()
     except Exception:
         pass
-    # Free the SocketQueue's socketpair FDs too (2026-07-06).
+    # Free the SocketQueue's socketpair FDs too (L4, 2026-07-06).
     try:
         protocol.transport.thread_queue.close()
     except Exception:

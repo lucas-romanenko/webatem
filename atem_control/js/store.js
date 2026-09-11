@@ -535,6 +535,16 @@ document.addEventListener('alpine:init', () => {
                        row(bank.r2cams, bank.r2mid, bank.r2x)],
             };
         },
+        // USK bank columns. The ON AIR row renders one button per USK the M/E
+        // reports and the BKGD/KEY row one per USK in the topology; they live
+        // in separate grids that have to line up, so both take the wider of
+        // the two plus the leading BKGD / spacer cell. (On real hardware the
+        // two agree — they differ only under a grafted topology, e2e --atem.)
+        uskCols() {
+            const states = this.state.mes?.[this.activeMe]?.usk?.states?.length ?? 0;
+            const topo = this.state.topology?.usksPerMe?.[this.activeMe] ?? 0;
+            return Math.max(states, topo, 1) + 1;
+        },
         busShiftHeld: false,
         busShiftLatched: false,
         busBanked() { return this.busLayout().banked; },

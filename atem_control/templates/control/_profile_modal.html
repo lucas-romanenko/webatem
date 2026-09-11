@@ -4,7 +4,7 @@
     <!-- sequential <a download> for save, <input type="file"> pickers for load. -->
     <div class="fixed inset-0 z-[300]" x-show="profileDialogOpen" x-cloak
          @keydown.escape.window="if (!profileBusy) profileDialogOpen = false">
-        <div class="absolute inset-0 bg-black/60"
+        <div class="atem-overlay-backdrop absolute inset-0"
              @click="if (!profileBusy) profileDialogOpen = false"
              x-transition:enter="transition-opacity ease-out duration-200"
              x-transition:enter-start="opacity-0"

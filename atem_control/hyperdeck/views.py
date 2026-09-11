@@ -13,7 +13,8 @@ from django.http import HttpResponseBadRequest, JsonResponse
 from django.views.decorators.http import require_GET, require_POST
 
 from atem_control.hyperdeck.connection import with_deck
-from pyhyperdeck import HyperdeckError
+from atem_control.netutil import is_valid_ip
+from hyperdeckwire import HyperdeckError
 
 logger = logging.getLogger(__name__)
 
@@ -91,8 +92,8 @@ def hyperdeck_state(request):
     """Full snapshot (slots + per-card clips + transport + name). Fetched on
     modal open / deck switch / manual refresh."""
     ip = (request.GET.get('ip') or '').strip()
-    if not ip:
-        return HttpResponseBadRequest('ip required')
+    if not is_valid_ip(ip):
+        return HttpResponseBadRequest('valid ip required')
     try:
         state = with_deck(ip, _read_state)
         state['name'] = _deck_name(ip)
@@ -105,8 +106,8 @@ def hyperdeck_state(request):
 def hyperdeck_status(request):
     """Live transport status only — polled ~1 Hz while the modal is open."""
     ip = (request.GET.get('ip') or '').strip()
-    if not ip:
-        return HttpResponseBadRequest('ip required')
+    if not is_valid_ip(ip):
+        return HttpResponseBadRequest('valid ip required')
     try:
         return JsonResponse(with_deck(ip, _read_status))
     except (OSError, HyperdeckError) as e:
@@ -126,8 +127,8 @@ def hyperdeck_transport(request):
         return HttpResponseBadRequest('invalid json')
     ip = (body.get('ip') or '').strip()
     action = body.get('action')
-    if not ip or not action:
-        return HttpResponseBadRequest('ip and action required')
+    if not is_valid_ip(ip) or not action:
+        return HttpResponseBadRequest('valid ip and action required')
 
     def run(hd):
         # Selecting a clip on a specific card means making that card active
