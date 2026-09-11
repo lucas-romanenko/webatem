@@ -28,12 +28,12 @@ Global section ids stay flat and match the ``SaveOptions`` /
 import re
 from typing import TYPE_CHECKING, List
 
-from pyatem._state import _me_count, _me_keyer_count
-from pyatem.profile._xml import _int
-from pyatem.profile.options import MixEffectOptions, PLATFORM_MAX_MES
+from atemwire._state import _me_count, _me_keyer_count
+from atemwire.profile._xml import _int
+from atemwire.profile.options import MixEffectOptions, PLATFORM_MAX_MES
 
 if TYPE_CHECKING:
-    from pyatem.profile import Profile
+    from atemwire.profile import Profile
 
 
 def _accept_atem_or_protocol(atem) -> None:

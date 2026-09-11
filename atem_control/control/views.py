@@ -1,3 +1,4 @@
+import json
 """HTTP views for the ATEM control feature.
 
 Endpoints:
@@ -9,15 +10,18 @@ Endpoints:
 
 import logging
 
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponseBadRequest
 from django.shortcuts import render
-from django.views.decorators.http import require_GET
+from django.views.decorators.http import require_GET, require_POST
 
-from pyatem._state import build_full_state
-from pyatem.pool import ATEMInstanceManager
+from atemwire._state import build_full_state
+from atemwire.pool import ATEMInstanceManager
 
 from atem_control import discovery
+from atem_control.control.device_api import get_device_info, set_device_name
 from atem_control.models import get_recent_atems
+from atem_control.netutil import is_valid_ip
+from atem_control.activity import ActivityLog, record_activity
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +39,9 @@ def atem_control(request):
     return render(request, 'control.html', {
         'initial_ip': request.GET.get('ip', '192.168.1.100'),
         'recent_atems': get_recent_atems(limit=5),
+        # Settings > HyperDecks labels a bound slot with an inventory name
+        # upstream; there is no inventory here, so slots show their IP.
+        'hyperdeck_names': {},
     })
 
 
@@ -150,3 +157,66 @@ def atem_scan(request):
     result = discovery.scan_atems(subnet)
     return JsonResponse(result)
 
+
+
+# =============================================================================
+# Switcher Name (Settings > Switcher Name on the control page, _atem_info.html)
+# — the ATEM's OWN stored name, read and set over its REST config API
+# (control/device_api.py). The panel is synced from upstream, where a second
+# name (the equipment list's) is offered too; there is no inventory here, so
+# ``equipmentName`` is always empty and that affordance stays hidden.
+# =============================================================================
+
+_MAX_DEVICE_NAME = 32
+
+
+def _clean_device_name(raw):
+    """Strip control chars, collapse to a tidy single-line name, cap the length."""
+    name = ''.join(ch for ch in str(raw or '') if ch.isprintable())
+    return name.strip()[:_MAX_DEVICE_NAME].strip()
+
+
+@require_GET
+def atem_device_info(request):
+    """Read-only device info for the Switcher Name section: the ATEM's REST
+    config (name / model / software). ``supported`` is False on older ATEMs
+    with no web admin (the section then shows the name read-only)."""
+    ip = (request.GET.get('ip') or '').strip()
+    if not is_valid_ip(ip):
+        return HttpResponseBadRequest('valid ip required')
+    info = get_device_info(ip)   # None if no REST API / unreachable
+    return JsonResponse({
+        'supported': info is not None,
+        'apiError': (info or {}).get('error', ''),
+        'deviceName': (info or {}).get('deviceName', ''),
+        'productName': (info or {}).get('productName', ''),
+        'software': (info or {}).get('software', ''),
+        'hostname': (info or {}).get('hostname', ''),
+        'ip': ip,
+        'equipmentName': '',
+    })
+
+
+@require_POST
+def atem_set_device_name(request):
+    """Set the ATEM's stored device name (the ATEM Setup name) via its REST API."""
+    try:
+        body = json.loads(request.body or b'{}')
+    except (ValueError, TypeError):
+        return HttpResponseBadRequest('invalid json')
+    ip = (body.get('ip') or '').strip()
+    name = _clean_device_name(body.get('name'))
+    if not is_valid_ip(ip):
+        return HttpResponseBadRequest('valid ip required')
+    if not name:
+        return HttpResponseBadRequest('name required')
+    ok, err = set_device_name(ip, name)
+    record_activity(
+        feature=ActivityLog.FEATURE_ATEM_CONTROL, device=ActivityLog.DEVICE_ATEM,
+        action='set_device_name', target=ip,
+        summary=(f'Set switcher name to "{name}"' if ok else f'Failed to set switcher name: {err}'),
+        success=ok, new_name=name,
+    )
+    if not ok:
+        return JsonResponse({'success': False, 'error': err}, status=502)
+    return JsonResponse({'success': True, 'deviceName': name})

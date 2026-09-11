@@ -20,27 +20,21 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 COPY requirements.txt /app/
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
+# gcc is here for ONE reason: atemwire (PyPI sdist) builds its mediaconvert
+# C extension (BT.709 YCbCr<->RGB + RLE) during pip install. Purged after.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gcc libc6-dev \
+    && pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt \
+    && python3 -c 'import atemwire.mediaconvert, hyperdeckwire; print("atemwire.mediaconvert OK")' \
+    && apt-get remove -y --purge gcc libc6-dev \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY . /app
 
 # Drop in the compiled stylesheet from the css stage (before collectstatic).
 COPY --from=css /build/webatem.css /app/atem_control/static/vendor/webatem.css
-
-# Compile the pyatem mediaconvert C extension (BT.709 YCbCr<->RGB + RLE)
-# in place; CPython imports the ABI-suffixed .so alongside the .py files.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends gcc libc6-dev \
-    && INCLUDE_DIR="$(python3 -c 'import sysconfig; print(sysconfig.get_paths()["include"])')" \
-    && EXT_SUFFIX="$(python3 -c 'import sysconfig; print(sysconfig.get_config_var("EXT_SUFFIX"))')" \
-    && gcc -shared -fPIC -O2 -I"$INCLUDE_DIR" \
-        pyatem/mediaconvertmodule.c \
-        -o "pyatem/mediaconvert$EXT_SUFFIX" \
-    && python3 -c 'import pyatem.mediaconvert; print("pyatem.mediaconvert OK")' \
-    && apt-get remove -y --purge gcc libc6-dev \
-    && apt-get autoremove -y \
-    && rm -rf /var/lib/apt/lists/*
 
 # Static assets are baked at build time (WhiteNoise serves them with
 # DEBUG=False). SECRET_KEY here is build-scoped and never persisted.

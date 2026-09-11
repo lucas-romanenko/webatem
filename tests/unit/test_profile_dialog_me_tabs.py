@@ -18,7 +18,7 @@ Pure-function tests (no Django harness):
 """
 from types import SimpleNamespace
 
-from pyatem.profile import Profile
+from atemwire.profile import Profile
 from atem_control.profile.dialog import (
     describe_load_sections,
     describe_save_sections,

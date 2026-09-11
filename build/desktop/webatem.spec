@@ -4,7 +4,6 @@
 # collectstatic MUST run before this (staticfiles/ is bundled read-only and
 # served by WhiteNoise). The compiled webatem.css must already sit in
 # atem_control/static/vendor/ so collectstatic picks it up.
-import glob
 import os
 import sys
 
@@ -42,12 +41,14 @@ hiddenimports = []
 # First-party packages: pull every submodule (migrations/apps/admin are
 # imported dynamically by Django and PyInstaller can't see them statically)
 # plus their template/static data files.
-for pkg in ('atem_control', 'config', 'pyatem', 'pyhyperdeck'):
+for pkg in ('atem_control', 'config'):
     hiddenimports += collect_submodules(pkg)
     datas += collect_data_files(pkg)
 
-# Third-party packages that lean on dynamic imports / ship data.
-for pkg in ('django', 'channels', 'whitenoise', 'uvicorn', 'zeroconf', 'PIL'):
+# Third-party packages that lean on dynamic imports / ship data. atemwire and
+# hyperdeckwire are the Blackmagic device libraries (PyPI); collect_all takes
+# atemwire's compiled mediaconvert extension along with the modules.
+for pkg in ('django', 'channels', 'whitenoise', 'uvicorn', 'zeroconf', 'PIL', 'atemwire', 'hyperdeckwire'):
     d, b, h = collect_all(pkg)
     datas += d
     binaries += b
@@ -57,10 +58,6 @@ for pkg in ('django', 'channels', 'whitenoise', 'uvicorn', 'zeroconf', 'PIL'):
 # the collected static root — neither belongs to a package.
 datas += [(rel('templates'), 'templates')]
 datas += [(rel('staticfiles'), 'staticfiles')]
-
-# The compiled mediaconvert C extension (built per-OS before packaging).
-for ext in glob.glob(rel('pyatem', 'mediaconvert*.so')) + glob.glob(rel('pyatem', 'mediaconvert*.pyd')):
-    binaries += [(ext, 'pyatem')]
 
 # uvicorn/asgi bits PyInstaller routinely misses.
 hiddenimports += [

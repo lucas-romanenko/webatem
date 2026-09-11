@@ -11,6 +11,54 @@
 }
 
 /* =================================================================
+   Program / Preview bus — an ASC row on a desktop, a wrapped pad on
+   a phone.
+
+   busGeom() (js/store.js) builds two rows of fixed --atem-btn tracks
+   with a spacer track between the camera and internals sections: the
+   ATEM-panel shape, and the only one that keeps a 40-input
+   Constellation legible. It needs a control surface's width, which a
+   phone has not got — on an iPhone 13 that row measured 314px inside
+   a 244px card and scrolled sideways, which is not an operator
+   surface, it is a filing cabinet.
+
+   So below sm each row becomes an auto-fill grid of the same square
+   and wraps into as many lines as it needs (5 columns on a 390px
+   phone). The padding cells that keep the two rows' columns aligned
+   are dropped with the columns. The desktop overflow-x is a safety
+   valve for a narrow window on a big switcher, never a layout: at any
+   normal width the row fits and nothing scrolls.
+
+   The 4px padding pulled back by the negative margin is load-bearing
+   (2026-09-11): a scroller's overflow is measured from its padding edge,
+   and the buttons' hover:scale-105 pushes a bottom-row or right-edge
+   button 1.6px past its cell (measured at --atem-btn 4rem). Without the
+   room, that 2px of overflow made the strip scrollable for the 200ms
+   transition and its NATIVE bars flashed on every hover — this strip is
+   a scroller by rule, not by .overflow-x-auto, so the site-wide bar
+   hiding never covered it. Pinned by e2e/specs/11_bus_hover_no_overflow.
+================================================================= */
+.atem-bus { overflow-x: auto; padding: 4px; margin: -4px; }
+.atem-bus-row { grid-template-columns: var(--bus-tpl); }
+
+@media (max-width: 639.98px) {
+    .atem-bus { overflow-x: visible; }
+    .atem-bus-row { grid-template-columns: repeat(auto-fill, var(--atem-btn)); }
+    .atem-bus-row > .atem-bus-pad { display: none; }
+}
+
+/* Between a phone and a desktop the ASC row still fits the fleet's 1 M/E
+   Constellations (622px of card on an iPad Mini, 622px of row), so it stays.
+   A BANKED switcher — 20+ cameras, i.e. a 4 M/E Constellation — does not
+   (654px of row in that same card, measured), and .atem-bus-big wraps it
+   there too rather than making a tablet operator nudge the bus sideways. */
+@media (max-width: 1023.98px) {
+    .atem-bus-big { overflow-x: visible; }
+    .atem-bus-big .atem-bus-row { grid-template-columns: repeat(auto-fill, var(--atem-btn)); }
+    .atem-bus-big .atem-bus-row > .atem-bus-pad { display: none; }
+}
+
+/* =================================================================
    T-Bar System - Only thing that really needs custom CSS
 ================================================================= */
 .tbar-container-vertical {
@@ -254,7 +302,10 @@
 @media (prefers-reduced-motion: reduce) {
     .tbar-handle-vertical,
     .tbar-progress-vertical,
-    .rate-countdown-ending {
+    .rate-countdown-ending,
+    .atem-overlay-backdrop,
+    .settings-panel,
+    [x-collapse] {
         animation: none !important;
         transition: none !important;
     }
@@ -297,23 +348,32 @@
 }
 
 /* =================================================================
-   Settings Panel Backdrop and Blur Effect
+   Overlay backdrop — ONE class for every overlay on the page (Settings
+   drawer, Media Pool, HyperDeck, Profile, the confirm dialogs).
+   The page underneath is dimmed + blurred THROUGH the backdrop
+   (backdrop-filter), not by filtering the content: the old
+   `filter: blur()` on .atem-main-content re-rasterized the whole
+   live-updating surface every frame and made it the containing block
+   for fixed descendants (why every overlay had to live "outside" it).
+   backdrop-filter runs in the compositor over the viewport only, and
+   the tally colours still read through, so the operator keeps context
+   while their attention goes to the panel. Overlays fade this in over
+   200 ms / out over 150 ms (the Tailwind classes on each x-transition).
 ================================================================= */
-/* Main content blur when settings is open */
-.atem-main-content {
-    transition: filter 400ms ease-out;
-    filter: blur(0px);
+.atem-overlay-backdrop {
+    background-color: rgba(0, 0, 0, 0.55);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
 }
 
-.atem-main-content.settings-blur-active {
-    filter: blur(4px);
-    transition: filter 400ms ease-in;
-}
-
-/* Backdrop overlay (without blur) */
-.settings-backdrop {
-    background-color: rgba(0, 0, 0, 0.3);
-    transition: opacity 0.3s ease;
+/* Settings accordion bodies animate open/closed with x-collapse (height
+   0 → auto). The bottom spacing is CONTENT (::after), not padding — with
+   border-box sizing a padding-bottom would floor the animated height at
+   16px and the section would pop at the end instead of closing smoothly. */
+.acc-body::after {
+    content: '';
+    display: block;
+    height: 1rem;
 }
 
 /* =================================================================

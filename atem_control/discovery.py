@@ -47,7 +47,7 @@ _MDNS_SERVICE = "_switcher_ctrl._udp.local."
 
 # ATEM control port + the wire handshake bytes. A client hello is a SYN
 # (flag 0x02) carrying opcode 0x01; the switcher replies SYN opcode 0x02;
-# our goodbye is SYN opcode 0x04 (see pyatem.transport.close_session).
+# our goodbye is SYN opcode 0x04 (see atemwire.transport.close_session).
 _ATEM_PORT = 9910
 _FLAG_SYN = 2
 _HELLO = struct.pack('>HHH2xHH', 20 | (_FLAG_SYN << 11), 0x1337, 0, 0, 0) \

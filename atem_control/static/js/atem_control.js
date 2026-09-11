@@ -930,16 +930,36 @@
       dve: { active: false, originalValue: null, inputId: "dveRate" },
       stinger: { active: false, originalValue: null, inputId: "stingerRate" }
     },
-    // RESTORED: T-Bar system
+    // The T-bar (2026-09-11). Dragging streams the switcher's transition
+    // position (set_transition_position → CTPs, 0..10000) throttled like the
+    // realtime sliders, so program output mixes live under the handle.
+    // Reaching the far end completes the transition ON THE SWITCHER (it
+    // swaps PGM/PVW and reports position 0) and the bar flips: the end the
+    // handle sits at becomes position 0 for the next transition — ATEM
+    // Software Control and a physical panel behave the same. Released
+    // part-way, the switcher holds the mix there (in_transition stays true)
+    // and the handle then follows the TrPs echoes; AUTO continues from that
+    // point and the handle follows it. CUT does not move the T-bar.
     tbarState: {
-      position: 0,
-      targetPosition: 0,
-      isAnimating: false,
+      percent: 100,
+      // handle on the track: 0 = top, 100 = bottom
+      zeroAt: "bottom",
+      // the end that is transition position 0 right now
       isDragging: false,
-      lastProgramSource: null,
-      lastPreviewSource: null
+      lastEcho: 0,
+      // last position (0..10000) the switcher reported
+      pendingSent: null,
+      // our last sent position, until its echo arrives
+      muteUntil: 0,
+      // ignore stale echoes until then (ms clock)
+      completing: false,
+      // sent 10000, waiting for the switcher to land
+      sendTimer: null,
+      lastSendAt: 0,
+      queuedPos: null
     },
     tbarElements: {},
+    TBAR_SEND_INTERVAL_MS: 25,
     // Transition styles
     transitionStyles: [
       { value: 0, label: "MIX", color: "green" },
@@ -1472,9 +1492,6 @@
         case "atem_state":
           this.updateStateFromATEM(data.state);
           break;
-        case "tbar_cut":
-          this.handleTBarCut();
-          break;
         case "media_pool_snapshot": {
           const mp = alpineInstance.mediaPool;
           const payload = data.data || {};
@@ -1703,7 +1720,9 @@
       const remainingFrames = totalFrames % fps;
       return `${seconds}:${remainingFrames.toString().padStart(2, "0")}`;
     },
-    // RESTORED: T-Bar System
+    // ------------------------------------------------------------------
+    // T-bar (see tbarState above for the model)
+    // ------------------------------------------------------------------
     initializeTBar() {
       this.tbarElements = {
         track: document.getElementById("tbarTrack"),
@@ -1715,65 +1734,84 @@
         console.warn("T-Bar elements not found");
         return;
       }
-      this.updateTBarVisual();
+      this.renderTBar(0);
       this.setupTBarInteraction();
-      console.log("🎛️ Vertical T-Bar system initialized");
+    },
+    // Handle percent (0 top … 100 bottom) ⇄ transition position (0 … 10000),
+    // through whichever end is position 0 right now.
+    tbarPositionFromPercent(percent) {
+      const p = Math.max(0, Math.min(100, percent));
+      return Math.round((this.tbarState.zeroAt === "bottom" ? 100 - p : p) * 100);
+    },
+    tbarPercentFromPosition(position) {
+      const p = Math.max(0, Math.min(1e4, position)) / 100;
+      return this.tbarState.zeroAt === "bottom" ? 100 - p : p;
+    },
+    tbarFarPercent() {
+      return this.tbarState.zeroAt === "bottom" ? 0 : 100;
+    },
+    tbarFlip() {
+      this.tbarState.zeroAt = this.tbarState.zeroAt === "bottom" ? "top" : "bottom";
     },
     setupTBarInteraction() {
       const track = this.tbarElements.track;
       const handle = this.tbarElements.handle;
       if (!track || !handle) return;
+      const st = this.tbarState;
+      const pointerY = (e) => e.touches ? e.touches[0].clientY : e.clientY;
       let startY = 0;
-      let startPosition = 0;
-      const startDrag = (e) => {
-        if (this.tbarState.isAnimating) return;
-        e.preventDefault();
-        this.tbarState.isDragging = true;
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        startY = clientY;
-        startPosition = this.tbarState.position;
-        document.addEventListener("mousemove", handleDrag);
-        document.addEventListener("mouseup", endDrag);
-        document.addEventListener("touchmove", handleDrag, { passive: false });
-        document.addEventListener("touchend", endDrag);
-        handle.classList.add("tbar-dragging");
-      };
-      const handleDrag = (e) => {
-        if (!this.tbarState.isDragging) return;
-        e.preventDefault();
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        const deltaY = clientY - startY;
-        const trackHeight = track.offsetHeight - handle.offsetHeight;
-        const deltaPercent = deltaY / trackHeight * 100;
-        const newPosition = Math.max(0, Math.min(100, startPosition + deltaPercent));
-        this.setTBarPosition(newPosition);
-      };
-      const endDrag = () => {
-        if (!this.tbarState.isDragging) return;
-        this.tbarState.isDragging = false;
+      let startPercent = 0;
+      const stopListening = () => {
         document.removeEventListener("mousemove", handleDrag);
         document.removeEventListener("mouseup", endDrag);
         document.removeEventListener("touchmove", handleDrag);
         document.removeEventListener("touchend", endDrag);
+        document.removeEventListener("touchcancel", endDrag);
         handle.classList.remove("tbar-dragging");
-        this.snapTBarToState();
+        st.isDragging = false;
+      };
+      const startDrag = (e) => {
+        if (st.isDragging) return;
+        e.preventDefault();
+        st.isDragging = true;
+        startY = pointerY(e);
+        startPercent = st.percent;
+        handle.style.transition = "none";
+        handle.classList.add("tbar-dragging");
+        document.addEventListener("mousemove", handleDrag);
+        document.addEventListener("mouseup", endDrag);
+        document.addEventListener("touchmove", handleDrag, { passive: false });
+        document.addEventListener("touchend", endDrag);
+        document.addEventListener("touchcancel", endDrag);
+      };
+      const handleDrag = (e) => {
+        if (!st.isDragging) return;
+        e.preventDefault();
+        const travel = track.getBoundingClientRect().height || 1;
+        st.percent = Math.max(0, Math.min(100, startPercent + (pointerY(e) - startY) / travel * 100));
+        const pos = this.tbarPositionFromPercent(st.percent);
+        if (pos >= 1e4) {
+          stopListening();
+          this.tbarComplete();
+          return;
+        }
+        this.renderTBar(pos);
+        this.tbarQueueSend(pos);
+      };
+      const endDrag = () => {
+        if (!st.isDragging) return;
+        stopListening();
+        const pos = this.tbarPositionFromPercent(st.percent);
+        st.lastEcho = pos;
+        this.renderTBar(pos);
+        this.tbarFlushSend(pos);
       };
       const handleTrackClick = (e) => {
-        if (this.tbarState.isAnimating || this.tbarState.isDragging) return;
-        if (e.target === handle) return;
+        if (st.isDragging || e.target === handle || handle.contains(e.target)) return;
         const rect = track.getBoundingClientRect();
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        const clickY = clientY - rect.top;
-        const trackHeight = track.offsetHeight;
-        const clickPercent = clickY / trackHeight * 100;
-        if (clickPercent < 50) {
-          if (this.tbarState.position > 50) {
-            this.cmd("auto");
-          }
-        } else {
-          if (this.tbarState.position < 50) {
-            this.cmd("auto");
-          }
+        const clickPercent = (pointerY(e) - rect.top) / (rect.height || 1) * 100;
+        if (clickPercent < 50 && st.percent > 50 || clickPercent > 50 && st.percent < 50) {
+          this.cmd("auto");
         }
       };
       handle.addEventListener("mousedown", startDrag);
@@ -1781,84 +1819,94 @@
       handle.addEventListener("touchstart", startDrag, { passive: false });
       track.addEventListener("touchstart", handleTrackClick, { passive: false });
     },
-    setTBarPosition(position, animate = false) {
-      position = Math.max(0, Math.min(100, position));
-      this.tbarState.position = position;
-      if (animate) {
-        this.tbarElements.handle.style.transition = "top 0.1s ease-out";
-      } else {
-        this.tbarElements.handle.style.transition = "none";
+    // Throttled send during a drag: at most one CTPs per TBAR_SEND_INTERVAL_MS,
+    // and the latest position never gets lost (a trailing send fires it).
+    tbarQueueSend(pos) {
+      const st = this.tbarState;
+      st.queuedPos = pos;
+      const due = st.lastSendAt + this.TBAR_SEND_INTERVAL_MS - Date.now();
+      if (due <= 0) {
+        this.tbarFlushSend(pos);
+        return;
       }
-      this.updateTBarVisual();
+      if (!st.sendTimer) {
+        st.sendTimer = setTimeout(() => {
+          st.sendTimer = null;
+          if (st.queuedPos !== null) this.tbarFlushSend(st.queuedPos);
+        }, due);
+      }
     },
-    updateTBarVisual() {
-      const handle = this.tbarElements.handle;
-      const positionDisplay = this.tbarElements.positionDisplay;
+    tbarFlushSend(pos) {
+      const st = this.tbarState;
+      if (st.sendTimer) {
+        clearTimeout(st.sendTimer);
+        st.sendTimer = null;
+      }
+      st.queuedPos = null;
+      st.lastSendAt = Date.now();
+      st.pendingSent = pos;
+      st.muteUntil = st.lastSendAt + 600;
+      this.cmd("set_transition_position", { position: pos });
+    },
+    // 10000 finishes the transition on the switcher, which lands on position 0
+    // with PGM and PVW swapped. The handle stays at this end, and from now on
+    // this end IS position 0.
+    tbarComplete() {
+      const st = this.tbarState;
+      this.tbarFlushSend(1e4);
+      st.percent = this.tbarFarPercent();
+      this.tbarFlip();
+      st.completing = true;
+      st.lastEcho = 0;
+      st.pendingSent = null;
+      st.muteUntil = Date.now() + 1e3;
+      this.renderTBar(0);
+    },
+    renderTBar(pos = null) {
+      const { handle, progress, positionDisplay } = this.tbarElements;
+      const st = this.tbarState;
       if (!handle) return;
-      handle.style.top = `${this.tbarState.position}%`;
+      if (pos === null) pos = this.tbarPositionFromPercent(st.percent);
+      handle.style.top = `${st.percent}%`;
       if (positionDisplay) {
-        positionDisplay.textContent = `Position: ${Math.round(this.tbarState.position)}%`;
+        positionDisplay.textContent = `Position: ${Math.round(pos / 100)}%`;
+      }
+      if (progress) {
+        if (st.zeroAt === "bottom") {
+          progress.style.top = `${st.percent}%`;
+          progress.style.height = `${100 - st.percent}%`;
+        } else {
+          progress.style.top = "0";
+          progress.style.height = `${st.percent}%`;
+        }
+        progress.style.opacity = pos > 0 ? "0.3" : "0";
       }
     },
+    // The switcher's view of the T-bar (TrPs → me.transition.position), the
+    // source of truth whenever the operator is not holding the handle: an
+    // AUTO, a held mix, another client's T-bar, a completed transition.
     updateTBarFromATEMState(state) {
-      if (!state || this.tbarState.isDragging) return;
-      const me = state.mes?.[Alpine.store("atem").activeMe] || {};
-      if (me.transition && me.transition.in_transition) {
-        const framesRemaining = parseInt(me.transition.frames_remaining) || 0;
-        const rate = this.parseRate(me.transition.rate) || this.fps();
-        if (!this.tbarState.isAnimating) {
-          this.animateTBarForAuto();
-        }
-        this.updateTBarProgress(framesRemaining, rate);
-      } else {
-        if (this.tbarState.isAnimating) {
-          this.completeTBarTransition();
-        }
+      const st = this.tbarState;
+      if (!state || st.isDragging || !this.tbarElements.handle) return;
+      const me = state.mes?.[Alpine.store("atem").activeMe];
+      const tr = me && me.transition;
+      if (!tr) return;
+      const inT = !!tr.in_transition;
+      const pos = inT ? Math.max(0, Math.min(1e4, Number(tr.position) || 0)) : 0;
+      const now = Date.now();
+      if (st.completing) {
+        if (inT && now < st.muteUntil) return;
+        st.completing = false;
       }
-    },
-    animateTBarForAuto() {
-      this.tbarState.isAnimating = true;
-      this.tbarState.targetPosition = this.tbarState.position < 50 ? 100 : 0;
-      this.tbarElements.handle.style.transition = "top 0.05s linear";
-    },
-    updateTBarProgress(framesRemaining, totalFrames) {
-      if (!this.tbarState.isAnimating) return;
-      const progress = Math.max(0, Math.min(1, (totalFrames - framesRemaining) / totalFrames));
-      const startPos = this.tbarState.targetPosition === 100 ? 0 : 100;
-      const endPos = this.tbarState.targetPosition;
-      const currentPos = startPos + (endPos - startPos) * progress;
-      this.setTBarPosition(currentPos);
-      if (this.tbarElements.progress) {
-        this.tbarElements.progress.style.height = `${progress * 100}%`;
-        this.tbarElements.progress.style.opacity = "0.3";
+      if (st.pendingSent !== null) {
+        if (now < st.muteUntil && Math.abs(pos - st.pendingSent) > 150) return;
+        st.pendingSent = null;
       }
-    },
-    completeTBarTransition() {
-      this.tbarState.isAnimating = false;
-      this.setTBarPosition(this.tbarState.targetPosition);
-      if (this.tbarElements.progress) {
-        this.tbarElements.progress.style.opacity = "0";
-      }
-      setTimeout(() => {
-        if (this.tbarElements.handle) {
-          this.tbarElements.handle.style.transition = "none";
-        }
-      }, 100);
-    },
-    handleTBarCut() {
-      this.tbarState.targetPosition = this.tbarState.position < 50 ? 100 : 0;
-      this.setTBarPosition(this.tbarState.targetPosition);
-    },
-    snapTBarToState() {
-      const shouldBeBottom = this.tbarState.position > 50;
-      this.tbarState.targetPosition = shouldBeBottom ? 100 : 0;
-      this.tbarElements.handle.style.transition = "top 0.3s ease-out";
-      this.setTBarPosition(this.tbarState.targetPosition);
-      setTimeout(() => {
-        if (this.tbarElements.handle) {
-          this.tbarElements.handle.style.transition = "none";
-        }
-      }, 300);
+      if (!inT && st.lastEcho > 5e3) this.tbarFlip();
+      st.lastEcho = pos;
+      st.percent = this.tbarPercentFromPosition(pos);
+      this.tbarElements.handle.style.transition = inT ? "top 0.05s linear" : "none";
+      this.renderTBar(pos);
     },
     // Button feedback
     addButtonFeedback() {
@@ -2997,6 +3045,16 @@
             row(bank.r2cams, bank.r2mid, bank.r2x)
           ]
         };
+      },
+      // USK bank columns. The ON AIR row renders one button per USK the M/E
+      // reports and the BKGD/KEY row one per USK in the topology; they live
+      // in separate grids that have to line up, so both take the wider of
+      // the two plus the leading BKGD / spacer cell. (On real hardware the
+      // two agree — they differ only under a grafted topology, e2e --atem.)
+      uskCols() {
+        const states = this.state.mes?.[this.activeMe]?.usk?.states?.length ?? 0;
+        const topo = this.state.topology?.usksPerMe?.[this.activeMe] ?? 0;
+        return Math.max(states, topo, 1) + 1;
       },
       busShiftHeld: false,
       busShiftLatched: false,

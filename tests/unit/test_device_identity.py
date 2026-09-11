@@ -4,8 +4,8 @@ Payload layout captured 2026-08-04 from an ATEM 1 M/E Constellation HD:
 32-char hex device id, NUL-padded IP (16), mDNS hostname (64), and the
 custom name set in ATEM Setup (64) — 176 bytes total.
 """
-from pyatem.messages import RECV_BY_CODE
-from pyatem.messages.system_info import (
+from atemwire.messages import RECV_BY_CODE
+from atemwire.messages.system_info import (
     DeviceIdentityField,
     device_name,
     product_name,

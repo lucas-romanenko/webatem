@@ -173,6 +173,51 @@
             });
         },
 
+        // Reconcile the open modal's sidebar against the LIVE switcher bindings
+        // (state.hyperdecks). Fired reactively while the modal is open, so a
+        // deck cleared or added in ASC disappears/appears without reopening —
+        // the modal snapshots hd.decks on open, this keeps it honest. Cheap:
+        // bails immediately when the configured-deck set is unchanged.
+        syncDecks: function () {
+            var st = store(); if (!st || !st.hyperdeckOpen) return;
+            var hd = st.hyperdeck;
+            var configured = ((st.state && st.state.hyperdecks) || [])
+                .filter(function (d) { return d.configured; });
+            var wantIps = configured.map(function (d) { return d.network_address; });
+            var haveIps = hd.decks.map(function (d) { return d.network_address; });
+            var same = wantIps.length === haveIps.length &&
+                wantIps.every(function (ip) { return haveIps.indexOf(ip) !== -1; });
+            if (same) return;
+
+            // drop decks no longer bound; keep the rest (with their live status)
+            var next = hd.decks.filter(function (d) { return wantIps.indexOf(d.network_address) !== -1; });
+            var added = false;
+            configured.forEach(function (d) {
+                if (!next.some(function (x) { return x.network_address === d.network_address; })) {
+                    next.push({ slot: d.slot, network_address: d.network_address,
+                                input: d.input, name: null, online: null, playState: null });
+                    added = true;
+                }
+            });
+            hd.decks = next;
+
+            if (hd.deckIp && wantIps.indexOf(hd.deckIp) === -1) {
+                // the selected deck vanished — move to the first remaining, or empty out
+                if (hd.decks.length) {
+                    hd.deckIp = hd.decks[0].network_address;
+                    hd.clips = []; hd.slots = []; hd.transport = {}; hd.name = null; hd.error = null;
+                    this.refresh(true); this._loadDeckOverview();
+                } else {
+                    hd.deckIp = null; hd.clips = []; hd.slots = []; hd.transport = {};
+                    hd.name = null; hd.model = '';
+                    hd.error = 'No HyperDecks are configured on this ATEM.';
+                    this.stopPoll();
+                }
+            } else if (added) {
+                this._loadDeckOverview();
+            }
+        },
+
         close: function () {
             var st = store(); if (!st) return;
             st.hyperdeckOpen = false;

@@ -16,13 +16,8 @@
                         :class="openSections.dsks[d] ? 'rotate-180' : ''"></i>
                     </button>
                     <div x-show="openSections.dsks[d]"
-                        x-transition:enter="transition ease-out duration-200"
-                        x-transition:enter-start="opacity-0 -translate-y-2"
-                        x-transition:enter-end="opacity-100 translate-y-0"
-                        x-transition:leave="transition ease-in duration-150"
-                        x-transition:leave-start="opacity-100 translate-y-0"
-                        x-transition:leave-end="opacity-0 -translate-y-2"
-                        class="px-4 pb-4">
+                        x-collapse.duration.200ms
+                        class="px-4 acc-body">
                         <div class="space-y-4 text-sm">
 
                             <!-- Key Selection Header -->
@@ -257,14 +252,9 @@
                         <i class="bi bi-chevron-down transition-transform duration-200" 
                            :class="openSections.ftb ? 'rotate-180' : ''"></i>
                     </button>
-                    <div x-show="openSections.ftb" 
-                         x-transition:enter="transition ease-out duration-200"
-                         x-transition:enter-start="opacity-0 -translate-y-2"
-                         x-transition:enter-end="opacity-100 translate-y-0"
-                         x-transition:leave="transition ease-in duration-150"
-                         x-transition:leave-start="opacity-100 translate-y-0"
-                         x-transition:leave-end="opacity-0 -translate-y-2"
-                         class="px-4 pb-4">
+                    <div x-show="openSections.ftb"
+                         x-collapse.duration.200ms
+                         class="px-4 acc-body">
                         <div class="space-y-3 text-sm">
                             <!-- FTB Rate -->
                             <div class="flex items-center gap-2">
@@ -313,14 +303,9 @@
                         <i class="bi bi-chevron-down transition-transform duration-200" 
                            :class="openSections.outputs ? 'rotate-180' : ''"></i>
                     </button>
-                    <div x-show="openSections.outputs" 
-                         x-transition:enter="transition ease-out duration-200"
-                         x-transition:enter-start="opacity-0 -translate-y-2"
-                         x-transition:enter-end="opacity-100 translate-y-0"
-                         x-transition:leave="transition ease-in duration-150"
-                         x-transition:leave-start="opacity-100 translate-y-0"
-                         x-transition:leave-end="opacity-0 -translate-y-2"
-                         class="px-4 pb-4">
+                    <div x-show="openSections.outputs"
+                         x-collapse.duration.200ms
+                         class="px-4 acc-body">
                         <div class="space-y-3 text-sm">
                             <!-- One row per aux output, count from topology
                                  (a = 1-based output number; aux_channel is
@@ -363,13 +348,8 @@
                            :class="openSections.hyperdecks ? 'rotate-180' : ''"></i>
                     </button>
                     <div x-show="openSections.hyperdecks"
-                         x-transition:enter="transition ease-out duration-200"
-                         x-transition:enter-start="opacity-0 -translate-y-2"
-                         x-transition:enter-end="opacity-100 translate-y-0"
-                         x-transition:leave="transition ease-in duration-150"
-                         x-transition:leave-start="opacity-100 translate-y-0"
-                         x-transition:leave-end="opacity-0 -translate-y-2"
-                         class="px-4 pb-4">
+                         x-collapse.duration.200ms
+                         class="px-4 acc-body">
                         <p class="text-xs opacity-60 mb-2">Bindings are managed in the Equipment list and pushed here automatically. You can still edit a slot directly below.</p>
                         <div x-show="$store.atem.hyperdeckUnknownDecks.length"
                              class="alert alert-warning text-xs mb-3 py-2">
@@ -384,22 +364,37 @@
                         </div>
                         <div class="space-y-2 text-sm">
                             <template x-for="hd in ($store.atem.state.hyperdecks || [])" :key="hd.slot">
-                                <div class="flex items-end gap-2"
-                                     x-data="{ ip: '', focused: false }"
-                                     x-effect="if (!focused) ip = (hd.network_address && hd.network_address !== '0.0.0.0') ? hd.network_address : ''">
-                                    <div class="w-16 shrink-0">
-                                        <label class="block text-xs font-medium mb-1">Deck <span x-text="hd.slot + 1"></span></label>
+                                <!-- One slot, stacked so the full IP is readable in the narrow
+                                     panel: header [Deck N · <equipment name> | clear-X], then the
+                                     full-width IP, then [Input | switcher-input dropdown]. The
+                                     name comes from the inventory (window.ATEM_HYPERDECK_NAMES,
+                                     keyed by IP) — the ATEM itself only knows the IP. -->
+                                <div class="space-y-1.5 pb-2 border-b border-base-300/40 last:border-0 last:pb-0"
+                                     x-data="{ ip: '', focused: false, name: '' }"
+                                     x-effect="name = (window.ATEM_HYPERDECK_NAMES || {})[hd.network_address] || ''; if (!focused) ip = (hd.network_address && hd.network_address !== '0.0.0.0') ? hd.network_address : ''">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <span class="text-xs font-semibold truncate min-w-0">Deck <span x-text="hd.slot + 1"></span><span
+                                              class="opacity-60 font-normal" x-show="name" x-text="' · ' + name"></span></span>
+                                        <!-- Clear this slot (unbind on the ATEM — IP 0.0.0.0).
+                                             Broadcast-safe; only enabled when the slot is bound. -->
+                                        <button type="button"
+                                                class="btn btn-xs btn-ghost btn-square text-error shrink-0"
+                                                :class="(hd.network_address && hd.network_address !== '0.0.0.0') ? '' : 'btn-disabled opacity-40'"
+                                                :disabled="!(hd.network_address && hd.network_address !== '0.0.0.0')"
+                                                @click="ip = ''; $store.atem.send('set_hyperdeck', {slot: hd.slot, network_address: '0.0.0.0', switcher_input: 0})"
+                                                title="Clear this HyperDeck slot (unbind)">
+                                            <i class="bi bi-x-lg"></i>
+                                        </button>
                                     </div>
-                                    <div class="flex-1">
-                                        <input type="text" inputmode="decimal" placeholder="IP address"
-                                               class="input input-bordered input-sm w-full"
-                                               x-model="ip"
-                                               @focus="focused = true"
-                                               @blur="focused = false; if ((ip || '0.0.0.0') !== (hd.network_address || '0.0.0.0')) $store.atem.send('set_hyperdeck', {slot: hd.slot, network_address: (ip.trim() || '0.0.0.0')})"
-                                               @keydown.enter="$event.target.blur()">
-                                    </div>
-                                    <div class="w-40 shrink-0">
-                                        <select class="select select-bordered select-sm w-full"
+                                    <input type="text" inputmode="decimal" placeholder="IP address"
+                                           class="input input-bordered input-sm w-full font-mono"
+                                           x-model="ip"
+                                           @focus="focused = true"
+                                           @blur="focused = false; if ((ip || '0.0.0.0') !== (hd.network_address || '0.0.0.0')) $store.atem.send('set_hyperdeck', {slot: hd.slot, network_address: (ip.trim() || '0.0.0.0')})"
+                                           @keydown.enter="$event.target.blur()">
+                                    <div class="flex items-center gap-2">
+                                        <span class="w-14 shrink-0 text-xs opacity-50">Input</span>
+                                        <select class="select select-bordered select-sm flex-1 min-w-0"
                                                 :value="hd.input"
                                                 @change="$store.atem.send('set_hyperdeck', {slot: hd.slot, switcher_input: parseInt($event.target.value)})">
                                             <option value="0">— None —</option>

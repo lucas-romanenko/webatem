@@ -1,8 +1,10 @@
 # Third-party licenses
 
-WebATEM's own code is MIT-licensed (see [LICENSE](LICENSE)), except the
-`pyatem/` directory, which is an LGPL-3.0-only fork — see
-[pyatem/NOTICE.md](pyatem/NOTICE.md) and [pyatem/LICENSE](pyatem/LICENSE).
+WebATEM's own code is MIT-licensed (see [LICENSE](LICENSE)). The ATEM
+protocol library it installs, [atemwire](https://github.com/lucas-romanenko/atemwire)
+(a fork of Martijn Braam's pyatem), is LGPL-3.0-only and ships its own
+notices; [hyperdeckwire](https://github.com/lucas-romanenko/hyperdeckwire) is
+MIT. Neither is copied into this repository.
 
 This file reproduces the license notices for the third-party frontend
 assets bundled in this repository and in the built image. See
@@ -57,3 +59,16 @@ Python packages (Django, channels, uvicorn, Pillow, whitenoise, …) are
 not vendored in this repository — they are installed from PyPI at image
 build time per `requirements.txt`, and each carries its own license
 metadata inside the installed distribution.
+
+## @alpinejs/collapse 3.14.3
+
+MIT — the same license and copyright as Alpine.js above (Caleb Porzio and
+contributors). Vendored as `atem_control/static/vendor/alpinejs-collapse-3.14.3.min.js`
+for the settings accordion's height animation.
+
+## Poppins (font)
+
+Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins).
+Licensed under the SIL Open Font License, Version 1.1. The full license text
+is `atem_control/static/fonts/poppins/OFL.txt`, beside the TTFs. The font is
+self-hosted so the UI needs no internet access.

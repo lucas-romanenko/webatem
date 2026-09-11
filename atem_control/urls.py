@@ -15,6 +15,8 @@ urlpatterns = [
     path('api/lookup-name/',            control_views.atem_lookup_name, name='atem_lookup_name'),
     path('api/discovered/',             control_views.atem_discovered, name='atem_discovered'),
     path('api/scan/',                   control_views.atem_scan, name='atem_scan'),
+    path('device-info/',                control_views.atem_device_info, name='atem_device_info'),
+    path('device-name/',                control_views.atem_set_device_name, name='atem_set_device_name'),
     path('media-pool-upload/',          media_pool_views.media_pool_upload, name='media_pool_upload'),
     path('profile/save_dialog_init/',   profile_views.profile_save_dialog_init,
          name='profile_save_dialog_init'),

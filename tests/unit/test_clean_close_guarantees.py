@@ -27,8 +27,8 @@ import types
 import pytest
 
 from atem_control import uploader as U
-from pyatem.pool import ATEMInstanceManager, _close_all_sessions_at_exit
-from pyatem.protocol import AtemProtocol
+from atemwire.pool import ATEMInstanceManager, _close_all_sessions_at_exit
+from atemwire.protocol import AtemProtocol
 
 
 # ---------------------------------------------------------------------------
@@ -208,8 +208,8 @@ def test_ftde_fatal_status_pops_task_and_advances():
     """Per-frame lock discipline (2026-07-07): the fatal FTDE pops the
     corpse and RELEASES the lock; the next task starts when the unlock's
     LKST echo arrives (the pounce), not synchronously."""
-    from pyatem.protocol import TransferTask
-    from pyatem.messages.lock import LockCommand
+    from atemwire.protocol import TransferTask
+    from atemwire.messages.lock import LockCommand
 
     p, sent = _bare_protocol()
     try:
@@ -234,7 +234,7 @@ def test_ftde_fatal_status_pops_task_and_advances():
         # The unlock's LKST echo arrives -> pounce -> next task requests
         # the lock again (PLCK goes out; LKOB would then start FTSU).
         p.save_field_data(b'LKST', bytes([0, 0, 0, 0x13]))
-        from pyatem.messages.lock import PartialLockCommand
+        from atemwire.messages.lock import PartialLockCommand
         plcks = [c for batch in sent for c in batch
                  if isinstance(c, PartialLockCommand)]
         assert len(plcks) == 1                  # re-requested for t2
@@ -251,8 +251,8 @@ def test_ftde_fatal_status_pops_task_and_advances():
 
 
 def test_ftde_fatal_status_releases_lock_when_queue_empties():
-    from pyatem.protocol import TransferTask
-    from pyatem.messages.lock import LockCommand
+    from atemwire.protocol import TransferTask
+    from atemwire.messages.lock import LockCommand
 
     p, sent = _bare_protocol()
     try:
@@ -278,7 +278,7 @@ def test_ftde_fatal_status_releases_lock_when_queue_empties():
 
 
 def test_ftde_try_again_still_retries():
-    from pyatem.protocol import TransferTask
+    from atemwire.protocol import TransferTask
 
     p, sent = _bare_protocol()
     try:
@@ -352,8 +352,8 @@ def _lkst_unlocked():
 
 
 def test_ftdc_releases_lock_per_frame_and_echo_continues_queue():
-    from pyatem.protocol import TransferTask
-    from pyatem.messages.lock import LockCommand, PartialLockCommand
+    from atemwire.protocol import TransferTask
+    from atemwire.messages.lock import LockCommand, PartialLockCommand
 
     p, sent = _bare_protocol()
     try:
@@ -403,8 +403,8 @@ def test_foreign_lock_release_broadcast_pounces_waiting_queue():
     """A transfer queued while ANOTHER client holds the lock: our PLCK was
     silently dropped by the switcher. Their release LKST must trigger an
     immediate re-request — not a blind 20s-timeout retry."""
-    from pyatem.protocol import TransferTask
-    from pyatem.messages.lock import PartialLockCommand
+    from atemwire.protocol import TransferTask
+    from atemwire.messages.lock import PartialLockCommand
 
     p, sent = _bare_protocol()
     try:
@@ -427,10 +427,21 @@ def test_foreign_lock_release_broadcast_pounces_waiting_queue():
 
 
 def test_lkst_release_with_empty_queue_is_calm():
+    """Nothing queued: a release sends nothing. Since atemwire the LKST
+    handler no longer returns early — after the pounce check it falls
+    through to the generic state path, so the release also lands in
+    ``mixerstate['lock-state']`` and fires ``change:lock-state`` (the
+    vendored copy short-circuited both). Pinned here so a future
+    early-return regression is caught."""
     p, sent = _bare_protocol()
     try:
+        seen = []
+        p.on('change:lock-state', lambda c: seen.append(c))
         p.save_field_data(b'LKST', _lkst_unlocked())
         assert sent == []                       # nothing to do, nothing sent
+        assert p.mixerstate['lock-state'].store == 0
+        assert not p.mixerstate['lock-state'].state
+        assert len(seen) == 1                   # the release is now an event
     finally:
         try:
             p.transport.sock.close()
@@ -444,8 +455,8 @@ def test_request_deferred_while_own_unlock_in_flight():
     and with the lock then free, no LKST ever arrives to pounce on: dead
     air until the caller's 20s timeout. The trigger must DEFER the request
     until the release echo, then send exactly one."""
-    from pyatem.protocol import TransferTask
-    from pyatem.messages.lock import PartialLockCommand
+    from atemwire.protocol import TransferTask
+    from atemwire.messages.lock import PartialLockCommand
 
     p, sent = _bare_protocol()
     try:

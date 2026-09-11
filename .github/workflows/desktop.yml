@@ -89,10 +89,11 @@ jobs:
           $PY -m pip install --upgrade pip setuptools wheel
           $PY -m pip install -r requirements.txt pyinstaller
 
-      # 4. Compile the mediaconvert C extension with THIS build's compiler +
-      #    architecture (ARCHFLAGS forces x86_64 for the Rosetta build).
-      - name: Compile C extension
-        run: $PY setup.py build_ext --inplace
+      # 4. atemwire (PyPI sdist) built its mediaconvert C extension inside the
+      #    pip install above with THIS build's compiler + architecture
+      #    (ARCHFLAGS forces x86_64 for the Rosetta build). Prove it imports.
+      - name: Check the C extension
+        run: $PY -c "import atemwire.mediaconvert, hyperdeckwire; print('atemwire.mediaconvert OK')"
 
       # 5. Bundle-time static (WhiteNoise serves the read-only tree).
       - name: Collect static
