@@ -1,7 +1,10 @@
 services:
   webatem:
+    # The published image (amd64 + arm64, built by .github/workflows/image.yml
+    # on every release tag). `docker compose up -d` pulls it; developers build
+    # their own with `docker compose up -d --build`.
+    image: ghcr.io/lucas-romanenko/webatem:latest
     build: .
-    image: webatem
     # Host networking (not a bridge + port map) so LAN discovery works:
     # the app must see the studio subnet directly to receive ATEM
     # mDNS/Bonjour multicast and to hello-sweep the local /24. On a bridge

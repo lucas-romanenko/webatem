@@ -1,7 +1,10 @@
 # ---- Frontend CSS build: Tailwind + daisyUI -> one static stylesheet ----
 # Node is used ONLY here, at build time. The runtime image below is pure
 # Python; it just copies the compiled webatem.css out of this stage.
-FROM node:20-alpine AS css
+# --platform=$BUILDPLATFORM: the CSS is architecture-neutral text, so this
+# stage runs on the builder's own arch even when the image is built for
+# arm64 (a Raspberry Pi) under emulation — npm under QEMU is painfully slow.
+FROM --platform=$BUILDPLATFORM node:20-alpine AS css
 WORKDIR /build
 COPY package.json tailwind.config.js ./
 RUN npm install --no-audit --no-fund
