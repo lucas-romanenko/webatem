@@ -8,8 +8,8 @@ zeroconf==0.147.2
 # atemwire ships an sdist and builds its mediaconvert C extension at
 # install time — a C compiler must be present (the Dockerfile and the
 # desktop build both have one).
-atemwire==0.15.0.dev0
-hyperdeckwire==0.1.0.dev0
+atemwire==0.15.0.dev1
+hyperdeckwire==0.1.0.dev1
 pytest==9.1.1
 pytest-django==4.12.0
 pytest-timeout==2.4.0
