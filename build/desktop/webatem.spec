@@ -48,7 +48,7 @@ for pkg in ('atem_control', 'config'):
 # Third-party packages that lean on dynamic imports / ship data. atemwire and
 # hyperdeckwire are the Blackmagic device libraries (PyPI); collect_all takes
 # atemwire's compiled mediaconvert extension along with the modules.
-for pkg in ('django', 'channels', 'whitenoise', 'uvicorn', 'zeroconf', 'PIL', 'atemwire', 'hyperdeckwire'):
+for pkg in ('django', 'channels', 'whitenoise', 'uvicorn', 'zeroconf', 'PIL', 'atemwire', 'hyperdeckwire', 'pystray'):
     d, b, h = collect_all(pkg)
     datas += d
     binaries += b
@@ -58,6 +58,19 @@ for pkg in ('django', 'channels', 'whitenoise', 'uvicorn', 'zeroconf', 'PIL', 'a
 # the collected static root — neither belongs to a package.
 datas += [(rel('templates'), 'templates')]
 datas += [(rel('staticfiles'), 'staticfiles')]
+
+# The tray's per-OS backend is chosen at runtime (pystray._darwin / _win32 /
+# _xorg / _appindicator); on macOS it sits on PyObjC, whose frameworks load
+# dynamically too.
+if IS_MAC:
+    for pkg in ('objc', 'AppKit', 'Foundation', 'Quartz'):
+        try:
+            d, b, h = collect_all(pkg)
+            datas += d
+            binaries += b
+            hiddenimports += h
+        except Exception:
+            pass
 
 # uvicorn/asgi bits PyInstaller routinely misses.
 hiddenimports += [
@@ -95,9 +108,11 @@ exe = EXE(
     debug=False,
     strip=False,
     upx=False,
-    # macOS: windowed (no terminal) so the .app double-clicks like a real
-    # app. Windows/Linux: console so `WebATEM is running…` + Ctrl-C work.
-    console=not IS_MAC,
+    # macOS and Windows: windowed — the app lives in the menu bar / system
+    # tray and quits from there (output goes to webatem.log in the data
+    # dir). Linux: console, so a terminal start shows the address and
+    # Ctrl-C works on a headless box.
+    console=not (IS_MAC or IS_WIN),
     icon=ICON,
     disable_windowed_traceback=False,
 )
@@ -116,6 +131,9 @@ if IS_MAC:
             'CFBundleDisplayName': 'WebATEM',
             'CFBundleShortVersionString': '1.0.0',
             'NSHighResolutionCapable': True,
+            # Menu-bar app: no Dock icon, no app menu; Quit lives in the
+            # status item's menu (like Companion).
+            'LSUIElement': True,
             'LSApplicationCategoryType': 'public.app-category.video',
         },
     )

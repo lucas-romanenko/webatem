@@ -4,6 +4,9 @@ uvicorn[standard]==0.52.0
 pillow==12.3.0
 whitenoise==6.12.0
 zeroconf==0.147.2
+# The menu bar / system tray icon of the desktop launcher (pulls the per-OS
+# backend: pyobjc on macOS, python-xlib on Linux; ctypes on Windows).
+pystray==0.19.5
 # Blackmagic device libraries (PyPI; github.com/lucas-romanenko/<name>).
 # atemwire ships an sdist and builds its mediaconvert C extension at
 # install time — a C compiler must be present (the Dockerfile and the
