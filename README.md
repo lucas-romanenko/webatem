@@ -13,16 +13,18 @@ keyers, audio, media pool, macros — at a URL, on any device.
 </p>
 <p align="center"><sub>Download it, open it, and your switchers appear. &nbsp;·&nbsp; Intel Mac? <a href="https://github.com/lucas-romanenko/webatem/releases/latest/download/webatem-macos-intel.dmg">Intel build</a> &nbsp;·&nbsp; The Linux build runs on desktop <b>and</b> headless servers.</sub></p>
 
-Two ways to run it, both simple:
+Three ways to run it, all simple:
 
-- **Just you, right now** → **download the app** for your Mac, Windows, or
-  Linux machine, open it, and your switchers appear. Like ATEM Software
-  Control, but in your browser.
-- **Your whole team, always on** → **host it** with one Docker command on a
-  box on your network; everyone opens a URL — no installs, no accounts.
+- **Just you, right now** → **download it** for your Mac or Windows machine
+  and open it. It lives in your menu bar / system tray (with a *Start at
+  login* switch), opens your browser, and your switchers appear. Like ATEM
+  Software Control, but in your browser — and on every device on the network.
+- **Your whole team, always on** → **host it** on a Linux box, VM or Raspberry
+  Pi with one Docker command; everyone opens a URL — no installs, no accounts.
+- **Already have Python?** → `pipx install webatem`, then `webatem`.
 
-Either way, it **auto-discovers the ATEMs on your network** (Bonjour/mDNS) and
-lists them by name, exactly like ATEM Software Control.
+Every way of running it **auto-discovers the ATEMs on your network**
+(Bonjour/mDNS) and lists them by name, exactly like ATEM Software Control.
 
 <p align="center">
   <img src="docs/screenshot-control.png" alt="WebATEM control surface — program/preview buses, T-bar, keyers, transitions and macros" width="900">
@@ -32,7 +34,7 @@ lists them by name, exactly like ATEM Software Control.
 
 ## Get started
 
-### Option A — Download the app  *(easiest)*
+### Option A — Download it  *(Mac, Windows)*
 
 1. Click your platform's **Download** button at the top (or the
    [Releases](https://github.com/lucas-romanenko/webatem/releases) page).
@@ -41,27 +43,11 @@ lists them by name, exactly like ATEM Software Control.
 
 That's the whole setup — nothing to install alongside it, no Python, no Docker.
 
-**On Linux — desktop or headless server.** The same `webatem-linux-x64` binary
-works both ways. Make it runnable and start it:
-
-```bash
-chmod +x webatem-linux-x64
-./webatem-linux-x64
-```
-
-On a desktop it opens your browser; on a **headless server** (no display) it
-skips that and just prints the address to open from another machine:
-
-```
-WebATEM is running.
-  On this machine:      http://127.0.0.1:8000/atem/
-  From another device:  http://192.168.1.50:8000/atem/
-```
-
-It listens on all interfaces, so browse to that `From another device` URL from
-anywhere on the network. Leave it running under `nohup`, `tmux`, or a systemd
-service to keep it up. (For a permanent multi-user install, Option B is
-cleaner.)
+While it runs it sits in the **menu bar (Mac) / system tray (Windows)**: the
+icon's menu shows the address other devices can use, opens the browser again,
+and has a **Start at login** switch so it is back after every reboot. **Quit**
+is there too. Like Bitfocus Companion: the server is the app, the browser is
+the interface.
 
 <details>
 <summary><b>First-launch security prompt</b> (the app isn't code-signed yet)</summary>
@@ -79,26 +65,51 @@ certificates — planned, not done yet.
 
 ### Option B — Host it  *(a whole team; always on)*
 
-Run it on a **Linux box that's on the same network as your ATEMs** (this is
-the ATEM-Software-Control-on-a-server model):
+Run it on a **Linux box, VM or Raspberry Pi on the same network as your
+ATEMs** (the ATEM-Software-Control-on-a-server model). The published image
+is built for amd64 and arm64:
 
 ```bash
-git clone https://github.com/lucas-romanenko/webatem.git
-cd webatem
-docker compose up -d --build
+docker run -d --name webatem --network host --restart unless-stopped \
+  -v webatem-data:/app/data ghcr.io/lucas-romanenko/webatem:latest
 ```
 
 Open `http://<that-box>:8000` from any device on the network. It comes back
 automatically on reboot. No `.env` file needed — every setting has a working
-default (SQLite DB + a generated secret key live in the `atem-data` volume);
-see [.env.example](.env.example) for knobs like `PORT`, `TIME_ZONE`,
-`ALLOWED_HOSTS`.
+default (SQLite DB + a generated secret key live in the `webatem-data`
+volume); see [.env.example](.env.example) for knobs like `PORT`, `TIME_ZONE`,
+`ALLOWED_HOSTS`. Prefer Compose? The repository's
+[compose.yml](compose.yml) runs the same image: `docker compose up -d`.
+
+Without Docker: the `webatem-linux-x64` binary from the Releases page runs
+headless too — on a machine with no display it skips the browser and tray and
+prints the address to open from another device:
+
+```
+WebATEM is running.
+  On this machine:      http://127.0.0.1:8000/atem/
+  From another device:  http://192.168.1.50:8000/atem/
+```
+
+Keep it up with a systemd unit, `tmux` or `nohup`.
 
 > **Why Linux for hosting?** Discovery needs the app to see your LAN directly.
 > That works natively on Linux (the container uses host networking). Docker
 > Desktop on **Mac/Windows** runs containers in a VM that can’t see LAN
-> discovery traffic — so on a Mac or PC, use the **downloadable app** (Option
-> A), not Docker.
+> discovery traffic — so on a Mac or PC, use the download (Option A) or pipx
+> (Option C), not Docker.
+
+### Option C — pipx  *(you already have Python 3.10+)*
+
+```bash
+pipx install webatem      # or: uvx webatem, with no install at all
+webatem
+```
+
+Same behaviour as the download: a native process on your real network, the
+browser opens, the tray icon appears where there is a desktop. Prebuilt wheels
+for every platform mean no compiler is needed. Upgrade with
+`pipx upgrade webatem`.
 
 ---
 
@@ -136,7 +147,7 @@ like ASC if you want).
 | **Access from** | Any device on the network | The machine it’s installed on |
 | **Multiple operators** | One shared switcher session, many operators | Each machine opens its own session |
 | **Phones / tablets** | ✓ Responsive | ✗ |
-| **How to run** | Download the app, **or** host one instance for everyone | Install on each machine |
+| **How to run** | Download it, host one instance for everyone (Docker), or `pipx install webatem` | Install on each machine |
 | **Price** | Free, open source | Free (proprietary) |
 | **Feature breadth** | Core: switching, keyers, Fairlight audio, media pool, macros, profiles, HyperDeck | Everything, incl. camera control (CCU), streaming & recording, SuperSource |
 | **Support** | Community / self-hosted | Official Blackmagic |
@@ -229,35 +240,44 @@ ATEM switchers (UDP 9910) · HyperDecks (TCP 9993 / FTP)
   pooling, native interleaved bulk transfers, macro bytecode transfer, and
   ASC-compatible profile save/restore. A small C extension does YCbCr↔RGB
   conversion. **[hyperdeckwire](https://github.com/lucas-romanenko/bmdwire/tree/main/hyperdeckwire)**
-  (PyPI) drives the HyperDecks. Both are pinned in `requirements.txt`; a
-  library change is a release there and a pin bump here.
+  (PyPI) drives the HyperDecks. Both are pinned in `pyproject.toml`; a
+  library change is a release there and a pin bump here (Dependabot opens it,
+  CI runs, it merges itself).
 - **`atem_control/`** — the Django app: the WebSocket consumer, a declarative
   command dispatch table, the media-pool watcher, LAN discovery, and the UI.
-- **`launcher.py` + `build/desktop/`** — the desktop app: a PyInstaller build
-  that runs the same web app locally and opens a browser, packaged per OS by
-  `.github/workflows/desktop.yml`.
+- **`webatem/`** — the project package: settings, the ASGI entry, the
+  WebSocket origin guard, and `launcher.py` — the `webatem` command that runs
+  the same web app locally, opens a browser and lives in the tray. The
+  downloads are that launcher frozen per OS by PyInstaller
+  (`build/desktop/`); the PyPI package is the same code installed by pip.
+- **One tag, three deliverables.** A `v*` tag publishes the Mac / Windows /
+  Linux downloads to the GitHub release, the Docker image to GHCR (amd64 +
+  arm64) and the `webatem` package to PyPI.
 - **SQLite** for persistence (connection history) — no external database.
 
 ## Development
 
 ```bash
-docker compose up -d --build                     # run the app
-docker compose exec webatem pytest tests/ -q     # run the test suite
+git clone https://github.com/lucas-romanenko/webatem.git
+cd webatem
+npm install && npm run build:css      # the stylesheet — without it the app renders unstyled
+pip install -e ".[test]"              # Python 3.10+; the device libraries install as wheels
+python -m webatem                     # the launcher: server + browser + tray
+python -m pytest tests/ -q            # the suite (no hardware needed)
 ```
 
-The suite (the command dispatch table, the T-bar, the consumer's
-state-change and session-cleanup rules, upload policy, tally safety, profile
-dialogs, the media-pool thumbnail cache, LAN discovery identity, WebSocket
-origin checks) runs against fake protocol layers — no hardware needed. CI runs
-it on every push. The protocol libraries carry their own suites in their repos.
+Or entirely in Docker: `docker compose up -d --build` runs the app and
+`docker compose exec webatem pytest tests/ -q` runs the suite in it. The suite
+(the command dispatch table, the T-bar, the consumer's state-change and
+session-cleanup rules, upload policy, tally safety, profile dialogs, the
+media-pool thumbnail cache, LAN discovery identity, WebSocket origin checks)
+runs against fake protocol layers. CI runs it on every push. The protocol
+libraries carry their own suites in [bmdwire](https://github.com/lucas-romanenko/bmdwire).
 
-**Bare-metal / build the desktop app:** Python 3.14 and a C compiler
-(atemwire builds its small extension during `pip install`), `npm install && npm
-run build:css` (the stylesheet — without it the app renders unstyled),
-`pip install -r requirements.txt`, then `python launcher.py` (desktop) or
-`python manage.py migrate && python manage.py runserver` (server). The per-OS
-downloadable binaries are built by the **Desktop builds** GitHub Actions
-workflow (`pyinstaller build/desktop/webatem.spec`).
+`python manage.py runserver` works too for plain Django development. The
+per-OS downloads are built by the **Desktop builds** workflow
+(`pyinstaller build/desktop/webatem.spec`); the control page itself is
+synced from its upstream application by `tools/sync_from_av_server.py`.
 
 ## License
 

@@ -71,23 +71,23 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'config.urls'
+ROOT_URLCONF = 'webatem.urls'
 
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / 'templates'],
+        'DIRS': [Path(__file__).resolve().parent / 'templates'],   # webatem/templates (base.html)
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
                 'django.template.context_processors.request',
-                'config.context.app',
+                'webatem.context.app',
             ],
         },
     },
 ]
 
-ASGI_APPLICATION = 'config.asgi.application'
+ASGI_APPLICATION = 'webatem.asgi.application'
 
 # Process-local by design: the app runs a SINGLE uvicorn worker (the ATEM
 # connection pool and media-pool watcher registry are process-local too).
@@ -108,7 +108,10 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = '/static/'
-STATIC_ROOT = BASE_DIR / 'staticfiles'
+# Where collectstatic puts the files WhiteNoise serves. The launcher points
+# this into the per-user data dir (a pip install's package dir is read-only);
+# the Docker image collects into /app/staticfiles at build time.
+STATIC_ROOT = Path(os.getenv('STATIC_ROOT', BASE_DIR / 'staticfiles'))
 STORAGES = {
     'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
     'staticfiles': {'BACKEND': 'whitenoise.storage.CompressedStaticFilesStorage'},

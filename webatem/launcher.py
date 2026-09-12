@@ -108,7 +108,7 @@ def _launch_command() -> list:
     interpreter plus this script when run from a checkout."""
     if getattr(sys, 'frozen', False):
         return [sys.executable, '--autostart']
-    return [sys.executable, str(Path(__file__).resolve()), '--autostart']
+    return [sys.executable, '-m', 'webatem', '--autostart']
 
 
 def _autostart_path() -> Path:
@@ -245,14 +245,19 @@ def main() -> None:
 
     # settings.py reads DATA_DIR at import time — set it before django.setup().
     os.environ['DATA_DIR'] = str(data_dir)
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
-    os.environ.setdefault('DEBUG', 'False')  # bundled static via WhiteNoise
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'webatem.settings')
+    os.environ.setdefault('DEBUG', 'False')  # static via WhiteNoise
+    # The package's own directory is read-only (site-packages, a frozen
+    # bundle): WhiteNoise serves from a collected copy in the data dir,
+    # refreshed at every start so an upgrade never serves stale assets.
+    os.environ.setdefault('STATIC_ROOT', str(data_dir / 'staticfiles'))
 
     import django
     django.setup()
 
     from django.core.management import call_command
     call_command('migrate', '--noinput', verbosity=0)
+    call_command('collectstatic', '--noinput', '--clear', verbosity=0)
 
     port = int(os.environ.get('PORT', '8000'))
     host = os.environ.get('HOST', '0.0.0.0')  # bind all — reachable from other devices too
@@ -267,7 +272,7 @@ def main() -> None:
     if want_browser:
         threading.Thread(target=lambda: _wait_for_port(port) and _open_browser(local_url), daemon=True).start()
 
-    from config.asgi import application
+    from webatem.asgi import application
     import uvicorn
 
     want_tray = _has_display() and os.environ.get('WEBATEM_NO_TRAY') != '1'

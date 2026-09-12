@@ -7,7 +7,7 @@
  */
 module.exports = {
   content: [
-    './templates/**/*.html',
+    './webatem/templates/**/*.html',
     './atem_control/templates/**/*.html',
     './atem_control/static/js/**/*.js',
   ],

@@ -10,7 +10,7 @@ explicit allow-list for proxy Host rewrites, and non-browser clients
 import pytest
 from django.core.exceptions import ImproperlyConfigured
 
-from config.websocket import SameOriginValidator
+from webatem.websocket import SameOriginValidator
 
 
 def _scope(origin=None, host='192.168.1.5:8000', scheme='ws'):

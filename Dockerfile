@@ -9,7 +9,7 @@ WORKDIR /build
 COPY package.json tailwind.config.js ./
 RUN npm install --no-audit --no-fund
 COPY styles ./styles
-COPY templates ./templates
+COPY webatem/templates ./webatem/templates
 COPY atem_control/templates ./atem_control/templates
 COPY atem_control/static/js ./atem_control/static/js
 RUN npx tailwindcss -c tailwind.config.js -i styles/app.css -o webatem.css --minify
@@ -22,22 +22,23 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY requirements.txt /app/
-# gcc is here for ONE reason: atemwire (PyPI sdist) builds its mediaconvert
-# C extension (BT.709 YCbCr<->RGB + RLE) during pip install. Purged after.
+COPY . /app
+# The compiled stylesheet, into the source tree BEFORE the package is
+# installed so the installed copy carries it.
+COPY --from=css /build/webatem.css /app/atem_control/static/vendor/webatem.css
+
+# Install the app as the `webatem` package (pyproject.toml is the one list
+# of dependencies; the test extras are for the CI run inside this image).
+# gcc is here for ONE reason: atemwire builds its mediaconvert C extension
+# from the sdist where no wheel matches. Purged after.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends gcc libc6-dev \
     && pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt \
-    && python3 -c 'import atemwire.mediaconvert, hyperdeckwire; print("atemwire.mediaconvert OK")' \
+    && pip install --no-cache-dir ".[test]" \
+    && python3 -c 'import atemwire.mediaconvert, hyperdeckwire, webatem, atem_control; print("webatem + libraries OK")' \
     && apt-get remove -y --purge gcc libc6-dev \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
-
-COPY . /app
-
-# Drop in the compiled stylesheet from the css stage (before collectstatic).
-COPY --from=css /build/webatem.css /app/atem_control/static/vendor/webatem.css
 
 # Static assets are baked at build time (WhiteNoise serves them with
 # DEBUG=False). SECRET_KEY here is build-scoped and never persisted.

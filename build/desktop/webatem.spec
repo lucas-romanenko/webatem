@@ -41,7 +41,7 @@ hiddenimports = []
 # First-party packages: pull every submodule (migrations/apps/admin are
 # imported dynamically by Django and PyInstaller can't see them statically)
 # plus their template/static data files.
-for pkg in ('atem_control', 'config'):
+for pkg in ('atem_control', 'webatem'):
     hiddenimports += collect_submodules(pkg)
     datas += collect_data_files(pkg)
 
@@ -54,10 +54,8 @@ for pkg in ('django', 'channels', 'whitenoise', 'uvicorn', 'zeroconf', 'PIL', 'a
     binaries += b
     hiddenimports += h
 
-# Top-level template dir (config.TEMPLATES DIRS = BASE_DIR/'templates') and
-# the collected static root — neither belongs to a package.
-datas += [(rel('templates'), 'templates')]
-datas += [(rel('staticfiles'), 'staticfiles')]
+# (webatem/templates and atem_control/static ride in with the package data
+# above; the launcher collects static into the data dir at start.)
 
 # The tray's per-OS backend is chosen at runtime (pystray._darwin / _win32 /
 # _xorg / _appindicator); on macOS it sits on PyObjC, whose frameworks load
@@ -85,7 +83,7 @@ hiddenimports += [
 ]
 
 a = Analysis(
-    [rel('launcher.py')],
+    [rel('webatem', 'launcher.py')],
     pathex=[ROOT],
     binaries=binaries,
     datas=datas,

@@ -3,7 +3,7 @@
 The tests run without a live ATEM. Test doubles for the protocol layer
 (``FakeAtemProtocol`` and friends) ship inside the atemwire package as
 ``atemwire.testing``; tests import them from there. Django is configured by
-pytest-django from pytest.ini (``DJANGO_SETTINGS_MODULE = config.settings``).
+pytest-django from pytest.ini (``DJANGO_SETTINGS_MODULE = webatem.settings``).
 """
 import os
 import sys
