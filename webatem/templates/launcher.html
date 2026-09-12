@@ -127,11 +127,13 @@
 
   // The three window buttons work through the desktop launcher's bridge;
   // in a plain browser Launch GUI just opens the app. Inside the launcher
-  // this page is served by the window's own loopback server, so the app is
-  // at the public server's loopback address, never this page's origin.
+  // this page is served by the window's own loopback server, so Launch GUI
+  // opens the address shown (the real interface and port — what other
+  // devices use); the launcher falls back to 127.0.0.1 only when this
+  // machine cannot reach that address itself.
   el('lwLaunch').addEventListener('click', function () {
     if (!current || current.running === false) return;
-    if (native) window.pywebview.api.launch(current.local_url); else window.open(location.origin + '/atem/', '_blank');
+    if (native) window.pywebview.api.launch(current.url, current.local_url); else window.open(location.origin + '/atem/', '_blank');
   });
   el('lwHide').addEventListener('click', function () { if (native) window.pywebview.api.hide(); });
   el('lwQuit').addEventListener('click', function () {

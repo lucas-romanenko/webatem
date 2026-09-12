@@ -308,3 +308,17 @@ def test_describe_reports_running_and_restarting(client, data_dir):
     srv.runtime.register(ctl)
     d = client.get('/server/settings/').json()
     assert d['running'] is False and d['restarting'] is True
+
+
+def test_launch_gui_opens_the_shown_address_when_reachable_else_loopback():
+    from webatem.launcher import _reachable_url
+    live = socket.socket(); live.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    live.bind(('127.0.0.1', 0)); live.listen(1)
+    lp = live.getsockname()[1]
+    dead = _free_port()
+    try:
+        assert _reachable_url(f'http://127.0.0.1:{lp}/atem/', 'http://fallback/') == f'http://127.0.0.1:{lp}/atem/'
+        assert _reachable_url(f'http://127.0.0.1:{dead}/atem/', 'http://fallback/') == 'http://fallback/'
+        assert _reachable_url(f'http://127.0.0.1:{dead}/atem/') == f'http://127.0.0.1:{dead}/atem/'   # nothing to fall back to
+    finally:
+        live.close()

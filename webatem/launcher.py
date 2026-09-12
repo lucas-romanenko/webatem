@@ -124,6 +124,22 @@ def _open_browser(url: str) -> None:
         pass
 
 
+def _reachable_url(url: str, fallback=None, timeout: float = 1.5) -> str:
+    """Launch GUI opens the address the window shows — the real interface
+    and port, what other devices use — when this machine can connect to it;
+    otherwise the fallback (loopback, always served). A VPN address is not
+    always reachable from the machine that owns it."""
+    if not fallback:
+        return url
+    try:
+        from urllib.parse import urlsplit
+        parts = urlsplit(url)
+        with socket.create_connection((parts.hostname, parts.port or 80), timeout=timeout):
+            return url
+    except (OSError, ValueError, TypeError):
+        return fallback
+
+
 # ---------------------------------------------------------------------------
 # Start at login — the native mechanism per OS: a file (or a registry value)
 # the OS reads at the next login. Nothing is started now, the app is already
@@ -539,8 +555,8 @@ def _window_process(url: str) -> None:
     import webview
 
     class Api:
-        def launch(self, target):
-            _open_browser(target)
+        def launch(self, target, fallback=None):
+            _open_browser(_reachable_url(target, fallback))
 
         def hide(self):
             window.destroy()
@@ -635,6 +651,10 @@ def _run_tray(supervisor, controller, window) -> None:
     def local_url():
         return _urls(supervisor.host, supervisor.port)[0]
 
+    def gui_url():
+        local, lan = _urls(supervisor.host, supervisor.port)
+        return _reachable_url(lan or local, local)
+
     def shown_address(item=None):
         local, lan = _urls(supervisor.host, supervisor.port)
         return f'{APP_NAME} is running at {lan or local}'
@@ -654,14 +674,14 @@ def _run_tray(supervisor, controller, window) -> None:
         # Companion's three: the window carries the settings.
         menu = Menu(
             MenuItem('Show/Hide window', lambda icon, item: window.toggle(), default=True),
-            MenuItem('Launch GUI', lambda icon, item: _open_browser(local_url())),
+            MenuItem('Launch GUI', lambda icon, item: _open_browser(gui_url())),
             Menu.SEPARATOR,
             MenuItem('Quit', quit_app),
         )
     else:
         menu = Menu(
             MenuItem(shown_address, None, enabled=False),
-            MenuItem('Open in browser', lambda icon, item: _open_browser(local_url()), default=True),
+            MenuItem('Open in browser', lambda icon, item: _open_browser(gui_url()), default=True),
             MenuItem('Server settings…', lambda icon, item: _open_browser(local_url().replace('/atem/', '/launcher/'))),
             MenuItem('Start at login', toggle_autostart, checked=lambda item: autostart_enabled()),
             Menu.SEPARATOR,
@@ -766,7 +786,8 @@ def main() -> None:
         lines.append('')
         print('\n'.join(lines), flush=True)
         if want_browser and supervisor.ready.wait(60):
-            _open_browser(_urls(supervisor.host, supervisor.port)[0])
+            local, lan = _urls(supervisor.host, supervisor.port)
+            _open_browser(_reachable_url(lan or local, local))
 
     booter = threading.Thread(target=boot, name='webatem-boot', daemon=True)
     booter.start()
