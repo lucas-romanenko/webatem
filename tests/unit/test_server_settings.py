@@ -147,10 +147,13 @@ def test_supervisor_moves_a_live_server_to_another_port():
         assert _answers(p2), 'the server should answer on the new port'
         assert not _answers(p1), 'the old port should be closed'
         assert (sup.host, sup.port) == ('127.0.0.1', p2) and sup.last_error is None
+        assert sup.running and not sup.restarting
+        assert sup.launcher_port and _answers(sup.launcher_port), "the window's own server rides through the move"
+        assert sup.launcher_url == f'http://127.0.0.1:{sup.launcher_port}/launcher/'
     finally:
         sup.stop()
         sup.join(20)
-    assert not _answers(p2)
+    assert not _answers(p2) and not _answers(sup.launcher_port)
 
 
 def test_supervisor_falls_back_when_the_new_port_is_taken():
@@ -224,12 +227,12 @@ def test_supervisor_takes_the_next_free_port_when_the_configured_one_is_taken():
 def test_window_child_command(monkeypatch):
     from webatem.launcher import _WindowChild
     class S:
-        port = 8880
+        launcher_url = 'http://127.0.0.1:45678/launcher/'
     monkeypatch.setattr('sys.frozen', False, raising=False)
     cmd = _WindowChild(S())._command()
-    assert cmd[1:] == ['-m', 'webatem', '--window', 'http://127.0.0.1:8880/launcher/']
+    assert cmd[1:] == ['-m', 'webatem', '--window', 'http://127.0.0.1:45678/launcher/']
     monkeypatch.setattr('sys.frozen', True, raising=False)
-    assert _WindowChild(S())._command()[1:] == ['--window', 'http://127.0.0.1:8880/launcher/']
+    assert _WindowChild(S())._command()[1:] == ['--window', 'http://127.0.0.1:45678/launcher/']
 
 
 def test_launcher_never_imports_pywebview_in_the_tray_process():
@@ -243,3 +246,65 @@ def test_launcher_never_imports_pywebview_in_the_tray_process():
     assert 'import webview' not in ''.join(
         line for line in open(launcher.__file__) if not line.lstrip().startswith(('#', '"'))
     ).split('def _window_process')[0]
+
+
+def test_supervisor_on_one_interface_also_answers_on_loopback():
+    """A VPN address is not always reachable from the machine that owns it:
+    the server bound to one interface listens on 127.0.0.1 as well."""
+    from webatem.launcher import _Supervisor
+    ips = [e['ip'] for e in srv.interfaces() if e['ip'] != '127.0.0.1' and not e['ip'].startswith('169.254.')]
+    if not ips:
+        pytest.skip('no non-loopback interface here')
+    ip, p = ips[0], _free_port()
+    sup = _Supervisor(_tiny_app, ip, p)
+    sup.start()
+    try:
+        assert sup.ready.wait(15) and sup.running and (sup.host, sup.port) == (ip, p)
+        assert _answers(p), 'loopback should answer too'
+        with socket.create_connection((ip, p), timeout=1):
+            pass
+    finally:
+        sup.stop()
+        sup.join(20)
+
+
+def test_supervisor_falls_back_to_all_interfaces_when_the_saved_one_is_gone():
+    """The VPN was on when the interface was chosen and is off today."""
+    from webatem.launcher import _Supervisor
+    p = _free_port()
+    sup = _Supervisor(_tiny_app, '203.0.113.7', p)      # TEST-NET-3: never one of ours
+    sup.start()
+    try:
+        assert sup.ready.wait(15), sup.last_error
+        assert (sup.host, sup.port) == ('0.0.0.0', p) and _answers(p)
+        assert '203.0.113.7' in sup.startup_note and 'all interfaces' in sup.startup_note
+    finally:
+        sup.stop()
+        sup.join(20)
+
+
+def test_supervisor_uses_a_prebound_launcher_socket():
+    from webatem.launcher import _Supervisor, _bind
+    sock = _bind('127.0.0.1', 0)
+    lp = sock.getsockname()[1]
+    sup = _Supervisor(_tiny_app, '127.0.0.1', _free_port(), launcher_socket=sock)
+    sup.start()
+    try:
+        assert sup.launcher_ready.wait(15) and sup.launcher_port == lp
+        deadline = time.time() + 10
+        while time.time() < deadline and not _answers(lp):
+            time.sleep(0.1)
+        assert _answers(lp)
+    finally:
+        sup.stop()
+        sup.join(20)
+
+
+def test_describe_reports_running_and_restarting(client, data_dir):
+    d = client.get('/server/settings/').json()
+    assert d['running'] is True and d['restarting'] is False       # plain uvicorn: serving by definition
+    ctl = _FakeController()
+    ctl.running, ctl.restarting = False, True
+    srv.runtime.register(ctl)
+    d = client.get('/server/settings/').json()
+    assert d['running'] is False and d['restarting'] is True
