@@ -124,20 +124,29 @@ def _open_browser(url: str) -> None:
         pass
 
 
-def _reachable_url(url: str, fallback=None, timeout: float = 1.5) -> str:
-    """Launch GUI opens the address the window shows — the real interface
-    and port, what other devices use — when this machine can connect to it;
-    otherwise the fallback (loopback, always served). A VPN address is not
-    always reachable from the machine that owns it."""
+def _launch_target(url: str, fallback=None, timeout: float = 3.0):
+    """(address to open, note). Launch GUI opens the address the window
+    shows — the real interface and port, what other devices use — when this
+    machine can connect to it; otherwise the fallback (loopback, always
+    served) with a note saying so. A VPN address is not always reachable
+    from the machine that owns it; the note and the log say which it was."""
     if not fallback:
-        return url
+        return url, None
+    from urllib.parse import urlsplit
+    parts = urlsplit(url)
     try:
-        from urllib.parse import urlsplit
-        parts = urlsplit(url)
         with socket.create_connection((parts.hostname, parts.port or 80), timeout=timeout):
-            return url
-    except (OSError, ValueError, TypeError):
-        return fallback
+            return url, None
+    except (OSError, ValueError, TypeError) as e:
+        reason = getattr(e, 'strerror', None) or str(e) or 'no answer'
+        note = (f'Opened {fallback} — this computer cannot reach {parts.hostname}:{parts.port} itself '
+                f'({reason}). Other devices use {url}.')
+        print(f'Launch GUI: {note}', flush=True)
+        return fallback, note
+
+
+def _reachable_url(url: str, fallback=None, timeout: float = 3.0) -> str:
+    return _launch_target(url, fallback, timeout)[0]
 
 
 # ---------------------------------------------------------------------------
@@ -568,7 +577,9 @@ def _window_process(url: str) -> None:
 
     class Api:
         def launch(self, target, fallback=None):
-            _open_browser(_reachable_url(target, fallback))
+            opened, note = _launch_target(target, fallback)
+            _open_browser(opened)
+            return {'opened': opened, 'note': note}
 
         def hide(self):
             window.destroy()

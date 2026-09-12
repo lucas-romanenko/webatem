@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "webatem"
-version = "0.2.6"
+version = "0.2.7"
 description = "Browser-based control for Blackmagic ATEM switchers: run it, open the browser, your switchers are there"
 readme = "README.md"
 license = { text = "MIT" }

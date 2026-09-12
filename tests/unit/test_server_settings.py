@@ -322,3 +322,16 @@ def test_launch_gui_opens_the_shown_address_when_reachable_else_loopback():
         assert _reachable_url(f'http://127.0.0.1:{dead}/atem/') == f'http://127.0.0.1:{dead}/atem/'   # nothing to fall back to
     finally:
         live.close()
+
+
+def test_launch_target_says_why_it_fell_back():
+    from webatem.launcher import _launch_target
+    dead = _free_port()
+    opened, note = _launch_target(f'http://127.0.0.1:{dead}/atem/', 'http://127.0.0.1:1/atem/')
+    assert opened == 'http://127.0.0.1:1/atem/' and f'127.0.0.1:{dead}' in note and 'Other devices use' in note
+    assert _launch_target('http://127.0.0.1:1/atem/') == ('http://127.0.0.1:1/atem/', None)
+
+
+def test_launcher_page_offers_the_interface_placeholder(client, data_dir):
+    html = client.get('/launcher/').content.decode()
+    assert 'Change network interface' in html and "d.source === 'default'" in html
