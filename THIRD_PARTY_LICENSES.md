@@ -1,9 +1,9 @@
 # Third-party licenses
 
 WebATEM's own code is MIT-licensed (see [LICENSE](LICENSE)). The ATEM
-protocol library it installs, [atemwire](https://github.com/lucas-romanenko/atemwire)
+protocol library it installs, [atemwire](https://github.com/lucas-romanenko/bmdwire/tree/main/atemwire)
 (a fork of Martijn Braam's pyatem), is LGPL-3.0-only and ships its own
-notices; [hyperdeckwire](https://github.com/lucas-romanenko/hyperdeckwire) is
+notices; [hyperdeckwire](https://github.com/lucas-romanenko/bmdwire/tree/main/hyperdeckwire) is
 MIT. Neither is copied into this repository.
 
 This file reproduces the license notices for the third-party frontend

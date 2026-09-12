@@ -222,13 +222,13 @@ Django + Channels (single ASGI worker, uvicorn)
 ATEM switchers (UDP 9910) · HyperDecks (TCP 9993 / FTP)
 ```
 
-- **[atemwire](https://github.com/lucas-romanenko/atemwire)** (PyPI) — the
+- **[atemwire](https://github.com/lucas-romanenko/bmdwire/tree/main/atemwire)** (PyPI) — the
   ATEM protocol library, a substantially modified fork of Martijn Braam's
   pyatem: declarative wire-format DSL, hardened UDP transport (in-order
   delivery, retransmit serving, clean session close), ref-counted connection
   pooling, native interleaved bulk transfers, macro bytecode transfer, and
   ASC-compatible profile save/restore. A small C extension does YCbCr↔RGB
-  conversion. **[hyperdeckwire](https://github.com/lucas-romanenko/hyperdeckwire)**
+  conversion. **[hyperdeckwire](https://github.com/lucas-romanenko/bmdwire/tree/main/hyperdeckwire)**
   (PyPI) drives the HyperDecks. Both are pinned in `requirements.txt`; a
   library change is a release there and a pin bump here.
 - **`atem_control/`** — the Django app: the WebSocket consumer, a declarative
@@ -262,11 +262,11 @@ workflow (`pyinstaller build/desktop/webatem.spec`).
 ## License
 
 - Application code: [MIT](LICENSE).
-- The ATEM protocol library, [atemwire](https://github.com/lucas-romanenko/atemwire),
+- The ATEM protocol library, [atemwire](https://github.com/lucas-romanenko/bmdwire/tree/main/atemwire),
   is a separate package (a fork of the [OpenAtem pyatem
   library](https://git.sr.ht/~martijnbraam/pyatem)) and is **LGPL-3.0-only**;
   WebATEM uses it as an installed dependency, unmodified.
-  [hyperdeckwire](https://github.com/lucas-romanenko/hyperdeckwire) is MIT.
+  [hyperdeckwire](https://github.com/lucas-romanenko/bmdwire/tree/main/hyperdeckwire) is MIT.
 - Bundled frontend assets (Alpine.js and its collapse plugin, Bootstrap Icons,
   Tailwind/daisyUI) are MIT and the Poppins font is OFL — notices in
   [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
