@@ -133,16 +133,14 @@
 
   // The three window buttons work through the desktop launcher's bridge;
   // in a plain browser Launch GUI just opens the app. Inside the launcher
-  // this page is served by the window's own loopback server, so Launch GUI
-  // opens the address shown (the real interface and port — what other
-  // devices use); the launcher falls back to 127.0.0.1 only when this
-  // machine cannot reach that address itself.
+  // Launch GUI opens the address shown — the real interface and port, what
+  // other devices use. No fallback: like Companion, it opens what the user
+  // chose.
   el('lwLaunch').addEventListener('click', function () {
     if (!current || current.running === false) return;
     if (!native) { window.open(location.origin + '/atem/', '_blank'); return; }
-    window.pywebview.api.launch(current.url, current.local_url).then(function (r) {
-      if (r && r.note) say(r.note, 'text-warning'); else say('Opened ' + current.url, 'text-base-content/70');
-    });
+    window.pywebview.api.launch(current.url);
+    say('Opened ' + current.url, 'text-base-content/70');
   });
   el('lwHide').addEventListener('click', function () { if (native) window.pywebview.api.hide(); });
   el('lwQuit').addEventListener('click', function () {
