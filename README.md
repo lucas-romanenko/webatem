@@ -46,7 +46,8 @@ Every way of running it **auto-discovers the ATEMs on your network**
 That's the whole setup — nothing to install alongside it, no Python, no Docker.
 
 While it runs it is a small window plus an icon in the **menu bar (Mac) /
-system tray (Windows)**, the way Bitfocus Companion works. The window shows
+system tray (Windows)**, the way Bitfocus Companion works — nothing in the
+Dock or on the taskbar, only the icon. The window shows
 **Running** and the address other devices use, and holds the settings:
 **Interface** (all of them, one adapter, or this computer only), **Port**,
 **Start minimized**, **Run at login**, with **Launch GUI** (opens the control

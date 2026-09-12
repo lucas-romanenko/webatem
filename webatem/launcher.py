@@ -553,6 +553,18 @@ def _window_process(url: str) -> None:
     page answers, then the page itself. Spawned before Django boots so the
     window is on screen while the server comes up."""
     import webview
+    if sys.platform == 'darwin':
+        # pywebview's Cocoa backend turns the process into a regular (Dock)
+        # application the moment it is imported. This is a menu-bar app's
+        # window, like Companion's: load that backend now (start() would),
+        # then back to an accessory app — no Dock icon, the window still
+        # shows and takes focus.
+        try:
+            import webview.platforms.cocoa  # noqa: F401
+            import AppKit
+            AppKit.NSApplication.sharedApplication().setActivationPolicy_(AppKit.NSApplicationActivationPolicyAccessory)
+        except Exception as e:  # noqa: BLE001
+            print(f'could not hide the Dock icon: {e}', flush=True)
 
     class Api:
         def launch(self, target, fallback=None):
@@ -562,6 +574,17 @@ def _window_process(url: str) -> None:
             window.destroy()
 
     window = webview.create_window(APP_NAME, html=_LOADING_HTML, js_api=Api(), width=520, height=700, resizable=False)
+    if os.name == 'nt':
+        # No taskbar button: the app lives in the notification area. Set
+        # before the form is shown (before_show fires on the UI thread with
+        # the form built and not yet shown), so no window handle is rebuilt.
+        def no_taskbar(*_):
+            try:
+                from webview.platforms import winforms
+                winforms.BrowserView.instances[window.uid].ShowInTaskbar = False
+            except Exception as e:  # noqa: BLE001
+                print(f'could not hide the taskbar button: {e}', flush=True)
+        window.events.before_show += no_taskbar
 
     def follow():
         import urllib.request
