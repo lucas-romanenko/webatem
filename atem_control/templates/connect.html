@@ -13,7 +13,12 @@
     <div class="card w-full max-w-md bg-base-200">
         <div class="card-body">
             <!-- Header -->
-            <div class="text-center mb-6">
+            <div class="text-center mb-6 relative">
+                <button type="button" class="btn btn-sm btn-ghost btn-circle absolute right-0 top-0"
+                        id="serverSettingsBtn" title="Server settings: address, port, start at login"
+                        onclick="document.getElementById('serverSettings').showModal()">
+                    <i class="bi bi-gear text-lg text-base-content/60"></i>
+                </button>
                 <h1
                     class="text-4xl font-bold mb-2 text-base-content">
                     ATEM Control</h1>
@@ -101,9 +106,49 @@
     </div>
 </div>
 
+            <!-- Server settings (Companion-style): which address and port this
+                 server listens on, and Start at login. Populated and applied by
+                 atem_server_settings.js through /server/settings/. -->
+            <dialog id="serverSettings" class="modal">
+                <div class="modal-box max-w-md">
+                    <form method="dialog" class="absolute right-3 top-3">
+                        <button class="btn btn-sm btn-circle btn-ghost" aria-label="Close">✕</button>
+                    </form>
+                    <h3 class="font-bold text-lg flex items-center gap-2">
+                        <i class="bi bi-hdd-network text-primary"></i> Server settings
+                    </h3>
+                    <p class="text-sm text-base-content/60 mt-1">
+                        Where this WebATEM listens. Other devices open the address shown below.
+                    </p>
+                    <form id="serverSettingsForm" class="space-y-3 mt-4" onsubmit="return false;">
+                        {% csrf_token %}
+                        <div class="form-control">
+                            <label class="label py-1" for="listenHost"><span class="label-text">Listen on</span></label>
+                            <select id="listenHost" class="select select-bordered w-full"></select>
+                        </div>
+                        <div class="form-control">
+                            <label class="label py-1" for="listenPort"><span class="label-text">Port</span></label>
+                            <input id="listenPort" type="number" min="1" max="65535" class="input input-bordered w-full font-mono">
+                        </div>
+                        <label class="label cursor-pointer justify-start gap-3 py-1 hidden" id="autostartRow">
+                            <input id="autostartToggle" type="checkbox" class="toggle toggle-primary">
+                            <span class="label-text">Start at login</span>
+                        </label>
+                        <p class="text-xs text-base-content/60 hidden" id="serverSettingsNote"></p>
+                        <p class="text-sm hidden" id="serverSettingsStatus"></p>
+                        <div class="flex justify-end gap-2 pt-4 border-t border-base-300">
+                            <button type="button" class="btn" onclick="document.getElementById('serverSettings').close()">Cancel</button>
+                            <button type="button" class="btn btn-primary" id="serverSettingsSave">Save</button>
+                        </div>
+                    </form>
+                </div>
+                <form method="dialog" class="modal-backdrop"><button>close</button></form>
+            </dialog>
+
 {% endblock %}
 
 {% block extra_js %}
 <script src="{% static_v 'js/atem_connect.js' %}"></script>
 <script src="{% static_v 'js/atem_discovery.js' %}"></script>
+<script src="{% static_v 'js/atem_server_settings.js' %}"></script>
 {% endblock %}
