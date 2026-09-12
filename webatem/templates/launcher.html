@@ -78,12 +78,18 @@
     else { state.textContent = 'Running'; addr.textContent = d.url; }
     el('lwLaunch').disabled = !!d.restarting || d.running === false;
     hostSel.innerHTML = '';
+    var ph = opt('', 'Change network interface…'); ph.disabled = true; hostSel.appendChild(ph);
     hostSel.appendChild(opt('0.0.0.0', 'All interfaces'));
     (d.interfaces || []).forEach(function (e) {
       hostSel.appendChild(opt(e.ip, e.ip === '127.0.0.1' ? 'localhost: 127.0.0.1' : e.name + ': ' + e.ip));
     });
-    hostSel.value = d.host;
-    if (hostSel.value !== d.host) { hostSel.appendChild(opt(d.host, d.host)); hostSel.value = d.host; }
+    // Nothing chosen yet (the built-in default): the placeholder, like
+    // Companion — the server is on all interfaces meanwhile.
+    if (d.source === 'default') { hostSel.value = ''; }
+    else {
+      hostSel.value = d.host;
+      if (hostSel.value !== d.host) { hostSel.appendChild(opt(d.host, d.host)); hostSel.value = d.host; }
+    }
     portInp.value = d.port;
     minim.checked = !!d.start_minimized;
     autoRow.hidden = !(d.autostart && d.autostart.available);
@@ -117,7 +123,7 @@
 
   function apply() {
     if (!current) return;
-    post({ host: hostSel.value, port: parseInt(portInp.value, 10) });
+    post({ host: hostSel.value || current.host, port: parseInt(portInp.value, 10) });
   }
   hostSel.addEventListener('change', apply);
   el('lwPortApply').addEventListener('click', apply);
@@ -127,13 +133,14 @@
 
   // The three window buttons work through the desktop launcher's bridge;
   // in a plain browser Launch GUI just opens the app. Inside the launcher
-  // this page is served by the window's own loopback server, so Launch GUI
-  // opens the address shown (the real interface and port — what other
-  // devices use); the launcher falls back to 127.0.0.1 only when this
-  // machine cannot reach that address itself.
+  // Launch GUI opens the address shown — the real interface and port, what
+  // other devices use. No fallback: like Companion, it opens what the user
+  // chose.
   el('lwLaunch').addEventListener('click', function () {
     if (!current || current.running === false) return;
-    if (native) window.pywebview.api.launch(current.url, current.local_url); else window.open(location.origin + '/atem/', '_blank');
+    if (!native) { window.open(location.origin + '/atem/', '_blank'); return; }
+    window.pywebview.api.launch(current.url);
+    say('Opened ' + current.url, 'text-base-content/70');
   });
   el('lwHide').addEventListener('click', function () { if (native) window.pywebview.api.hide(); });
   el('lwQuit').addEventListener('click', function () {

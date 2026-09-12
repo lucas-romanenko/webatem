@@ -56,11 +56,9 @@ it; the tray menu is three items — **Show/Hide window**, **Launch GUI**,
 **Quit**. Changing the interface or port restarts the server on the new
 address right there; handy on a laptop with Wi-Fi, Ethernet and a VPN at
 once. **Launch GUI** opens the address shown — the real interface and port,
-the same one other devices use. Whichever interface you pick, this computer
-can also reach its own server at `127.0.0.1` (a VPN address is not always
-reachable from the machine that owns it; Launch GUI falls back to that only
-then), and if that interface is gone at the next start WebATEM listens on
-all interfaces and says so. The same settings are behind
+the same one other devices use. (This computer also answers at `127.0.0.1`
+whichever interface is chosen, and if that interface is gone at the next
+start WebATEM listens on all interfaces and says so.) The same settings are behind
 the gear on the connect page. The default port is **8880** (Bitfocus
 Companion has 8000); if the port is taken anyway, the next free one is used
 and the window says so.

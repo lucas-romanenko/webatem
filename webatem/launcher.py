@@ -124,20 +124,13 @@ def _open_browser(url: str) -> None:
         pass
 
 
-def _reachable_url(url: str, fallback=None, timeout: float = 1.5) -> str:
-    """Launch GUI opens the address the window shows — the real interface
-    and port, what other devices use — when this machine can connect to it;
-    otherwise the fallback (loopback, always served). A VPN address is not
-    always reachable from the machine that owns it."""
-    if not fallback:
-        return url
-    try:
-        from urllib.parse import urlsplit
-        parts = urlsplit(url)
-        with socket.create_connection((parts.hostname, parts.port or 80), timeout=timeout):
-            return url
-    except (OSError, ValueError, TypeError):
-        return fallback
+def _gui_url(host: str, port: int) -> str:
+    """The address Launch GUI opens: the one the window shows — the real
+    interface and port, what other devices use. No probing, no fallback
+    (Lucas, 2026-09-12: Companion opens what the user chose; if that does
+    not work, it does not work)."""
+    local, lan = _urls(host, port)
+    return lan or local
 
 
 # ---------------------------------------------------------------------------
@@ -567,8 +560,8 @@ def _window_process(url: str) -> None:
             print(f'could not hide the Dock icon: {e}', flush=True)
 
     class Api:
-        def launch(self, target, fallback=None):
-            _open_browser(_reachable_url(target, fallback))
+        def launch(self, target):
+            _open_browser(target)
 
         def hide(self):
             window.destroy()
@@ -675,8 +668,7 @@ def _run_tray(supervisor, controller, window) -> None:
         return _urls(supervisor.host, supervisor.port)[0]
 
     def gui_url():
-        local, lan = _urls(supervisor.host, supervisor.port)
-        return _reachable_url(lan or local, local)
+        return _gui_url(supervisor.host, supervisor.port)
 
     def shown_address(item=None):
         local, lan = _urls(supervisor.host, supervisor.port)
@@ -809,8 +801,7 @@ def main() -> None:
         lines.append('')
         print('\n'.join(lines), flush=True)
         if want_browser and supervisor.ready.wait(60):
-            local, lan = _urls(supervisor.host, supervisor.port)
-            _open_browser(_reachable_url(lan or local, local))
+            _open_browser(_gui_url(supervisor.host, supervisor.port))
 
     booter = threading.Thread(target=boot, name='webatem-boot', daemon=True)
     booter.start()

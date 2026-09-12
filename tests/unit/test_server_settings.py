@@ -310,15 +310,14 @@ def test_describe_reports_running_and_restarting(client, data_dir):
     assert d['running'] is False and d['restarting'] is True
 
 
-def test_launch_gui_opens_the_shown_address_when_reachable_else_loopback():
-    from webatem.launcher import _reachable_url
-    live = socket.socket(); live.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    live.bind(('127.0.0.1', 0)); live.listen(1)
-    lp = live.getsockname()[1]
-    dead = _free_port()
-    try:
-        assert _reachable_url(f'http://127.0.0.1:{lp}/atem/', 'http://fallback/') == f'http://127.0.0.1:{lp}/atem/'
-        assert _reachable_url(f'http://127.0.0.1:{dead}/atem/', 'http://fallback/') == 'http://fallback/'
-        assert _reachable_url(f'http://127.0.0.1:{dead}/atem/') == f'http://127.0.0.1:{dead}/atem/'   # nothing to fall back to
-    finally:
-        live.close()
+def test_launch_gui_opens_the_shown_address_no_fallback():
+    """Companion opens what the user chose; so does WebATEM."""
+    from webatem.launcher import _gui_url
+    assert _gui_url('10.20.31.44', 8000) == 'http://10.20.31.44:8000/atem/'
+    assert _gui_url('127.0.0.1', 8880) == 'http://127.0.0.1:8880/atem/'
+    assert _gui_url('0.0.0.0', 8880).endswith(':8880/atem/')      # the LAN address, or loopback if unknown
+
+
+def test_launcher_page_offers_the_interface_placeholder(client, data_dir):
+    html = client.get('/launcher/').content.decode()
+    assert 'Change network interface' in html and "d.source === 'default'" in html
