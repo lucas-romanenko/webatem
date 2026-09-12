@@ -87,20 +87,13 @@ jobs:
       - name: Install dependencies
         run: |
           $PY -m pip install --upgrade pip setuptools wheel
-          $PY -m pip install -r requirements.txt pyinstaller
+          $PY -m pip install . pyinstaller
 
       # 4. atemwire (PyPI sdist) built its mediaconvert C extension inside the
       #    pip install above with THIS build's compiler + architecture
       #    (ARCHFLAGS forces x86_64 for the Rosetta build). Prove it imports.
       - name: Check the C extension
         run: $PY -c "import atemwire.mediaconvert, hyperdeckwire; print('atemwire.mediaconvert OK')"
-
-      # 5. Bundle-time static (WhiteNoise serves the read-only tree).
-      - name: Collect static
-        env:
-          SECRET_KEY: build-only
-          DEBUG: 'False'
-        run: $PY manage.py collectstatic --noinput --clear
 
       # 6. Freeze into one self-contained executable. `$PY -m PyInstaller` keeps
       #    the freeze in the same interpreter/arch as everything above.

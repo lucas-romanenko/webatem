@@ -1,0 +1,62 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "webatem"
+version = "0.2.0"
+description = "Browser-based control for Blackmagic ATEM switchers: run it, open the browser, your switchers are there"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [{ name = "Lucas Romanenko" }]
+# Exact pins on purpose: this is an application, installed into its own
+# environment (pipx, Docker, the desktop bundle), and one list here is what
+# Dependabot bumps. The two device libraries come from
+# github.com/lucas-romanenko/bmdwire.
+dependencies = [
+    "Django==6.0.7",
+    "channels==4.3.2",
+    "uvicorn[standard]==0.52.0",
+    "pillow==12.3.0",
+    "whitenoise==6.12.0",
+    "zeroconf==0.147.2",
+    "pystray==0.19.5",
+    "atemwire==0.15.0.dev1",
+    "hyperdeckwire==0.1.0.dev1",
+]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Development Status :: 4 - Beta",
+    "Environment :: Web Environment",
+    "Framework :: Django",
+    "Topic :: Multimedia :: Video",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest==9.1.1",
+    "pytest-django==4.12.0",
+    "pytest-timeout==2.4.0",
+]
+
+[project.scripts]
+webatem = "webatem.launcher:main"
+
+[project.urls]
+Repository = "https://github.com/lucas-romanenko/webatem"
+Issues = "https://github.com/lucas-romanenko/webatem/issues"
+
+[tool.setuptools.packages.find]
+include = ["webatem", "webatem.*", "atem_control", "atem_control.*"]
+exclude = ["atem_control.js*"]
+
+[tool.setuptools.package-data]
+webatem = ["templates/*.html"]
+atem_control = ["templates/**/*.html", "static/**/*"]

@@ -2,7 +2,7 @@
 # (github.com/lucas-romanenko/bmdwire) publishes a new version on PyPI; CI
 # builds the image and runs the suite on it; dependabot-automerge.yml merges
 # it when CI is green. Scoped to those two on purpose: everything else in
-# requirements.txt is bumped by hand. Grouped, so a bmdwire release that
+# pyproject.toml is bumped by hand. Grouped, so a bmdwire release that
 # touches both is one PR.
 # Dependabot re-checks PyPI whenever this file changes (and daily): edit
 # it to force a check.
