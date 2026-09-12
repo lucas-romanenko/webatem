@@ -9,20 +9,25 @@ can, exactly like ATEM Software Control.) Packaged into one self-contained
 executable per OS via PyInstaller — no Python, no Docker required by the
 user: download, double-click, browser opens, switchers appear.
 
-Like Bitfocus Companion: a small native window (pywebview, showing the
-app's own /launcher/ page — Running, the address, the interface and port,
-Start minimized, Run at login, Launch GUI / Hide / Quit) and a three-item
-menu bar / system tray icon (Show/Hide window, Launch GUI, Quit). Closing
-the window hides it; Quit is the way out. Where the window library is
-missing it is the tray alone (its menu then carries the address, Open in
-browser, Server settings… and Start at login); where no tray is possible
-either — a headless Linux server — it runs in the foreground as a plain
-process (Ctrl+C to quit).
+Like Bitfocus Companion: a menu bar / system tray icon with three items
+(Show/Hide window, Launch GUI, Quit) and a small window — Running, the
+address, the interface and port, Start minimized, Run at login, Launch GUI
+/ Hide / Quit. The window is the app's own /launcher/ page in a native
+webview, run as a SEPARATE PROCESS: a native window and a tray icon each
+want the main thread and the event loop, and sharing one loop between them
+lost the tray on macOS (0.2.2). The tray process is the server; Show spawns
+the window process, Hide ends it. Where the window library is missing it
+is the tray alone (its menu then opens the launcher page in the browser);
+where no tray is possible either — a headless Linux server — it runs in the
+foreground as a plain process (Ctrl+C to quit).
+
+If the port is taken at startup (Companion lives on 8000, hence 8880 here)
+the next free port is used and the window says so.
 
 The Docker image stays the path for a shared studio server (a Linux box
 with a dedicated IP), where mDNS works natively too.
 
-Env knobs (all optional): PORT (default 8000), HOST (default 0.0.0.0 so
+Env knobs (all optional): PORT (default 8880), HOST (default 0.0.0.0 so
 other devices on the LAN can reach it), WEBATEM_DATA_DIR (override the
 per-user data location), WEBATEM_NO_BROWSER=1 (don't auto-open a browser),
 WEBATEM_NO_TRAY=1 (foreground mode even on a desktop), WEBATEM_NO_WINDOW=1
@@ -195,17 +200,20 @@ def set_autostart(enabled: bool) -> None:
 
 # ---------------------------------------------------------------------------
 # The server, supervised: uvicorn in a worker thread, restarted on a new
-# address when the Server settings page asks (Companion's "run on interface
-# X, port Y"), the process — and the tray — staying up throughout.
+# address when the launcher window asks (Companion's "run on interface X,
+# port Y"), the process — and the tray — staying up throughout.
 # ---------------------------------------------------------------------------
 
 class _Supervisor:
+    PORT_TRIES = 20     # when the configured port is taken, walk up this far
+
     def __init__(self, application, host: str, port: int):
         self.application = application
         self.host, self.port = host, port
         self.last_error = None
-        self.ready = threading.Event()      # set once the first server answers
-        self.on_change = None               # tray hook: refresh the menu text
+        self.startup_note = None            # "port X was in use; using Y"
+        self.ready = threading.Event()      # set once a server answers
+        self.on_change = None               # hook after a restart
         self._wake = threading.Event()
         self._pending = None
         self._stopping = False
@@ -265,8 +273,22 @@ class _Supervisor:
         worker.join(15)
 
     def _loop(self) -> None:
+        wanted = self.port
         server, worker = self._serve(self.host, self.port)
-        if self._came_up(server, worker):
+        up = self._came_up(server, worker)
+        tries = 0
+        while not up and tries < self.PORT_TRIES:
+            # The port is taken (Companion on 8000, an earlier WebATEM, …):
+            # take the next one rather than failing.
+            self._shutdown(server, worker)
+            tries += 1
+            self.port = wanted + tries
+            server, worker = self._serve(self.host, self.port)
+            up = self._came_up(server, worker)
+        if up:
+            if self.port != wanted:
+                self.startup_note = f'Port {wanted} was in use, so WebATEM is on port {self.port} this time.'
+                print(self.startup_note, flush=True)
             self.ready.set()
         while True:
             self._wake.wait()
@@ -280,6 +302,7 @@ class _Supervisor:
             server, worker = self._serve(host, port)
             if self._came_up(server, worker):
                 self.host, self.port, self.last_error = host, port, None
+                self.startup_note = None
                 print(f'{APP_NAME} now listening on {host}:{port}', flush=True)
             else:
                 self.last_error = f'could not listen on {host}:{port} (is the port in use?)'
@@ -297,10 +320,11 @@ class _Supervisor:
 
 class _Controller:
     """What the web app sees (webatem.server.runtime): the live address, a
-    restart, and the start-at-login switch."""
+    restart, the start-at-login switch, and Quit."""
 
     def __init__(self, supervisor):
         self._s = supervisor
+        self.on_quit = None
 
     @property
     def host(self):
@@ -314,16 +338,116 @@ class _Controller:
     def last_error(self):
         return self._s.last_error
 
+    @property
+    def startup_note(self):
+        return self._s.startup_note
+
     def restart(self, host, port):
         self._s.restart(host, port)
+
+    def quit(self):
+        # From a request handler: let the response out, then stop the tray.
+        if self.on_quit:
+            threading.Timer(0.3, self.on_quit).start()
 
     autostart_enabled = staticmethod(autostart_enabled)
     set_autostart = staticmethod(set_autostart)
 
 
 # ---------------------------------------------------------------------------
-# The tray (pystray). Runs on the main thread — macOS insists — with the
-# server supervised in threads; Quit stops the supervisor.
+# The launcher window: this same program run again with --window <url>,
+# showing the page in a native webview (pywebview). Its own process, so its
+# event loop never competes with the tray's.
+# ---------------------------------------------------------------------------
+
+def _window_support() -> bool:
+    """Is pywebview there? Checked WITHOUT importing it: importing its macOS
+    backend switches this process to a regular (Dock) application at import
+    time, which is exactly what took the menu-bar icon away in 0.2.2. The
+    window process imports it; this one never does."""
+    if os.environ.get('WEBATEM_NO_WINDOW') == '1':
+        return False
+    try:
+        import importlib.util
+        return importlib.util.find_spec('webview') is not None
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _on_ui_thread(fn) -> None:
+    """Run fn on the tray's event loop thread where that matters (macOS: the
+    NSApplication is stopped from the main thread only)."""
+    if sys.platform == 'darwin':
+        try:
+            from PyObjCTools import AppHelper
+            AppHelper.callAfter(fn)
+            return
+        except Exception:  # noqa: BLE001
+            pass
+    fn()
+
+
+def _window_process(url: str) -> None:
+    import webview
+
+    class Api:
+        def launch(self, target):
+            _open_browser(target)
+
+        def hide(self):
+            window.destroy()
+
+    window = webview.create_window(APP_NAME, url, js_api=Api(), width=520, height=700, resizable=False)
+    webview.start()
+
+
+class _WindowChild:
+    """Show spawns the window process, Hide ends it; the close button ends
+    it too (the page's Hide and Quit go through the bridge / the server)."""
+
+    def __init__(self, supervisor):
+        self._s = supervisor
+        self._proc = None
+
+    def _command(self):
+        url = f'http://127.0.0.1:{self._s.port}/launcher/'
+        if getattr(sys, 'frozen', False):
+            return [sys.executable, '--window', url]
+        return [sys.executable, '-m', 'webatem', '--window', url]
+
+    def visible(self) -> bool:
+        return self._proc is not None and self._proc.poll() is None
+
+    def show(self) -> None:
+        if self.visible():
+            return
+        import subprocess
+        try:
+            self._proc = subprocess.Popen(self._command(), stdin=subprocess.DEVNULL,
+                                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception as e:  # noqa: BLE001
+            print(f'The launcher window could not open: {e}', flush=True)
+            self._proc = None
+
+    def hide(self) -> None:
+        proc, self._proc = self._proc, None
+        if proc is not None and proc.poll() is None:
+            proc.terminate()
+
+            def reap():
+                try:
+                    proc.wait(3)
+                except Exception:  # noqa: BLE001
+                    proc.kill()
+            threading.Thread(target=reap, daemon=True).start()
+
+    def toggle(self) -> None:
+        self.hide() if self.visible() else self.show()
+
+
+# ---------------------------------------------------------------------------
+# The tray (pystray) — on the main thread, as macOS insists (0.2.1's proven
+# shape). The server runs supervised in threads; Quit stops everything.
 # ---------------------------------------------------------------------------
 
 def _tray_image():
@@ -338,7 +462,7 @@ def _tray_image():
         return Image.new('RGBA', (64, 64), (246, 139, 42, 255))
 
 
-def _run_tray(supervisor) -> None:
+def _run_tray(supervisor, controller, window, show_window: bool) -> None:
     """Menu bar / system tray icon; returns when the user quits."""
     import pystray
     from pystray import Menu, MenuItem
@@ -356,136 +480,56 @@ def _run_tray(supervisor) -> None:
         except Exception as e:  # noqa: BLE001 — a failed toggle must not kill the tray
             print(f'Start at login could not be changed: {e}', flush=True)
 
-    def quit_app(icon, item):
-        icon.stop()
+    def quit_app(icon, item=None):
+        if window is not None:
+            window.hide()
+        _on_ui_thread(icon.stop)
 
-    menu = Menu(
-        MenuItem(shown_address, None, enabled=False),
-        MenuItem('Open in browser', lambda icon, item: _open_browser(local_url()), default=True),
-        MenuItem('Server settings…', lambda icon, item: _open_browser(local_url().replace('/atem/', '/launcher/'))),
-        MenuItem('Start at login', toggle_autostart, checked=lambda item: autostart_enabled()),
-        Menu.SEPARATOR,
-        MenuItem('Quit', quit_app),
-    )
+    if window is not None:
+        # Companion's three: the window carries the settings.
+        menu = Menu(
+            MenuItem('Show/Hide window', lambda icon, item: window.toggle(), default=True),
+            MenuItem('Launch GUI', lambda icon, item: _open_browser(local_url())),
+            Menu.SEPARATOR,
+            MenuItem('Quit', quit_app),
+        )
+    else:
+        menu = Menu(
+            MenuItem(shown_address, None, enabled=False),
+            MenuItem('Open in browser', lambda icon, item: _open_browser(local_url()), default=True),
+            MenuItem('Server settings…', lambda icon, item: _open_browser(local_url().replace('/atem/', '/launcher/'))),
+            MenuItem('Start at login', toggle_autostart, checked=lambda item: autostart_enabled()),
+            Menu.SEPARATOR,
+            MenuItem('Quit', quit_app),
+        )
     icon = pystray.Icon(APP_NAME, _tray_image(), APP_NAME, menu)
     supervisor.on_change = icon.update_menu
+    controller.on_quit = lambda: quit_app(icon)
 
-    def watch_server():
-        # If the server never comes up (port taken, say), do not sit in the
-        # tray pretending: tell the user and leave.
-        if not supervisor.ready.wait(30):
+    def after_start():
+        if not supervisor.ready.wait(60):
             try:
                 if getattr(icon, 'HAS_NOTIFICATION', False):
-                    icon.notify(f'{APP_NAME} could not start on port {supervisor.port} (is it already running?)', APP_NAME)
+                    icon.notify(f'{APP_NAME} could not find a free port to start on.', APP_NAME)
             except Exception:
                 pass
             time.sleep(3)
             icon.stop()
+            return
+        if window is not None and show_window:
+            window.show()
 
-    threading.Thread(target=watch_server, daemon=True).start()
+    threading.Thread(target=after_start, daemon=True).start()
     icon.run()
 
 
-class _WindowApi:
-    """What the launcher page can call through window.pywebview.api."""
-
-    def __init__(self, supervisor):
-        self._s = supervisor
-        self.window = None
-        self.visible = True
-
-    def launch(self):
-        _open_browser(_urls(self._s.host, self._s.port)[0])
-
-    def show(self):
-        if self.window is not None:
-            self.window.show()
-            self.visible = True
-
-    def hide(self):
-        if self.window is not None:
-            self.window.hide()
-            self.visible = False
-
-    def toggle(self):
-        self.hide() if self.visible else self.show()
-
-    def quit(self):
-        if self.window is not None:
-            self.window.destroy()       # webview.start() returns; main() winds down
-
-
-_LOADING_HTML = ('<!doctype html><html style="background:#121315;color:#8f9399;font:15px system-ui">'
-                 '<body style="display:flex;align-items:center;justify-content:center;height:100vh;margin:0">'
-                 'Starting WebATEM…</body></html>')
-
-
-def _run_window(supervisor, start_hidden: bool) -> None:
-    """The Companion-style launcher window plus a detached tray icon sharing
-    its event loop. Returns when the user quits."""
-    import webview
-    api = _WindowApi(supervisor)
-
-    def page_url():
-        return f'http://127.0.0.1:{supervisor.port}/launcher/'
-
-    window = webview.create_window(APP_NAME, html=_LOADING_HTML, js_api=api, width=520, height=680,
-                                   resizable=False, hidden=start_hidden)
-    api.window = window
-    api.visible = not start_hidden
-
-    def on_closing():
-        api.hide()                  # the close button hides; Quit quits
-        return False
-    window.events.closing += on_closing
-    window.events.shown += lambda: setattr(api, 'visible', True)
-
-    icon = None
-    try:
-        import pystray
-        from pystray import Menu, MenuItem
-        menu = Menu(
-            MenuItem('Show/Hide window', lambda i, it: api.toggle(), default=True),
-            MenuItem('Launch GUI', lambda i, it: api.launch()),
-            Menu.SEPARATOR,
-            MenuItem('Quit', lambda i, it: api.quit()),
-        )
-        icon = pystray.Icon(APP_NAME, _tray_image(), APP_NAME, menu)
-        if sys.platform == 'darwin':
-            from AppKit import NSApplication
-            icon.run_detached(darwin_nsapplication=NSApplication.sharedApplication())
-        else:
-            icon.run_detached()
-    except Exception as e:  # noqa: BLE001
-        print(f'No tray ({e}); the window alone.', flush=True)
-        icon = None
-
-    def after_change():
-        # The server moved: the page it came from is gone; load it from the new address.
-        try:
-            window.load_url(page_url())
-        except Exception:
-            pass
-    supervisor.on_change = after_change
-
-    def setup():
-        if supervisor.ready.wait(30):
-            window.load_url(page_url())
-        else:
-            window.load_html('<!doctype html><html style="background:#121315;color:#ff5c6e;font:15px system-ui">'
-                             '<body style="padding:2rem">WebATEM could not start on port '
-                             f'{supervisor.port}. Is it already running?</body></html>')
-
-    webview.start(func=setup)
-    if icon is not None:
-        try:
-            icon.stop()
-        except Exception:
-            pass
-
-
 def main() -> None:
-    autostarted = '--autostart' in sys.argv[1:]
+    argv = sys.argv[1:]
+    if '--window' in argv:
+        i = argv.index('--window')
+        _window_process(argv[i + 1] if i + 1 < len(argv) else 'http://127.0.0.1:8880/launcher/')
+        return
+    autostarted = '--autostart' in argv
     data_dir = _data_dir()
     # A windowed build has no console: send output to a log in the data dir
     # so a failure is diagnosable instead of silent.
@@ -512,12 +556,6 @@ def main() -> None:
     from webatem import server as srv
     cfg = srv.load()                      # HOST/PORT env > server.json > defaults
     host, port = cfg['host'], cfg['port']
-    local_url, lan_url = _urls(host, port)
-
-    # Auto-open a browser only where there's a display, the user didn't opt
-    # out, and this is not the login-time start (a browser popping up at
-    # boot is not what anyone ticked the box for).
-    want_browser = _has_display() and os.environ.get('WEBATEM_NO_BROWSER') != '1' and not autostarted
 
     from webatem.asgi import application
 
@@ -528,42 +566,42 @@ def main() -> None:
         except Exception as e:  # noqa: BLE001
             print(f'No tray ({e}); running in the foreground.', flush=True)
             want_tray = False
-    want_window = want_tray and os.environ.get('WEBATEM_NO_WINDOW') != '1'
-    if want_window:
-        try:
-            import webview  # noqa: F401 — probe only
-        except Exception as e:  # noqa: BLE001
-            print(f'No launcher window ({e}); the tray alone.', flush=True)
-            want_window = False
+    has_window = want_tray and _window_support()
+    # With the window there is no browser at start: the window is the first
+    # thing (Launch GUI opens the browser). Without it, the browser opens as
+    # before — unless this is the login-time start.
+    want_browser = _has_display() and not has_window and os.environ.get('WEBATEM_NO_BROWSER') != '1' and not autostarted
 
-    lines = ['', f'  {APP_NAME} is running.']
-    if want_browser:
-        lines.append(f'  Opening {local_url} …')
+    supervisor = _Supervisor(application, host, port)
+    controller = _Controller(supervisor)
+    srv.runtime.register(controller)
+    supervisor.start()
+
+    local_url, lan_url = _urls(host, port)
+    lines = ['', f'  {APP_NAME} is starting on {host}:{port}.']
     lines.append(f'  On this machine:      {local_url}')
     if lan_url and lan_url != local_url:
         lines.append(f'  From another device:  {lan_url}')
-    lines.append('  Address and port: the launcher window, or the gear on the connect page.')
+    lines.append('  Address and port: the launcher window, or /launcher/ in a browser.')
     lines.append('  (Quit from the tray icon.)' if want_tray else '  (Press Ctrl+C to quit.)')
     lines.append('')
     print('\n'.join(lines), flush=True)
 
-    supervisor = _Supervisor(application, host, port)
-    srv.runtime.register(_Controller(supervisor))
-    supervisor.start()
     if want_browser:
-        threading.Thread(target=lambda: supervisor.ready.wait(30) and _open_browser(local_url), daemon=True).start()
+        threading.Thread(target=lambda: supervisor.ready.wait(60) and _open_browser(_urls(supervisor.host, supervisor.port)[0]), daemon=True).start()
 
+    window = _WindowChild(supervisor) if has_window else None
     try:
-        if want_window:
-            _run_window(supervisor, start_hidden=bool(cfg.get('start_minimized')) or autostarted)
-        elif want_tray:
-            _run_tray(supervisor)
+        if want_tray:
+            _run_tray(supervisor, controller, window, show_window=not (bool(cfg.get('start_minimized')) or autostarted))
         else:
             while supervisor._thread.is_alive():
                 supervisor._thread.join(1)
     except KeyboardInterrupt:
         pass
     finally:
+        if window is not None:
+            window.hide()
         supervisor.stop()
         supervisor.join(20)
 

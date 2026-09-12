@@ -9,8 +9,8 @@ services:
     # the app must see the studio subnet directly to receive ATEM
     # mDNS/Bonjour multicast and to hello-sweep the local /24. On a bridge
     # network, multicast never arrives and a sweep would scan the docker
-    # subnet. The app binds host :8000 directly (set PORT via the
-    # entrypoint's env if 8000 is taken). Linux hosts only — host mode is
+    # subnet. The app binds host :8880 directly (set PORT via the
+    # entrypoint's env if 8880 is taken). Linux hosts only — host mode is
     # a no-op on Docker Desktop for macOS/Windows; studio VMs are Linux.
     network_mode: host
     environment:
@@ -22,7 +22,7 @@ services:
       - TIME_ZONE=${TIME_ZONE:-UTC}
       - TIME_FORMAT_24HR=${TIME_FORMAT_24HR:-True}
       - APP_TITLE=${APP_TITLE:-WebATEM}
-      - PORT=${PORT:-8000}
+      - PORT=${PORT:-8880}
     volumes:
       - webatem-data:/app/data
     restart: unless-stopped

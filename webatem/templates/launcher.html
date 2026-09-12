@@ -59,6 +59,7 @@
   'use strict';
   var root = document.getElementById('launcherWindow');
   var ENDPOINT = root.dataset.settings;
+  var QUIT = ENDPOINT.replace('settings/', 'quit/');
   var el = function (id) { return document.getElementById(id); };
   var hostSel = el('lwHost'), portInp = el('lwPort'), state = el('lwState'), addr = el('lwAddr');
   var minim = el('lwMinimized'), auto = el('lwAutostart'), autoRow = el('lwAutoRow');
@@ -88,7 +89,22 @@
     hostSel.disabled = locked; portInp.disabled = locked; el('lwPortApply').disabled = locked;
     note.textContent = locked ? 'The address is fixed by this server\'s environment (HOST / PORT).' : '';
     note.classList.toggle('hidden', !locked);
-    if (d.last_error) say('Last change failed: ' + d.last_error, 'text-error'); else status.classList.add('hidden');
+    if (d.last_error) say('Last change failed: ' + d.last_error, 'text-error');
+    else if (d.startup_note) say(d.startup_note, 'text-warning');
+    else status.classList.add('hidden');
+    el('lwQuit').hidden = !(native || d.quit_available);
+  }
+
+  // After a restart on another address the page it came from is gone: wait
+  // for the new one to answer, then go there.
+  function follow(url) {
+    var target = url.replace('/atem/', '/launcher/');
+    var deadline = Date.now() + 30000;
+    (function poll() {
+      fetch(target, { mode: 'no-cors', cache: 'no-store' })
+        .then(function () { location.href = target; })
+        .catch(function () { if (Date.now() < deadline) setTimeout(poll, 500); else { say('The server did not come up at ' + url + '; it falls back to the previous address.', 'text-error'); load(); } });
+    })();
   }
 
   function load() {
@@ -101,7 +117,7 @@
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
       .then(function (res) {
         if (!res.ok) { say(res.d.error || 'Not saved.', 'text-error'); load(); return; }
-        if (after) after(res.d); else if (res.d.restarting) { state.textContent = 'Restarting…'; addr.textContent = res.d.url; }
+        if (after) after(res.d); else if (res.d.restarting) { state.textContent = 'Restarting…'; addr.textContent = res.d.url; follow(res.d.url); }
         else if (res.d.note) say(res.d.note, 'text-warning');
         else status.classList.add('hidden');
       })
@@ -121,14 +137,21 @@
   // The three window buttons work through the desktop launcher's bridge;
   // in a plain browser Launch GUI just opens the app.
   el('lwLaunch').addEventListener('click', function () {
-    if (native) window.pywebview.api.launch(); else if (current) window.open(current.local_url, '_blank');
+    if (!current) return;
+    if (native) window.pywebview.api.launch(current.local_url); else window.open(current.local_url, '_blank');
   });
   el('lwHide').addEventListener('click', function () { if (native) window.pywebview.api.hide(); });
-  el('lwQuit').addEventListener('click', function () { if (native) window.pywebview.api.quit(); });
+  el('lwQuit').addEventListener('click', function () {
+    fetch(QUIT, { method: 'POST', headers: { 'X-CSRFToken': csrf() } })
+      .then(function () { state.textContent = 'Stopped'; addr.textContent = ''; if (native) setTimeout(function () { window.pywebview.api.hide(); }, 300); })
+      .catch(function () { say('Could not stop the server from here.', 'text-error'); });
+  });
   window.addEventListener('pywebviewready', function () {
     native = true; el('lwHide').hidden = false; el('lwQuit').hidden = false;
   });
   if (window.pywebview && window.pywebview.api) { native = true; el('lwHide').hidden = false; el('lwQuit').hidden = false; }
+  // the page needs the CSRF cookie for its POSTs
+  if (!csrf()) fetch('/atem/', { cache: 'no-store' }).catch(function () {});
   load();
 })();
 </script>

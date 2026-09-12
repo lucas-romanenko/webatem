@@ -49,5 +49,5 @@ RUN adduser --uid 1000 --disabled-password --gecos "" appuser \
     && chown -R appuser:appuser /app
 USER appuser
 
-EXPOSE 8000
+EXPOSE 8880
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
