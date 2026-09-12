@@ -1,15 +1,21 @@
-# Publish WebATEM to PyPI on a GitHub release, via trusted publishing (OIDC):
-# no API token in this repository. PyPI must know this workflow first: on
+# Publish WebATEM to PyPI on a v* tag, via trusted publishing (OIDC): no
+# API token in this repository. PyPI must know this workflow first: on
 # pypi.org add a (pending) publisher for project "webatem" with owner
 # lucas-romanenko, repository webatem, workflow publish.yml, environment
 # pypi. The tag must be "v" + the version in pyproject.toml, and the job
 # refuses to build otherwise. Re-publish an existing tag with "Run
 # workflow" and the tag name (a no-op if the files are already there).
+#
+# Why the tag and not the GitHub release: the release is created by the
+# desktop build with the workflow token, and events raised with that token
+# never start other workflows — v0.2.3 reached GitHub and GHCR but not PyPI
+# until this was run by hand. The tag push is the one thing that always
+# happens, and it is what the desktop and image workflows key on too.
 name: Publish to PyPI
 
 on:
-  release:
-    types: [published]
+  push:
+    tags: ['v*']
   workflow_dispatch:
     inputs:
       tag:
