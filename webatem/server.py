@@ -34,18 +34,23 @@ def config_path() -> Path:
     return data_dir() / 'server.json'
 
 
-def load() -> dict:
-    """The effective listen address and where each part came from."""
-    host, port, source = DEFAULT_HOST, DEFAULT_PORT, 'default'
+def _saved() -> dict:
     try:
         saved = json.loads(config_path().read_text())
-        if isinstance(saved, dict):
-            if saved.get('host'):
-                host, source = str(saved['host']), 'file'
-            if saved.get('port'):
-                port, source = int(saved['port']), 'file'
+        return saved if isinstance(saved, dict) else {}
     except (OSError, ValueError):
-        pass
+        return {}
+
+
+def load() -> dict:
+    """The effective listen address and where each part came from, plus the
+    launcher window's own preference (start minimized)."""
+    host, port, source = DEFAULT_HOST, DEFAULT_PORT, 'default'
+    saved = _saved()
+    if saved.get('host'):
+        host, source = str(saved['host']), 'file'
+    if saved.get('port'):
+        port, source = int(saved['port']), 'file'
     env_host, env_port = os.environ.get('HOST'), os.environ.get('PORT')
     if env_host or env_port:
         source = 'env'
@@ -56,13 +61,31 @@ def load() -> dict:
                 port = int(env_port)
             except ValueError:
                 pass
-    return {'host': host, 'port': port, 'source': source}
+    return {'host': host, 'port': port, 'source': source,
+            'start_minimized': bool(saved.get('start_minimized', False))}
 
 
-def save(host: str, port: int) -> None:
+def save(host: str, port: int, start_minimized=None) -> None:
+    saved = _saved()
+    saved.update({'host': host, 'port': int(port)})
+    if start_minimized is not None:
+        saved['start_minimized'] = bool(start_minimized)
     path = config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps({'host': host, 'port': int(port)}, indent=1) + '\n')
+    path.write_text(json.dumps(saved, indent=1) + '\n')
+
+
+def lan_ip():
+    """This machine's primary LAN address (no packet is sent). None if unknown."""
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(('8.8.8.8', 80))
+        return s.getsockname()[0]
+    except OSError:
+        return None
+    finally:
+        s.close()
 
 
 def interfaces() -> list:
@@ -150,10 +173,14 @@ def describe() -> dict:
     """Everything the Server settings page shows."""
     cfg = load()
     host, port = runtime.current()
+    reach = host if host not in (DEFAULT_HOST, '') else (lan_ip() or '127.0.0.1')
     return {
         'host': host,
         'port': port,
         'source': cfg['source'],
+        'start_minimized': cfg['start_minimized'],
+        'url': f'http://{reach}:{port}/atem/',        # what other devices open
+        'local_url': f'http://127.0.0.1:{port}/atem/',
         'interfaces': interfaces(),
         'restart_available': runtime.restart_available(),
         'last_error': runtime.last_error(),

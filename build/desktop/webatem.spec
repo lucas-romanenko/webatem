@@ -48,7 +48,7 @@ for pkg in ('atem_control', 'webatem'):
 # Third-party packages that lean on dynamic imports / ship data. atemwire and
 # hyperdeckwire are the Blackmagic device libraries (PyPI); collect_all takes
 # atemwire's compiled mediaconvert extension along with the modules.
-for pkg in ('django', 'channels', 'whitenoise', 'uvicorn', 'zeroconf', 'PIL', 'atemwire', 'hyperdeckwire', 'pystray'):
+for pkg in ('django', 'channels', 'whitenoise', 'uvicorn', 'zeroconf', 'PIL', 'atemwire', 'hyperdeckwire', 'pystray', 'webview', 'bottle', 'proxy_tools'):
     d, b, h = collect_all(pkg)
     datas += d
     binaries += b
@@ -61,7 +61,7 @@ for pkg in ('django', 'channels', 'whitenoise', 'uvicorn', 'zeroconf', 'PIL', 'a
 # _xorg / _appindicator); on macOS it sits on PyObjC, whose frameworks load
 # dynamically too.
 if IS_MAC:
-    for pkg in ('objc', 'AppKit', 'Foundation', 'Quartz'):
+    for pkg in ('objc', 'AppKit', 'Foundation', 'Quartz', 'WebKit', 'Security', 'UniformTypeIdentifiers'):
         try:
             d, b, h = collect_all(pkg)
             datas += d
@@ -69,6 +69,10 @@ if IS_MAC:
             hiddenimports += h
         except Exception:
             pass
+
+# The launcher window on Windows is WebView2 through pythonnet.
+if IS_WIN:
+    hiddenimports += ['clr', 'clr_loader', 'webview.platforms.edgechromium', 'webview.platforms.winforms']
 
 # uvicorn/asgi bits PyInstaller routinely misses.
 hiddenimports += [

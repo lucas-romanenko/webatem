@@ -27,11 +27,11 @@ def data_dir(tmp_path, monkeypatch):
 
 
 def test_load_precedence_env_over_file_over_defaults(data_dir, monkeypatch):
-    assert srv.load() == {'host': '0.0.0.0', 'port': 8000, 'source': 'default'}
+    assert srv.load() == {'host': '0.0.0.0', 'port': 8000, 'source': 'default', 'start_minimized': False}
     srv.save('127.0.0.1', 9000)
-    assert srv.load() == {'host': '127.0.0.1', 'port': 9000, 'source': 'file'}
+    assert srv.load() == {'host': '127.0.0.1', 'port': 9000, 'source': 'file', 'start_minimized': False}
     monkeypatch.setenv('PORT', '9100')
-    assert srv.load() == {'host': '127.0.0.1', 'port': 9100, 'source': 'env'}
+    assert srv.load() == {'host': '127.0.0.1', 'port': 9100, 'source': 'env', 'start_minimized': False}
 
 
 def test_validate_rejects_bad_ports_and_unknown_hosts(data_dir):
@@ -167,3 +167,25 @@ def test_supervisor_falls_back_when_the_new_port_is_taken():
         blocker.close()
         sup.stop()
         sup.join(20)
+
+
+def test_start_minimized_is_kept_beside_the_address(data_dir):
+    srv.save('0.0.0.0', 8000, start_minimized=True)
+    assert srv.load()['start_minimized'] is True
+    srv.save('0.0.0.0', 8001)                      # an address change leaves the flag alone
+    assert srv.load() == {'host': '0.0.0.0', 'port': 8001, 'source': 'file', 'start_minimized': True}
+
+
+def test_post_start_minimized(client, data_dir):
+    r = client.post('/server/settings/', json.dumps({'host': '0.0.0.0', 'port': 8000, 'start_minimized': True}), content_type='application/json')
+    assert r.status_code == 200 and srv.load()['start_minimized'] is True
+    d = client.get('/server/settings/').json()
+    assert d['start_minimized'] is True and d['url'].endswith(':8000/atem/') and d['local_url'] == 'http://127.0.0.1:8000/atem/'
+
+
+def test_launcher_page_renders(client, data_dir):
+    r = client.get('/launcher/')
+    body = r.content.decode()
+    assert r.status_code == 200
+    for needle in ('Launch GUI', 'Start minimized', 'Run at login', 'lwHost', 'lwPort', '/server/settings/'):
+        assert needle in body, needle

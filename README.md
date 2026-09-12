@@ -43,17 +43,16 @@ Every way of running it **auto-discovers the ATEMs on your network**
 
 That's the whole setup — nothing to install alongside it, no Python, no Docker.
 
-While it runs it sits in the **menu bar (Mac) / system tray (Windows)**: the
-icon's menu shows the address other devices can use, opens the browser again,
-and has a **Start at login** switch so it is back after every reboot. **Quit**
-is there too. Like Bitfocus Companion: the server is the app, the browser is
-the interface.
-
-**Which network, which port:** the gear on the connect page (also *Server
-settings…* in the tray menu) lists this machine's interfaces — all of them,
-one adapter, or this computer only — and the port. Saving restarts the server
-on the new address and sends your browser there. Handy on a laptop with
-Wi-Fi, Ethernet and a VPN at once.
+While it runs it is a small window plus an icon in the **menu bar (Mac) /
+system tray (Windows)**, the way Bitfocus Companion works. The window shows
+**Running** and the address other devices use, and holds the settings:
+**Interface** (all of them, one adapter, or this computer only), **Port**,
+**Start minimized**, **Run at login**, with **Launch GUI** (opens the control
+page in your browser), **Hide** and **Quit**. Closing the window just hides
+it; the tray menu is three items — **Show/Hide window**, **Launch GUI**,
+**Quit**. Changing the interface or port restarts the server on the new
+address right there; handy on a laptop with Wi-Fi, Ethernet and a VPN at
+once. The same settings are behind the gear on the connect page.
 
 <details>
 <summary><b>First-launch security prompt</b> (the app isn't code-signed yet)</summary>
