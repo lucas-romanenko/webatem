@@ -4,6 +4,8 @@
 # it when CI is green. Scoped to those two on purpose: everything else in
 # requirements.txt is bumped by hand. Grouped, so a bmdwire release that
 # touches both is one PR.
+# Dependabot re-checks PyPI whenever this file changes (and daily): edit
+# it to force a check.
 version: 2
 updates:
   - package-ecosystem: pip
