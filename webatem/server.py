@@ -5,7 +5,7 @@ page can apply a change without a quit.
 Resolution order for the address: the HOST / PORT environment variables
 (Docker, a systemd unit: the environment is the configuration there) win
 over ``server.json`` in the data dir (what the settings page writes), which
-wins over the defaults (all interfaces, 8000).
+wins over the defaults (all interfaces, 8880).
 
 ``runtime`` is the seam between the web app and the process that hosts it.
 The launcher registers a controller with ``restart(host, port)`` and the
@@ -17,7 +17,7 @@ import os
 from pathlib import Path
 
 DEFAULT_HOST = '0.0.0.0'
-DEFAULT_PORT = 8000
+DEFAULT_PORT = 8880   # not 8000: Bitfocus Companion lives there on the same desks
 NO_RESTART_NOTE = ('Saved. This server was started with a fixed address (the HOST / PORT '
                    'environment, or plain uvicorn), so the change applies where that is set.')
 
@@ -156,6 +156,15 @@ class _Runtime:
     def last_error(self):
         return getattr(self.controller, 'last_error', None)
 
+    def startup_note(self):
+        return getattr(self.controller, 'startup_note', None)
+
+    def quit_available(self) -> bool:
+        return self.controller is not None and hasattr(self.controller, 'quit')
+
+    def quit(self) -> None:
+        self.controller.quit()
+
     def autostart_available(self) -> bool:
         return self.controller is not None and hasattr(self.controller, 'set_autostart')
 
@@ -184,5 +193,7 @@ def describe() -> dict:
         'interfaces': interfaces(),
         'restart_available': runtime.restart_available(),
         'last_error': runtime.last_error(),
+        'startup_note': runtime.startup_note(),
+        'quit_available': runtime.quit_available(),
         'autostart': {'available': runtime.autostart_available(), 'enabled': runtime.autostart_enabled()},
     }

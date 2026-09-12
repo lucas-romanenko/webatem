@@ -38,8 +38,10 @@ Every way of running it **auto-discovers the ATEMs on your network**
 
 1. Click your platform's **Download** button at the top (or the
    [Releases](https://github.com/lucas-romanenko/webatem/releases) page).
-2. Open it. It starts a local server, opens your browser, and lists the ATEMs
-   on your network. Pick one and you're controlling it.
+2. Open it. The icon appears in the menu bar / tray and the launcher window
+   comes up: pick the interface and port if the defaults are not right, then
+   **Launch GUI** opens the control page in your browser with the ATEMs on
+   your network listed. Pick one and you're controlling it.
 
 That's the whole setup — nothing to install alongside it, no Python, no Docker.
 
@@ -52,7 +54,9 @@ page in your browser), **Hide** and **Quit**. Closing the window just hides
 it; the tray menu is three items — **Show/Hide window**, **Launch GUI**,
 **Quit**. Changing the interface or port restarts the server on the new
 address right there; handy on a laptop with Wi-Fi, Ethernet and a VPN at
-once. The same settings are behind the gear on the connect page.
+once. The same settings are behind the gear on the connect page. The default
+port is **8880** (Bitfocus Companion has 8000); if the port is taken anyway,
+the next free one is used and the window says so.
 
 <details>
 <summary><b>First-launch security prompt</b> (the app isn't code-signed yet)</summary>
@@ -79,7 +83,7 @@ docker run -d --name webatem --network host --restart unless-stopped \
   -v webatem-data:/app/data ghcr.io/lucas-romanenko/webatem:latest
 ```
 
-Open `http://<that-box>:8000` from any device on the network. It comes back
+Open `http://<that-box>:8880` from any device on the network. It comes back
 automatically on reboot. No `.env` file needed — every setting has a working
 default (SQLite DB + a generated secret key live in the `webatem-data`
 volume); see [.env.example](.env.example) for knobs like `PORT`, `TIME_ZONE`,
@@ -93,8 +97,8 @@ prints the address to open from another device:
 
 ```
 WebATEM is running.
-  On this machine:      http://127.0.0.1:8000/atem/
-  From another device:  http://192.168.1.50:8000/atem/
+  On this machine:      http://127.0.0.1:8880/atem/
+  From another device:  http://192.168.1.50:8880/atem/
 ```
 
 Keep it up with a systemd unit, `tmux` or `nohup`.
@@ -113,7 +117,7 @@ webatem
 ```
 
 Same behaviour as the download: a native process on your real network, the
-browser opens, the tray icon appears where there is a desktop. Prebuilt wheels
+tray icon and the launcher window appear where there is a desktop. Prebuilt wheels
 for every platform mean no compiler is needed. Upgrade with
 `pipx upgrade webatem`.
 
@@ -253,7 +257,7 @@ ATEM switchers (UDP 9910) · HyperDecks (TCP 9993 / FTP)
   command dispatch table, the media-pool watcher, LAN discovery, and the UI.
 - **`webatem/`** — the project package: settings, the ASGI entry, the
   WebSocket origin guard, and `launcher.py` — the `webatem` command that runs
-  the same web app locally, opens a browser and lives in the tray. The
+  the same web app locally and lives in the tray with its launcher window. The
   downloads are that launcher frozen per OS by PyInstaller
   (`build/desktop/`); the PyPI package is the same code installed by pip.
 - **One tag, three deliverables.** A `v*` tag publishes the Mac / Windows /
@@ -268,7 +272,7 @@ git clone https://github.com/lucas-romanenko/webatem.git
 cd webatem
 npm install && npm run build:css      # the stylesheet — without it the app renders unstyled
 pip install -e ".[test]"              # Python 3.10+; the device libraries install as wheels
-python -m webatem                     # the launcher: server + browser + tray
+python -m webatem                     # the launcher: server + tray + window
 python -m pytest tests/ -q            # the suite (no hardware needed)
 ```
 

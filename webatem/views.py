@@ -4,7 +4,7 @@ import json
 
 from django.http import HttpResponseBadRequest, JsonResponse
 from django.shortcuts import render
-from django.views.decorators.http import require_GET, require_http_methods
+from django.views.decorators.http import require_GET, require_POST, require_http_methods
 
 from webatem import server as srv
 
@@ -59,3 +59,13 @@ def launcher_page(request):
     except Exception:  # noqa: BLE001 — a checkout without metadata
         ver = 'dev'
     return render(request, 'launcher.html', {'version': ver})
+
+
+@require_POST
+def server_quit(request):
+    """The launcher window's Quit: stop the whole launcher (tray included).
+    Only meaningful under the launcher; plain uvicorn answers 409."""
+    if not srv.runtime.quit_available():
+        return JsonResponse({'error': 'not running under the launcher'}, status=409)
+    srv.runtime.quit()
+    return JsonResponse({'ok': True})
