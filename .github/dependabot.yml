@@ -20,6 +20,13 @@ updates:
         patterns:
           - atemwire
           - hyperdeckwire
+    # Dependabot holds new versions back for 3 days by default (its
+    # platform-wide cooldown). These are our own releases, published from
+    # bmdwire when they are ready, so they are exempt and arrive at once.
+    cooldown:
+      exclude:
+        - atemwire
+        - hyperdeckwire
     labels:
       - dependencies
     commit-message:
