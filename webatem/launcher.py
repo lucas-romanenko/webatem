@@ -78,16 +78,29 @@ def _has_display() -> bool:
     return bool(os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY'))
 
 
-def _wait_for_port(port: int, timeout: float = 30) -> bool:
-    """True once something accepts connections on 127.0.0.1:port."""
+def _wait_for_port(port: int, timeout: float = 30, host: str = '127.0.0.1') -> bool:
+    """True once something accepts connections on host:port (loopback when
+    the server listens on every interface)."""
+    if host in ('0.0.0.0', ''):
+        host = '127.0.0.1'
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            with socket.create_connection(('127.0.0.1', port), timeout=0.5):
+            with socket.create_connection((host, port), timeout=0.5):
                 return True
         except OSError:
             time.sleep(0.25)
     return False
+
+
+def _urls(host: str, port: int):
+    """(local_url, lan_url) for a listen address: on all interfaces the
+    machine's LAN address is the one to hand out; on a specific address
+    that address is both."""
+    if host in ('0.0.0.0', ''):
+        lan = _lan_ip()
+        return (f'http://127.0.0.1:{port}/atem/', f'http://{lan}:{port}/atem/' if lan else None)
+    return (f'http://{host}:{port}/atem/', f'http://{host}:{port}/atem/')
 
 
 def _open_browser(url: str) -> None:
@@ -177,8 +190,136 @@ def set_autostart(enabled: bool) -> None:
 
 
 # ---------------------------------------------------------------------------
+# The server, supervised: uvicorn in a worker thread, restarted on a new
+# address when the Server settings page asks (Companion's "run on interface
+# X, port Y"), the process — and the tray — staying up throughout.
+# ---------------------------------------------------------------------------
+
+class _Supervisor:
+    def __init__(self, application, host: str, port: int):
+        self.application = application
+        self.host, self.port = host, port
+        self.last_error = None
+        self.ready = threading.Event()      # set once the first server answers
+        self.on_change = None               # tray hook: refresh the menu text
+        self._wake = threading.Event()
+        self._pending = None
+        self._stopping = False
+        self._thread = None
+
+    def start(self) -> None:
+        self._thread = threading.Thread(target=self._loop, name='webatem-supervisor', daemon=True)
+        self._thread.start()
+
+    def restart(self, host: str, port: int) -> None:
+        """Called from a request handler: hand the change to the supervisor
+        thread and return, so the HTTP response gets out first."""
+        self._pending = (host, port)
+        self._wake.set()
+
+    def stop(self) -> None:
+        self._stopping = True
+        self._wake.set()
+
+    def join(self, timeout=None) -> None:
+        if self._thread is not None:
+            self._thread.join(timeout)
+
+    def _serve(self, host: str, port: int):
+        import uvicorn
+        server = uvicorn.Server(uvicorn.Config(self.application, host=host, port=port, log_level='info'))
+
+        def run():
+            try:
+                server.run()
+            except SystemExit:
+                pass            # uvicorn's exit on a failed bind; _came_up reports it
+            except Exception as e:  # noqa: BLE001
+                print(f'server thread ended: {e}', flush=True)
+
+        worker = threading.Thread(target=run, name='webatem-uvicorn', daemon=True)
+        worker.start()
+        return server, worker
+
+    @staticmethod
+    def _came_up(server, worker, timeout: float = 15) -> bool:
+        """uvicorn's own word: ``started`` flips once it is bound and serving;
+        a failed bind ends the thread instead. (Probing the port would be
+        fooled by whatever else holds it.)"""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if getattr(server, 'started', False):
+                return True
+            if not worker.is_alive():
+                return False
+            time.sleep(0.05)
+        return False
+
+    @staticmethod
+    def _shutdown(server, worker) -> None:
+        server.should_exit = True
+        worker.join(15)
+
+    def _loop(self) -> None:
+        server, worker = self._serve(self.host, self.port)
+        if self._came_up(server, worker):
+            self.ready.set()
+        while True:
+            self._wake.wait()
+            self._wake.clear()
+            if self._stopping:
+                break
+            host, port = self._pending
+            self._pending = None
+            time.sleep(0.5)                     # let the settings response reach the browser
+            self._shutdown(server, worker)
+            server, worker = self._serve(host, port)
+            if self._came_up(server, worker):
+                self.host, self.port, self.last_error = host, port, None
+                print(f'{APP_NAME} now listening on {host}:{port}', flush=True)
+            else:
+                self.last_error = f'could not listen on {host}:{port} (is the port in use?)'
+                print(self.last_error + '; back to ' + f'{self.host}:{self.port}', flush=True)
+                self._shutdown(server, worker)
+                server, worker = self._serve(self.host, self.port)
+                self._came_up(server, worker)
+            if self.on_change:
+                try:
+                    self.on_change()
+                except Exception:
+                    pass
+        self._shutdown(server, worker)
+
+
+class _Controller:
+    """What the web app sees (webatem.server.runtime): the live address, a
+    restart, and the start-at-login switch."""
+
+    def __init__(self, supervisor):
+        self._s = supervisor
+
+    @property
+    def host(self):
+        return self._s.host
+
+    @property
+    def port(self):
+        return self._s.port
+
+    @property
+    def last_error(self):
+        return self._s.last_error
+
+    def restart(self, host, port):
+        self._s.restart(host, port)
+
+    autostart_enabled = staticmethod(autostart_enabled)
+    set_autostart = staticmethod(set_autostart)
+
+
+# ---------------------------------------------------------------------------
 # The tray (pystray). Runs on the main thread — macOS insists — with the
-# server in a thread; Quit sets the server's should_exit and it winds down.
+# server supervised in threads; Quit stops the supervisor.
 # ---------------------------------------------------------------------------
 
 def _tray_image():
@@ -193,10 +334,17 @@ def _tray_image():
         return Image.new('RGBA', (64, 64), (246, 139, 42, 255))
 
 
-def _run_tray(server, local_url: str, lan_url, port: int) -> None:
+def _run_tray(supervisor) -> None:
     """Menu bar / system tray icon; returns when the user quits."""
     import pystray
     from pystray import Menu, MenuItem
+
+    def local_url():
+        return _urls(supervisor.host, supervisor.port)[0]
+
+    def shown_address(item=None):
+        local, lan = _urls(supervisor.host, supervisor.port)
+        return f'{APP_NAME} is running at {lan or local}'
 
     def toggle_autostart(icon, item):
         try:
@@ -207,23 +355,24 @@ def _run_tray(server, local_url: str, lan_url, port: int) -> None:
     def quit_app(icon, item):
         icon.stop()
 
-    address = lan_url or local_url
     menu = Menu(
-        MenuItem(f'{APP_NAME} is running at {address}', None, enabled=False),
-        MenuItem('Open in browser', lambda icon, item: _open_browser(local_url), default=True),
+        MenuItem(shown_address, None, enabled=False),
+        MenuItem('Open in browser', lambda icon, item: _open_browser(local_url()), default=True),
+        MenuItem('Server settings…', lambda icon, item: _open_browser(local_url() + '?settings=1')),
         MenuItem('Start at login', toggle_autostart, checked=lambda item: autostart_enabled()),
         Menu.SEPARATOR,
         MenuItem('Quit', quit_app),
     )
     icon = pystray.Icon(APP_NAME, _tray_image(), APP_NAME, menu)
+    supervisor.on_change = icon.update_menu
 
     def watch_server():
         # If the server never comes up (port taken, say), do not sit in the
         # tray pretending: tell the user and leave.
-        if not _wait_for_port(port, timeout=30):
+        if not supervisor.ready.wait(30):
             try:
                 if getattr(icon, 'HAS_NOTIFICATION', False):
-                    icon.notify(f'{APP_NAME} could not start on port {port} (is it already running?)', APP_NAME)
+                    icon.notify(f'{APP_NAME} could not start on port {supervisor.port} (is it already running?)', APP_NAME)
             except Exception:
                 pass
             time.sleep(3)
@@ -231,7 +380,6 @@ def _run_tray(server, local_url: str, lan_url, port: int) -> None:
 
     threading.Thread(target=watch_server, daemon=True).start()
     icon.run()
-    server.should_exit = True
 
 
 def main() -> None:
@@ -259,21 +407,17 @@ def main() -> None:
     call_command('migrate', '--noinput', verbosity=0)
     call_command('collectstatic', '--noinput', '--clear', verbosity=0)
 
-    port = int(os.environ.get('PORT', '8000'))
-    host = os.environ.get('HOST', '0.0.0.0')  # bind all — reachable from other devices too
-    local_url = f'http://127.0.0.1:{port}/atem/'
-    lan = _lan_ip()
-    lan_url = f'http://{lan}:{port}/atem/' if lan else None
+    from webatem import server as srv
+    cfg = srv.load()                      # HOST/PORT env > server.json > defaults
+    host, port = cfg['host'], cfg['port']
+    local_url, lan_url = _urls(host, port)
 
     # Auto-open a browser only where there's a display, the user didn't opt
     # out, and this is not the login-time start (a browser popping up at
     # boot is not what anyone ticked the box for).
     want_browser = _has_display() and os.environ.get('WEBATEM_NO_BROWSER') != '1' and not autostarted
-    if want_browser:
-        threading.Thread(target=lambda: _wait_for_port(port) and _open_browser(local_url), daemon=True).start()
 
     from webatem.asgi import application
-    import uvicorn
 
     want_tray = _has_display() and os.environ.get('WEBATEM_NO_TRAY') != '1'
     if want_tray:
@@ -287,22 +431,30 @@ def main() -> None:
     if want_browser:
         lines.append(f'  Opening {local_url} …')
     lines.append(f'  On this machine:      {local_url}')
-    if lan_url:
+    if lan_url and lan_url != local_url:
         lines.append(f'  From another device:  {lan_url}')
+    lines.append('  Address and port: the gear on the connect page (Server settings).')
     lines.append('  (Quit from the tray icon.)' if want_tray else '  (Press Ctrl+C to quit.)')
     lines.append('')
     print('\n'.join(lines), flush=True)
 
-    config = uvicorn.Config(application, host=host, port=port, log_level='info')
-    server = uvicorn.Server(config)
-    if not want_tray:
-        server.run()
-        return
+    supervisor = _Supervisor(application, host, port)
+    srv.runtime.register(_Controller(supervisor))
+    supervisor.start()
+    if want_browser:
+        threading.Thread(target=lambda: supervisor.ready.wait(30) and _open_browser(local_url), daemon=True).start()
 
-    worker = threading.Thread(target=server.run, daemon=True)
-    worker.start()
-    _run_tray(server, local_url, lan_url, port)
-    worker.join(timeout=10)
+    try:
+        if want_tray:
+            _run_tray(supervisor)
+        else:
+            while supervisor._thread.is_alive():
+                supervisor._thread.join(1)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        supervisor.stop()
+        supervisor.join(20)
 
 
 if __name__ == '__main__':

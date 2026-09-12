@@ -49,6 +49,12 @@ and has a **Start at login** switch so it is back after every reboot. **Quit**
 is there too. Like Bitfocus Companion: the server is the app, the browser is
 the interface.
 
+**Which network, which port:** the gear on the connect page (also *Server
+settings…* in the tray menu) lists this machine's interfaces — all of them,
+one adapter, or this computer only — and the port. Saving restarts the server
+on the new address and sends your browser there. Handy on a laptop with
+Wi-Fi, Ethernet and a VPN at once.
+
 <details>
 <summary><b>First-launch security prompt</b> (the app isn't code-signed yet)</summary>
 
@@ -78,7 +84,8 @@ Open `http://<that-box>:8000` from any device on the network. It comes back
 automatically on reboot. No `.env` file needed — every setting has a working
 default (SQLite DB + a generated secret key live in the `webatem-data`
 volume); see [.env.example](.env.example) for knobs like `PORT`, `TIME_ZONE`,
-`ALLOWED_HOSTS`. Prefer Compose? The repository's
+`ALLOWED_HOSTS`. (In Docker the address and port come from that environment,
+so the connect page's Server settings show them read-only.) Prefer Compose? The repository's
 [compose.yml](compose.yml) runs the same image: `docker compose up -d`.
 
 Without Docker: the `webatem-linux-x64` binary from the Releases page runs
