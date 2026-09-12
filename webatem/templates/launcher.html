@@ -64,7 +64,8 @@
   var hostSel = el('lwHost'), portInp = el('lwPort'), state = el('lwState'), addr = el('lwAddr');
   var minim = el('lwMinimized'), auto = el('lwAutostart'), autoRow = el('lwAutoRow');
   var note = el('lwNote'), status = el('lwStatus');
-  var current = null, native = false;
+  var current = null, native = false, pollTimer = null;
+  function schedule(ms) { clearTimeout(pollTimer); pollTimer = setTimeout(load, ms); }
 
   function csrf() { var m = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/); return m ? m[1] : ''; }
   function say(text, cls) { status.textContent = text; status.className = 'text-sm ' + (cls || 'text-base-content/70'); status.classList.remove('hidden'); }
@@ -72,8 +73,10 @@
 
   function render(d) {
     current = d;
-    state.textContent = 'Running';
-    addr.textContent = d.url;
+    if (d.restarting) { state.textContent = 'Restarting…'; addr.textContent = '\u00a0'; schedule(500); }
+    else if (d.running === false) { state.textContent = 'Not running'; addr.textContent = '\u00a0'; }
+    else { state.textContent = 'Running'; addr.textContent = d.url; }
+    el('lwLaunch').disabled = !!d.restarting || d.running === false;
     hostSel.innerHTML = '';
     hostSel.appendChild(opt('0.0.0.0', 'All interfaces'));
     (d.interfaces || []).forEach(function (e) {
@@ -85,7 +88,7 @@
     minim.checked = !!d.start_minimized;
     autoRow.hidden = !(d.autostart && d.autostart.available);
     auto.checked = !!(d.autostart && d.autostart.enabled);
-    var locked = !d.restart_available;
+    var locked = !d.restart_available || !!d.restarting;
     hostSel.disabled = locked; portInp.disabled = locked; el('lwPortApply').disabled = locked;
     note.textContent = locked ? 'The address is fixed by this server\'s environment (HOST / PORT).' : '';
     note.classList.toggle('hidden', !locked);
@@ -95,21 +98,9 @@
     el('lwQuit').hidden = !(native || d.quit_available);
   }
 
-  // After a restart on another address the page it came from is gone: wait
-  // for the new one to answer, then go there.
-  function follow(url) {
-    var target = url.replace('/atem/', '/launcher/');
-    var deadline = Date.now() + 30000;
-    (function poll() {
-      fetch(target, { mode: 'no-cors', cache: 'no-store' })
-        .then(function () { location.href = target; })
-        .catch(function () { if (Date.now() < deadline) setTimeout(poll, 500); else { say('The server did not come up at ' + url + '; it falls back to the previous address.', 'text-error'); load(); } });
-    })();
-  }
-
   function load() {
     fetch(ENDPOINT, { cache: 'no-store' }).then(function (r) { return r.json(); }).then(render)
-      .catch(function () { state.textContent = 'Starting…'; setTimeout(load, 1000); });
+      .catch(function () { state.textContent = 'Starting…'; schedule(1000); });
   }
 
   function post(body, after) {
@@ -117,7 +108,7 @@
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
       .then(function (res) {
         if (!res.ok) { say(res.d.error || 'Not saved.', 'text-error'); load(); return; }
-        if (after) after(res.d); else if (res.d.restarting) { state.textContent = 'Restarting…'; addr.textContent = res.d.url; follow(res.d.url); }
+        if (after) after(res.d); else if (res.d.restarting) { state.textContent = 'Restarting…'; addr.textContent = '\u00a0'; el('lwLaunch').disabled = true; schedule(700); }
         else if (res.d.note) say(res.d.note, 'text-warning');
         else status.classList.add('hidden');
       })
@@ -135,10 +126,12 @@
   auto.addEventListener('change', function () { if (current) post({ host: current.host, port: current.port, autostart: auto.checked }, function (d) { if (d.autostart_error) say('Run at login could not be changed: ' + d.autostart_error, 'text-warning'); }); });
 
   // The three window buttons work through the desktop launcher's bridge;
-  // in a plain browser Launch GUI just opens the app.
+  // in a plain browser Launch GUI just opens the app. Inside the launcher
+  // this page is served by the window's own loopback server, so the app is
+  // at the public server's loopback address, never this page's origin.
   el('lwLaunch').addEventListener('click', function () {
-    if (!current) return;
-    if (native) window.pywebview.api.launch(current.local_url); else window.open(current.local_url, '_blank');
+    if (!current || current.running === false) return;
+    if (native) window.pywebview.api.launch(current.local_url); else window.open(location.origin + '/atem/', '_blank');
   });
   el('lwHide').addEventListener('click', function () { if (native) window.pywebview.api.hide(); });
   el('lwQuit').addEventListener('click', function () {

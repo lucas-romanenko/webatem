@@ -159,6 +159,13 @@ class _Runtime:
     def startup_note(self):
         return getattr(self.controller, 'startup_note', None)
 
+    def running(self) -> bool:
+        # plain uvicorn is serving by definition; the launcher says
+        return bool(getattr(self.controller, 'running', True))
+
+    def restarting(self) -> bool:
+        return bool(getattr(self.controller, 'restarting', False))
+
     def quit_available(self) -> bool:
         return self.controller is not None and hasattr(self.controller, 'quit')
 
@@ -194,6 +201,8 @@ def describe() -> dict:
         'restart_available': runtime.restart_available(),
         'last_error': runtime.last_error(),
         'startup_note': runtime.startup_note(),
+        'running': runtime.running(),
+        'restarting': runtime.restarting(),
         'quit_available': runtime.quit_available(),
         'autostart': {'available': runtime.autostart_available(), 'enabled': runtime.autostart_enabled()},
     }

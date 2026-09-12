@@ -16,7 +16,9 @@ address, the interface and port, Start minimized, Run at login, Launch GUI
 webview, run as a SEPARATE PROCESS: a native window and a tray icon each
 want the main thread and the event loop, and sharing one loop between them
 lost the tray on macOS (0.2.2). The tray process is the server; Show spawns
-the window process, Hide ends it. Where the window library is missing it
+the window process, Hide ends it. The window's page comes from a second,
+loopback-only server on its own port that never restarts, so it keeps
+working while the public server moves (0.2.3 lost it that way). Where the window library is missing it
 is the tray alone (its menu then opens the launcher page in the browser);
 where no tray is possible either — a headless Linux server — it runs in the
 foreground as a plain process (Ctrl+C to quit).
@@ -34,6 +36,7 @@ WEBATEM_NO_TRAY=1 (foreground mode even on a desktop), WEBATEM_NO_WINDOW=1
 (tray only, no window). ``--autostart`` on the command line is what the
 login entry passes: no browser at boot, window hidden.
 """
+import errno
 import os
 import plistlib
 import socket
@@ -103,13 +106,15 @@ def _wait_for_port(port: int, timeout: float = 30, host: str = '127.0.0.1') -> b
 
 
 def _urls(host: str, port: int):
-    """(local_url, lan_url) for a listen address: on all interfaces the
-    machine's LAN address is the one to hand out; on a specific address
-    that address is both."""
+    """(local_url, lan_url) for a listen address. Loopback always answers
+    (the supervisor listens there beside a specific interface), so the local
+    address is 127.0.0.1 whatever the interface; the one to hand out is the
+    machine's LAN address on all interfaces, else the interface itself."""
+    local = f'http://127.0.0.1:{port}/atem/'
     if host in ('0.0.0.0', ''):
         lan = _lan_ip()
-        return (f'http://127.0.0.1:{port}/atem/', f'http://{lan}:{port}/atem/' if lan else None)
-    return (f'http://{host}:{port}/atem/', f'http://{host}:{port}/atem/')
+        return (local, f'http://{lan}:{port}/atem/' if lan else None)
+    return (local, f'http://{host}:{port}/atem/')
 
 
 def _open_browser(url: str) -> None:
@@ -204,20 +209,71 @@ def set_autostart(enabled: bool) -> None:
 # port Y"), the process — and the tray — staying up throughout.
 # ---------------------------------------------------------------------------
 
-class _Supervisor:
-    PORT_TRIES = 20     # when the configured port is taken, walk up this far
+def _bind(host: str, port: int) -> socket.socket:
+    """A listening socket, bound now — so a taken port or a gone interface is
+    an OSError here and not a SystemExit inside uvicorn's thread."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        s.bind((host, port))
+        s.listen(2048)
+    except OSError:
+        s.close()
+        raise
+    return s
 
-    def __init__(self, application, host: str, port: int):
-        self.application = application
+
+def _close_all(sockets) -> None:
+    for s in sockets:
+        try:
+            s.close()
+        except OSError:
+            pass
+
+
+class _Supervisor:
+    """Two uvicorn servers on one app, each in its own thread:
+
+    * the PUBLIC one on the chosen interface and port — restarted when the
+      launcher window asks (Companion's "run on interface X, port Y"). When
+      the interface is one specific address it ALSO listens on 127.0.0.1, so
+      this computer can always reach its own server (a VPN address is not
+      necessarily reachable from the machine that owns it — 0.2.3 sent
+      Launch GUI to a dead address that way);
+    * the LAUNCHER one on 127.0.0.1 and a free port, never restarted — the
+      window's own address. 0.2.3 served the window from the public server,
+      so moving that server killed the page that was steering it (stuck on
+      Restarting, Quit refused, a white window on the next Show).
+    """
+    PORT_TRIES = 20     # when the configured port is taken, walk up this far
+    ANY = ('0.0.0.0', '127.0.0.1', '', 'localhost')
+
+    def __init__(self, application, host: str, port: int, launcher_socket=None):
+        self.application = application      # set by the boot thread when None here
         self.host, self.port = host, port
+        self._launcher_socket = launcher_socket   # bound early so the window can open at once
+        self.running = False                # a public server is up on host:port
+        self.restarting = False
         self.last_error = None
-        self.startup_note = None            # "port X was in use; using Y"
-        self.ready = threading.Event()      # set once a server answers
+        self.startup_note = None            # "port X was in use; using Y", "interface gone"
+        self.launcher_port = None           # the window's own server
+        self.launcher_ready = threading.Event()
+        self.ready = threading.Event()      # set once the public server first answers
         self.on_change = None               # hook after a restart
         self._wake = threading.Event()
         self._pending = None
         self._stopping = False
         self._thread = None
+        self._launcher = (None, None, [])
+
+    @property
+    def launcher_url(self):
+        return f'http://127.0.0.1:{self.launcher_port}/launcher/' if self.launcher_port else None
+
+    def boot_failed(self, error: str) -> None:
+        """The boot thread could not bring Django up: nothing will serve."""
+        self.last_error = error
+        self.launcher_ready.set()
 
     def start(self) -> None:
         self._thread = threading.Thread(target=self._loop, name='webatem-supervisor', daemon=True)
@@ -237,27 +293,38 @@ class _Supervisor:
         if self._thread is not None:
             self._thread.join(timeout)
 
-    def _serve(self, host: str, port: int):
+    def _listen(self, host: str, port: int):
+        sockets = [_bind(host, port)]
+        if host not in self.ANY:
+            try:
+                sockets.append(_bind('127.0.0.1', port))
+            except OSError:
+                _close_all(sockets)
+                raise
+        return sockets
+
+    def _serve(self, host: str, port: int, sockets):
         import uvicorn
-        server = uvicorn.Server(uvicorn.Config(self.application, host=host, port=port, log_level='info'))
+        # host/port are for the log line only: the sockets are bound already.
+        server = uvicorn.Server(uvicorn.Config(self.application, host=host, port=port, log_level='info',
+                                               timeout_graceful_shutdown=5))
 
         def run():
             try:
-                server.run()
+                server.run(sockets=sockets)
             except SystemExit:
-                pass            # uvicorn's exit on a failed bind; _came_up reports it
+                pass
             except Exception as e:  # noqa: BLE001
                 print(f'server thread ended: {e}', flush=True)
 
-        worker = threading.Thread(target=run, name='webatem-uvicorn', daemon=True)
+        worker = threading.Thread(target=run, name=f'webatem-uvicorn-{port}', daemon=True)
         worker.start()
         return server, worker
 
     @staticmethod
     def _came_up(server, worker, timeout: float = 15) -> bool:
-        """uvicorn's own word: ``started`` flips once it is bound and serving;
-        a failed bind ends the thread instead. (Probing the port would be
-        fooled by whatever else holds it.)"""
+        """uvicorn's own word: ``started`` flips once it is serving; a failure
+        ends the thread instead."""
         deadline = time.time() + timeout
         while time.time() < deadline:
             if getattr(server, 'started', False):
@@ -268,28 +335,83 @@ class _Supervisor:
         return False
 
     @staticmethod
-    def _shutdown(server, worker) -> None:
-        server.should_exit = True
-        worker.join(15)
+    def _shutdown(server, worker, sockets) -> None:
+        if server is not None:
+            server.should_exit = True
+            worker.join(15)
+        _close_all(sockets)
+
+    def _start_public(self, host: str, port: int):
+        """Bind + serve; (server, worker, sockets), or OSError from the bind /
+        RuntimeError if uvicorn did not come up."""
+        sockets = self._listen(host, port)
+        server, worker = self._serve(host, port, sockets)
+        if not self._came_up(server, worker):
+            self._shutdown(server, worker, sockets)
+            raise RuntimeError(f'the server did not start on {host}:{port}')
+        return server, worker, sockets
+
+    @staticmethod
+    def _reason(e) -> str:
+        return getattr(e, 'strerror', None) or str(e)
 
     def _loop(self) -> None:
-        wanted = self.port
-        server, worker = self._serve(self.host, self.port)
-        up = self._came_up(server, worker)
-        tries = 0
-        while not up and tries < self.PORT_TRIES:
-            # The port is taken (Companion on 8000, an earlier WebATEM, …):
-            # take the next one rather than failing.
-            self._shutdown(server, worker)
-            tries += 1
-            self.port = wanted + tries
-            server, worker = self._serve(self.host, self.port)
-            up = self._came_up(server, worker)
-        if up:
-            if self.port != wanted:
-                self.startup_note = f'Port {wanted} was in use, so WebATEM is on port {self.port} this time.'
+        # 1. The window's own server: loopback, any free port, for the life
+        #    of the process. (HTTP only — the window never opens a WebSocket
+        #    here; those go to the public server, whose event loop owns the
+        #    channel layer.)
+        try:
+            sock = self._launcher_socket or _bind('127.0.0.1', 0)
+            self.launcher_port = sock.getsockname()[1]
+            server, worker = self._serve('127.0.0.1', self.launcher_port, [sock])
+            self._launcher = (server, worker, [sock])
+            if not self._came_up(server, worker):
+                raise RuntimeError('did not come up')
+            print(f'{APP_NAME} window server on 127.0.0.1:{self.launcher_port}', flush=True)
+        except Exception as e:  # noqa: BLE001
+            print(f'The launcher window server could not start: {e}', flush=True)
+            self._shutdown(*self._launcher)
+            self._launcher, self.launcher_port = (None, None, []), None
+        finally:
+            self.launcher_ready.set()
+
+        # 2. The public server: the configured address; a gone interface
+        #    (the VPN is off today) falls back to all interfaces, a taken
+        #    port (Companion, an earlier WebATEM) to the next free one.
+        host, wanted = self.host, self.port
+        port, tries, notes = wanted, 0, []
+        current = (None, None, [])
+        while True:
+            try:
+                current = self._start_public(host, port)
+                break
+            except OSError as e:
+                if e.errno == errno.EADDRNOTAVAIL and host not in self.ANY:
+                    notes.append(f'{host} is not an address of this computer right now, so WebATEM is listening on all interfaces.')
+                    host = '0.0.0.0'
+                    continue
+                tries += 1
+                if tries > self.PORT_TRIES:
+                    self.last_error = f'could not listen on {host}:{port} ({self._reason(e)})'
+                    break
+                port = wanted + tries
+            except RuntimeError as e:
+                self.last_error = str(e)
+                break
+        if current[0] is not None:
+            if port != wanted:
+                notes.append(f'Port {wanted} was in use, so WebATEM is on port {port} this time.')
+            self.host, self.port = host, port
+            print(f'{APP_NAME} listening on {host}:{port}' + (' (and on 127.0.0.1)' if host not in self.ANY else ''), flush=True)
+            self.startup_note = ' '.join(notes) or None
+            if self.startup_note:
                 print(self.startup_note, flush=True)
+            self.running, self.last_error = True, None
             self.ready.set()
+        else:
+            print(f'{APP_NAME} is not running: {self.last_error}', flush=True)
+
+        # 3. Restarts from the window / the settings page.
         while True:
             self._wake.wait()
             self._wake.clear()
@@ -297,25 +419,32 @@ class _Supervisor:
                 break
             host, port = self._pending
             self._pending = None
-            time.sleep(0.5)                     # let the settings response reach the browser
-            self._shutdown(server, worker)
-            server, worker = self._serve(host, port)
-            if self._came_up(server, worker):
-                self.host, self.port, self.last_error = host, port, None
-                self.startup_note = None
+            self.restarting = True
+            time.sleep(0.5)                     # let the settings response reach the page
+            previous = (self.host, self.port) if self.running else None
+            self._shutdown(*current)
+            current, self.running = (None, None, []), False
+            try:
+                current = self._start_public(host, port)
+                self.host, self.port, self.last_error, self.startup_note = host, port, None, None
                 print(f'{APP_NAME} now listening on {host}:{port}', flush=True)
-            else:
-                self.last_error = f'could not listen on {host}:{port} (is the port in use?)'
-                print(self.last_error + '; back to ' + f'{self.host}:{self.port}', flush=True)
-                self._shutdown(server, worker)
-                server, worker = self._serve(self.host, self.port)
-                self._came_up(server, worker)
+            except (OSError, RuntimeError) as e:
+                self.last_error = f'could not listen on {host}:{port} ({self._reason(e)})'
+                print(self.last_error + (f'; back to {previous[0]}:{previous[1]}' if previous else ''), flush=True)
+                if previous:
+                    try:
+                        current = self._start_public(*previous)
+                    except (OSError, RuntimeError) as e2:
+                        print(f'and could not go back either: {self._reason(e2)}', flush=True)
+            self.running = current[0] is not None
+            self.restarting = False
             if self.on_change:
                 try:
                     self.on_change()
                 except Exception:
                     pass
-        self._shutdown(server, worker)
+        self._shutdown(*current)
+        self._shutdown(*self._launcher)
 
 
 class _Controller:
@@ -341,6 +470,14 @@ class _Controller:
     @property
     def startup_note(self):
         return self._s.startup_note
+
+    @property
+    def running(self):
+        return self._s.running
+
+    @property
+    def restarting(self):
+        return self._s.restarting
 
     def restart(self, host, port):
         self._s.restart(host, port)
@@ -387,7 +524,18 @@ def _on_ui_thread(fn) -> None:
     fn()
 
 
+_LOADING_HTML = """<!doctype html><html><head><meta charset="utf-8"><title>WebATEM</title>
+<style>html,body{height:100%;margin:0;background:#111;color:#bbb;font:15px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.c{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px}
+.s{width:26px;height:26px;border:3px solid #333;border-top-color:#f68b2a;border-radius:50%;animation:r 1s linear infinite}
+@keyframes r{to{transform:rotate(360deg)}}</style></head>
+<body><div class="c"><div class="s"></div><div>WebATEM is starting…</div></div></body></html>"""
+
+
 def _window_process(url: str) -> None:
+    """The child: a native window showing "Starting…" until the launcher
+    page answers, then the page itself. Spawned before Django boots so the
+    window is on screen while the server comes up."""
     import webview
 
     class Api:
@@ -397,8 +545,22 @@ def _window_process(url: str) -> None:
         def hide(self):
             window.destroy()
 
-    window = webview.create_window(APP_NAME, url, js_api=Api(), width=520, height=700, resizable=False)
-    webview.start()
+    window = webview.create_window(APP_NAME, html=_LOADING_HTML, js_api=Api(), width=520, height=700, resizable=False)
+
+    def follow():
+        import urllib.request
+        deadline = time.time() + 300
+        while time.time() < deadline:
+            try:
+                with urllib.request.urlopen(url, timeout=1) as r:
+                    if r.status == 200:
+                        break
+            except Exception:  # noqa: BLE001 — not up yet
+                pass
+            time.sleep(0.4)
+        window.load_url(url)
+
+    webview.start(follow)
 
 
 class _WindowChild:
@@ -410,7 +572,7 @@ class _WindowChild:
         self._proc = None
 
     def _command(self):
-        url = f'http://127.0.0.1:{self._s.port}/launcher/'
+        url = self._s.launcher_url
         if getattr(sys, 'frozen', False):
             return [sys.executable, '--window', url]
         return [sys.executable, '-m', 'webatem', '--window', url]
@@ -420,6 +582,9 @@ class _WindowChild:
 
     def show(self) -> None:
         if self.visible():
+            return
+        if not self._s.launcher_url:
+            print('The launcher window has no server to show.', flush=True)
             return
         import subprocess
         try:
@@ -462,7 +627,7 @@ def _tray_image():
         return Image.new('RGBA', (64, 64), (246, 139, 42, 255))
 
 
-def _run_tray(supervisor, controller, window, show_window: bool) -> None:
+def _run_tray(supervisor, controller, window) -> None:
     """Menu bar / system tray icon; returns when the user quits."""
     import pystray
     from pystray import Menu, MenuItem
@@ -507,17 +672,12 @@ def _run_tray(supervisor, controller, window, show_window: bool) -> None:
     controller.on_quit = lambda: quit_app(icon)
 
     def after_start():
-        if not supervisor.ready.wait(60):
+        if not supervisor.ready.wait(90):
             try:
                 if getattr(icon, 'HAS_NOTIFICATION', False):
-                    icon.notify(f'{APP_NAME} could not find a free port to start on.', APP_NAME)
+                    icon.notify(f'{APP_NAME} is not running: {supervisor.last_error}', APP_NAME)
             except Exception:
                 pass
-            time.sleep(3)
-            icon.stop()
-            return
-        if window is not None and show_window:
-            window.show()
 
     threading.Thread(target=after_start, daemon=True).start()
     icon.run()
@@ -546,18 +706,9 @@ def main() -> None:
     # refreshed at every start so an upgrade never serves stale assets.
     os.environ.setdefault('STATIC_ROOT', str(data_dir / 'staticfiles'))
 
-    import django
-    django.setup()
-
-    from django.core.management import call_command
-    call_command('migrate', '--noinput', verbosity=0)
-    call_command('collectstatic', '--noinput', '--clear', verbosity=0)
-
-    from webatem import server as srv
-    cfg = srv.load()                      # HOST/PORT env > server.json > defaults
+    from webatem import server as srv       # no Django needed for the config
+    cfg = srv.load()                        # HOST/PORT env > server.json > defaults
     host, port = cfg['host'], cfg['port']
-
-    from webatem.asgi import application
 
     want_tray = _has_display() and os.environ.get('WEBATEM_NO_TRAY') != '1'
     if want_tray:
@@ -572,30 +723,60 @@ def main() -> None:
     # before — unless this is the login-time start.
     want_browser = _has_display() and not has_window and os.environ.get('WEBATEM_NO_BROWSER') != '1' and not autostarted
 
-    supervisor = _Supervisor(application, host, port)
+    # The window's own port is known before anything else runs, so the
+    # window (a second process) can be opening while Django boots here.
+    launcher_socket = None
+    if has_window:
+        try:
+            launcher_socket = _bind('127.0.0.1', 0)
+        except OSError as e:
+            print(f'No loopback port for the launcher window ({e}); the window is off.', flush=True)
+            has_window = False
+    supervisor = _Supervisor(None, host, port, launcher_socket=launcher_socket)
+    if launcher_socket is not None:
+        supervisor.launcher_port = launcher_socket.getsockname()[1]
     controller = _Controller(supervisor)
     srv.runtime.register(controller)
-    supervisor.start()
-
-    local_url, lan_url = _urls(host, port)
-    lines = ['', f'  {APP_NAME} is starting on {host}:{port}.']
-    lines.append(f'  On this machine:      {local_url}')
-    if lan_url and lan_url != local_url:
-        lines.append(f'  From another device:  {lan_url}')
-    lines.append('  Address and port: the launcher window, or /launcher/ in a browser.')
-    lines.append('  (Quit from the tray icon.)' if want_tray else '  (Press Ctrl+C to quit.)')
-    lines.append('')
-    print('\n'.join(lines), flush=True)
-
-    if want_browser:
-        threading.Thread(target=lambda: supervisor.ready.wait(60) and _open_browser(_urls(supervisor.host, supervisor.port)[0]), daemon=True).start()
-
     window = _WindowChild(supervisor) if has_window else None
+    show_window = window is not None and not (bool(cfg.get('start_minimized')) or autostarted)
+    if show_window:
+        window.show()
+
+    def boot():
+        try:
+            import django
+            django.setup()
+            from django.core.management import call_command
+            call_command('migrate', '--noinput', verbosity=0)
+            call_command('collectstatic', '--noinput', '--clear', verbosity=0)
+            from webatem.asgi import application
+        except Exception as e:  # noqa: BLE001
+            print(f'{APP_NAME} could not start: {e}', flush=True)
+            supervisor.boot_failed(f'could not start: {e}')
+            return
+        supervisor.application = application
+        supervisor.start()
+        local_url, lan_url = _urls(host, port)
+        lines = ['', f'  {APP_NAME} is starting on {host}:{port}.']
+        lines.append(f'  On this machine:      {local_url}')
+        if lan_url and lan_url != local_url:
+            lines.append(f'  From another device:  {lan_url}')
+        lines.append('  Address and port: the launcher window, or /launcher/ in a browser.')
+        lines.append('  (Quit from the tray icon.)' if want_tray else '  (Press Ctrl+C to quit.)')
+        lines.append('')
+        print('\n'.join(lines), flush=True)
+        if want_browser and supervisor.ready.wait(60):
+            _open_browser(_urls(supervisor.host, supervisor.port)[0])
+
+    booter = threading.Thread(target=boot, name='webatem-boot', daemon=True)
+    booter.start()
+
     try:
         if want_tray:
-            _run_tray(supervisor, controller, window, show_window=not (bool(cfg.get('start_minimized')) or autostarted))
+            _run_tray(supervisor, controller, window)
         else:
-            while supervisor._thread.is_alive():
+            booter.join()
+            while supervisor._thread is not None and supervisor._thread.is_alive():
                 supervisor._thread.join(1)
     except KeyboardInterrupt:
         pass
