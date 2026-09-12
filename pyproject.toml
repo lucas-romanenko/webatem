@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "webatem"
-version = "0.2.1"
+version = "0.2.2"
 description = "Browser-based control for Blackmagic ATEM switchers: run it, open the browser, your switchers are there"
 readme = "README.md"
 license = { text = "MIT" }
@@ -22,6 +22,7 @@ dependencies = [
     "whitenoise==6.12.0",
     "zeroconf==0.147.2",
     "pystray==0.19.5",
+    "pywebview==6.2.1",
     "atemwire==0.15.0.dev1",
     "hyperdeckwire==0.1.0.dev1",
 ]

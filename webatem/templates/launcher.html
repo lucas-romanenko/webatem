@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}WebATEM{% endblock %}
+{% block extra_css %}
+<style>
+  /* The launcher window: a fixed-size panel, no scroller of its own. */
+  main { padding: 0 !important; max-width: none !important; }
+  .lw { min-height: 100vh; display: flex; flex-direction: column; }
+  .lw-head { background: #000; padding: 1.75rem 1.5rem 1.25rem; text-align: center; }
+  .lw-head img { width: 88px; height: 88px; border-radius: 22px; }
+  .lw-status { background: oklch(var(--p)); color: oklch(var(--pc)); text-align: center; padding: 1.1rem 1.5rem; }
+  .lw-status .state { font-size: 2rem; font-weight: 600; letter-spacing: .01em; line-height: 1.1; }
+  .lw-status .addr { font-family: ui-monospace, monospace; font-size: 1.05rem; margin-top: .3rem; word-break: break-all; }
+  .lw-body { padding: 1.25rem 1.5rem 1.5rem; display: flex; flex-direction: column; gap: 1rem; flex: 1; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="lw" id="launcherWindow"
+     data-settings="{% url 'server_settings' %}">
+  <div class="lw-head">
+    <img src="{% static 'icon.png' %}" alt="">
+    <div class="mt-3 text-base-content/80 text-sm">WebATEM <span class="font-mono">{{ version }}</span></div>
+  </div>
+  <div class="lw-status">
+    <div class="state" id="lwState">Starting…</div>
+    <div class="addr" id="lwAddr">&nbsp;</div>
+  </div>
+  <div class="lw-body">
+    <div class="grid grid-cols-[1fr_auto] gap-3 items-end">
+      <div class="form-control">
+        <label class="label py-1" for="lwHost"><span class="label-text">Interface</span></label>
+        <select id="lwHost" class="select select-bordered select-sm w-full"></select>
+      </div>
+      <div class="form-control">
+        <label class="label py-1" for="lwPort"><span class="label-text">Port</span></label>
+        <div class="join">
+          <input id="lwPort" type="number" min="1" max="65535" class="input input-bordered input-sm join-item w-24 font-mono">
+          <button id="lwPortApply" class="btn btn-sm join-item">Change</button>
+        </div>
+      </div>
+    </div>
+    <div class="flex flex-wrap gap-x-6 gap-y-2">
+      <label class="label cursor-pointer gap-2 py-0"><input id="lwMinimized" type="checkbox" class="checkbox checkbox-sm checkbox-primary"><span class="label-text">Start minimized</span></label>
+      <label class="label cursor-pointer gap-2 py-0" id="lwAutoRow"><input id="lwAutostart" type="checkbox" class="checkbox checkbox-sm checkbox-primary"><span class="label-text">Run at login</span></label>
+    </div>
+    <p class="text-xs text-base-content/60 hidden" id="lwNote"></p>
+    <p class="text-sm hidden" id="lwStatus"></p>
+    <div class="mt-auto flex gap-2 pt-3 border-t border-base-300">
+      <button id="lwLaunch" class="btn btn-primary flex-1">Launch GUI</button>
+      <button id="lwHide" class="btn" hidden>Hide</button>
+      <button id="lwQuit" class="btn btn-outline btn-error" hidden>Quit</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+(function () {
+  'use strict';
+  var root = document.getElementById('launcherWindow');
+  var ENDPOINT = root.dataset.settings;
+  var el = function (id) { return document.getElementById(id); };
+  var hostSel = el('lwHost'), portInp = el('lwPort'), state = el('lwState'), addr = el('lwAddr');
+  var minim = el('lwMinimized'), auto = el('lwAutostart'), autoRow = el('lwAutoRow');
+  var note = el('lwNote'), status = el('lwStatus');
+  var current = null, native = false;
+
+  function csrf() { var m = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/); return m ? m[1] : ''; }
+  function say(text, cls) { status.textContent = text; status.className = 'text-sm ' + (cls || 'text-base-content/70'); status.classList.remove('hidden'); }
+  function opt(v, label) { var o = document.createElement('option'); o.value = v; o.textContent = label; return o; }
+
+  function render(d) {
+    current = d;
+    state.textContent = 'Running';
+    addr.textContent = d.url;
+    hostSel.innerHTML = '';
+    hostSel.appendChild(opt('0.0.0.0', 'All interfaces'));
+    (d.interfaces || []).forEach(function (e) {
+      hostSel.appendChild(opt(e.ip, e.ip === '127.0.0.1' ? 'localhost: 127.0.0.1' : e.name + ': ' + e.ip));
+    });
+    hostSel.value = d.host;
+    if (hostSel.value !== d.host) { hostSel.appendChild(opt(d.host, d.host)); hostSel.value = d.host; }
+    portInp.value = d.port;
+    minim.checked = !!d.start_minimized;
+    autoRow.hidden = !(d.autostart && d.autostart.available);
+    auto.checked = !!(d.autostart && d.autostart.enabled);
+    var locked = !d.restart_available;
+    hostSel.disabled = locked; portInp.disabled = locked; el('lwPortApply').disabled = locked;
+    note.textContent = locked ? 'The address is fixed by this server\'s environment (HOST / PORT).' : '';
+    note.classList.toggle('hidden', !locked);
+    if (d.last_error) say('Last change failed: ' + d.last_error, 'text-error'); else status.classList.add('hidden');
+  }
+
+  function load() {
+    fetch(ENDPOINT, { cache: 'no-store' }).then(function (r) { return r.json(); }).then(render)
+      .catch(function () { state.textContent = 'Starting…'; setTimeout(load, 1000); });
+  }
+
+  function post(body, after) {
+    fetch(ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        if (!res.ok) { say(res.d.error || 'Not saved.', 'text-error'); load(); return; }
+        if (after) after(res.d); else if (res.d.restarting) { state.textContent = 'Restarting…'; addr.textContent = res.d.url; }
+        else if (res.d.note) say(res.d.note, 'text-warning');
+        else status.classList.add('hidden');
+      })
+      .catch(function () { say('Not saved (network error).', 'text-error'); });
+  }
+
+  function apply() {
+    if (!current) return;
+    post({ host: hostSel.value, port: parseInt(portInp.value, 10) });
+  }
+  hostSel.addEventListener('change', apply);
+  el('lwPortApply').addEventListener('click', apply);
+  portInp.addEventListener('keydown', function (e) { if (e.key === 'Enter') apply(); });
+  minim.addEventListener('change', function () { if (current) post({ host: current.host, port: current.port, start_minimized: minim.checked }, function () {}); });
+  auto.addEventListener('change', function () { if (current) post({ host: current.host, port: current.port, autostart: auto.checked }, function (d) { if (d.autostart_error) say('Run at login could not be changed: ' + d.autostart_error, 'text-warning'); }); });
+
+  // The three window buttons work through the desktop launcher's bridge;
+  // in a plain browser Launch GUI just opens the app.
+  el('lwLaunch').addEventListener('click', function () {
+    if (native) window.pywebview.api.launch(); else if (current) window.open(current.local_url, '_blank');
+  });
+  el('lwHide').addEventListener('click', function () { if (native) window.pywebview.api.hide(); });
+  el('lwQuit').addEventListener('click', function () { if (native) window.pywebview.api.quit(); });
+  window.addEventListener('pywebviewready', function () {
+    native = true; el('lwHide').hidden = false; el('lwQuit').hidden = false;
+  });
+  if (window.pywebview && window.pywebview.api) { native = true; el('lwHide').hidden = false; el('lwQuit').hidden = false; }
+  load();
+})();
+</script>
+{% endblock %}
