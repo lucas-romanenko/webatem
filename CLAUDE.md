@@ -97,7 +97,7 @@ decision — upstream has an equipment database and will not get mDNS.
 standalone, so nothing in the app reaches past one class for anything the
 host might own: `Hooks` (access for pages and the socket, activity and
 connection records, name-for-IP, the switcher list for suggestions, HyperDeck
-names, sightings, the HyperDeck binding diff, the dropped-still check and upload,
+names, the switcher-name probe and rename record, sightings, the HyperDeck binding diff, the dropped-still check and upload,
 template context, discovery on/off). `settings.WEBATEM_HOOKS` names the
 host's subclass; unset = the defaults, which ARE standalone WebATEM. The
 `activity` and `sightings` modules are facades over it — keep call sites on

@@ -55,6 +55,13 @@ class RecordingHooks(hooks.Hooks):
     def record_deck_model(self, ip, model):
         self.calls.append(('deck_model', ip, model))
 
+    def probe_device(self, ip):
+        self.calls.append(('probe', ip))
+        return {'deviceName': 'Room One', 'productName': 'ATEM Mini Pro', 'software': '9.0', 'hostname': 'atem'}
+
+    def record_named(self, ip, name):
+        self.calls.append(('named', ip, name))
+
     def validate_still(self, ip, file_path, file_name):
         self.calls.append(('validate', ip, file_name))
         return (False, 'wrong size for this switcher') if file_name.startswith('bad') else (True, None)
@@ -205,3 +212,14 @@ def test_default_still_check_is_1080p(tmp_path, settings):
     small = tmp_path / 'small.jpg'; Image.new('RGB', (1280, 720)).save(small, 'JPEG')
     ok, err = validate_and_resize_1080p(str(small), 'small.jpg')
     assert not ok and 'too small' in err
+
+
+@pytest.mark.django_db
+def test_switcher_name_section_goes_through_the_host(client, host_hooks, monkeypatch):
+    d = client.get('/atem/device-info/?ip=10.1.1.1').json()
+    assert d['supported'] and d['deviceName'] == 'Room One' and d['equipmentName'] == 'Host Room 1'
+    assert ('probe', '10.1.1.1') in host_hooks.calls
+    monkeypatch.setattr('atem_control.control.views.set_device_name', lambda ip, name: (True, None))
+    r = client.post('/atem/device-name/', json.dumps({'ip': '10.1.1.1', 'name': 'Studio B'}), content_type='application/json')
+    assert r.json() == {'success': True, 'deviceName': 'Studio B'}
+    assert ('named', '10.1.1.1', 'Studio B') in host_hooks.calls and ('activity', 'set_device_name') in host_hooks.calls

@@ -122,6 +122,17 @@ class Hooks:
         return True
 
     # ---- sightings ------------------------------------------------------
+    def probe_device(self, ip):
+        """The switcher's own REST config (name / model / software) for the
+        Switcher Name section, or None when it has no web setup. A host
+        records the probe as a sighting; the default just reads it."""
+        from atem_control.control.device_api import get_device_info
+        return get_device_info(ip)
+
+    def record_named(self, ip, name):
+        """We just set the switcher's stored name to ``name``."""
+        return None
+
     def record_video_mode(self, ip, label):
         """The switcher at ``ip`` reported video mode ``label``."""
         return None

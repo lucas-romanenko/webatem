@@ -18,7 +18,7 @@ from atemwire._state import build_full_state
 from atemwire.pool import ATEMInstanceManager
 
 from atem_control import discovery, hooks
-from atem_control.control.device_api import get_device_info, set_device_name
+from atem_control.control.device_api import set_device_name
 from atem_control.hooks import access_required
 from atem_control.netutil import is_valid_ip
 from atem_control.activity import ActivityLog, record_activity
@@ -202,7 +202,8 @@ def atem_device_info(request):
     ip = (request.GET.get('ip') or '').strip()
     if not is_valid_ip(ip):
         return HttpResponseBadRequest('valid ip required')
-    info = get_device_info(ip)   # None if no REST API / unreachable
+    h = hooks.get()
+    info = h.probe_device(ip)   # None if no REST API / unreachable
     return JsonResponse({
         'supported': info is not None,
         'apiError': (info or {}).get('error', ''),
@@ -211,7 +212,8 @@ def atem_device_info(request):
         'software': (info or {}).get('software', ''),
         'hostname': (info or {}).get('hostname', ''),
         'ip': ip,
-        'equipmentName': '',
+        # the host's own name for it, so the section can offer "use that one"
+        'equipmentName': h.name_for_ip(ip) or '',
     })
 
 
@@ -230,9 +232,13 @@ def atem_set_device_name(request):
     if not name:
         return HttpResponseBadRequest('name required')
     ok, err = set_device_name(ip, name)
+    h = hooks.get()
+    if ok:
+        h.record_named(ip, name)          # a rename we made is never a question
     record_activity(
         feature=ActivityLog.FEATURE_ATEM_CONTROL, device=ActivityLog.DEVICE_ATEM,
-        action='set_device_name', target=ip,
+        action='set_device_name', user=getattr(request, 'user', None), target=ip,
+        target_name=h.name_for_ip(ip) or '',
         summary=(f'Set switcher name to "{name}"' if ok else f'Failed to set switcher name: {err}'),
         success=ok, new_name=name,
     )
