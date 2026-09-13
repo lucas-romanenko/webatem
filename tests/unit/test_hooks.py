@@ -171,11 +171,9 @@ def test_upload_hands_the_file_to_the_host(client, host_hooks, tmp_path, setting
 
 def test_profile_filenames_take_the_host_s_name_and_clock(host_hooks):
     from atem_control.profile import export
-    assert export._equipment_name_for_ip('10.1.1.1') == 'Host Room 1' and export._equipment_name_for_ip('10.9.9.9') == ''
+    assert export._resolve_atem_db_name('10.1.1.1') == 'Host Room 1' and export._resolve_atem_db_name('10.9.9.9') == ''
     # a 12-hour host: the timestamp carries the AM/PM marker the 24-hour format lacks
-    stamp = export._timestamp_for_filename() if hasattr(export, '_timestamp_for_filename') else None
-    if stamp is not None:
-        assert stamp.endswith(('AM', 'PM'))
+    assert export._format_save_timestamp().endswith(('AM', 'PM'))
 
 
 def test_connection_log_carries_the_switcher_name(host_hooks):
