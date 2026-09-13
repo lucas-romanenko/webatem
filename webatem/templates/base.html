@@ -17,15 +17,20 @@
     <link rel="stylesheet" href="{% static 'vendor/webatem.css' %}">
     <link rel="stylesheet" href="{% static_v 'css/theme.css' %}">
     <link rel="stylesheet" href="{% static 'vendor/bootstrap-icons/bootstrap-icons.min.css' %}">
+    <!-- The brand (docs/brand/handoff): palette, Archivo + IBM Plex Mono, the
+         control-surface rules. WebATEM's own, loads last, wins. -->
+    <link rel="stylesheet" href="{% static_v 'brand/brand.css' %}">
 
     <!-- PWA meta tags -->
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="application-name" content="{{ app_title }}">
     <meta name="apple-mobile-web-app-title" content="{{ app_title }}">
-    <meta name="theme-color" content="#121315">
-    <link rel="icon" type="image/png" href="{% static 'icon.png' %}">
-    <link rel="apple-touch-icon" href="{% static 'icon.png' %}">
+    <meta name="theme-color" content="#0E0F10">
+    <link rel="icon" href="{% static 'brand/favicon.ico' %}" sizes="16x16 32x32 48x48">
+    <link rel="icon" type="image/png" sizes="32x32" href="{% static 'brand/favicon-32.png' %}">
+    <link rel="icon" type="image/png" sizes="192x192" href="{% static 'brand/icon-192.png' %}">
+    <link rel="apple-touch-icon" href="{% static 'brand/apple-touch-icon.png' %}">
 
     <!-- The select facade (any <select data-pp-select>) and our own scrollbar
          overlay for every scroller — both synced from upstream. -->
@@ -66,7 +71,7 @@
         [data-cbar*="x"]::-webkit-scrollbar { height: 0; }
 
         /* OUR OWN scrollbar — a DOM overlay per scroller (custom-scrollbar.js),
-           the same accent orange for every user regardless of OS auto-hide
+           the same grey for every user regardless of OS auto-hide
            settings. Only the thumb is interactive. */
         .cbar {
             position: absolute;
@@ -86,13 +91,13 @@
             width: 8px;
             min-height: 32px;
             border-radius: 999px;
-            background: oklch(var(--p));
+            background: var(--text-faint, oklch(var(--p)));   /* brand: chrome grey, not the accent */
             pointer-events: auto;
             cursor: grab;
             transition: width .12s ease, background .12s ease;
         }
         .cbar:hover .cbar-thumb { width: 10px; }
-        .cbar.is-dragging .cbar-thumb { width: 10px; cursor: grabbing; background: oklch(var(--p) / 0.85); }
+        .cbar.is-dragging .cbar-thumb { width: 10px; cursor: grabbing; background: var(--text-muted, oklch(var(--p) / 0.85)); }
         .cbar-x { width: auto; height: 12px; }
         .cbar-x .cbar-thumb {
             top: auto; bottom: 1px; left: 0; right: auto;

@@ -19,10 +19,11 @@
                         onclick="document.getElementById('serverSettings').showModal()">
                     <i class="bi bi-gear text-lg text-base-content/60"></i>
                 </button>
-                <h1
-                    class="text-4xl font-bold mb-2 text-base-content">
-                    ATEM Control</h1>
-                <p class="text-base-content/70">Connect to your ATEM video switcher</p>
+                <div class="flex items-center justify-center gap-[14px] mb-3">
+                    <span class="brand-mark" style="width:44px;height:44px">{% include "brand/_mark.svg" %}</span>
+                    <span class="brand-wordmark" style="font-size:30px"><span>web</span>ATEM</span>
+                </div>
+                <p style="color:var(--text-muted)">Browser control for ATEM switchers.</p>
             </div>
 
             <!-- Connection Form -->
@@ -144,6 +145,8 @@
                 </div>
                 <form method="dialog" class="modal-backdrop"><button>close</button></form>
             </dialog>
+
+            <p class="text-center mt-6" style="font-size:12px;color:var(--text-faint)">Not affiliated with or endorsed by the switcher manufacturer.</p>
 
 {% endblock %}
 

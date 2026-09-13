@@ -1,50 +1,7 @@
-<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#3B3E43"/>
-      <stop offset="1" stop-color="#212327"/>
-    </linearGradient>
-    <linearGradient id="amber" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#F2C55C"/>
-      <stop offset="1" stop-color="#E8B23D"/>
-    </linearGradient>
-    <linearGradient id="red" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#FF5C6E"/>
-      <stop offset="1" stop-color="#F03A4C"/>
-    </linearGradient>
-    <linearGradient id="green" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#54C97E"/>
-      <stop offset="1" stop-color="#33B061"/>
-    </linearGradient>
-    <linearGradient id="dark" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#34373C"/>
-      <stop offset="1" stop-color="#2A2D31"/>
-    </linearGradient>
-  </defs>
-
-  <!-- app tile -->
-  <rect x="64" y="64" width="896" height="896" rx="216" fill="url(#bg)"/>
-  <!-- top inner highlight for depth -->
-  <rect x="64" y="64" width="896" height="896" rx="216" fill="none"
-        stroke="#ffffff" stroke-opacity="0.06" stroke-width="3"/>
-
-  <!-- two-row source bus (a switcher control surface): program row + preview row -->
-  <!-- Program row (one button lit red) -->
-  <g>
-    <rect x="230" y="356" width="128" height="120" rx="26" fill="url(#dark)"/>
-    <rect x="382" y="356" width="128" height="120" rx="26" fill="url(#red)"/>
-    <rect x="534" y="356" width="128" height="120" rx="26" fill="url(#dark)"/>
-    <rect x="686" y="356" width="128" height="120" rx="26" fill="url(#dark)"/>
-  </g>
-  <!-- Preview row (one button lit green) -->
-  <g>
-    <rect x="230" y="548" width="128" height="120" rx="26" fill="url(#dark)"/>
-    <rect x="382" y="548" width="128" height="120" rx="26" fill="url(#dark)"/>
-    <rect x="534" y="548" width="128" height="120" rx="26" fill="url(#green)"/>
-    <rect x="686" y="548" width="128" height="120" rx="26" fill="url(#dark)"/>
-  </g>
-
-  <!-- amber T-bar down the right, the switcher signature -->
-  <rect x="854" y="356" width="40" height="312" rx="20" fill="#26282B"/>
-  <rect x="846" y="470" width="56" height="34" rx="14" fill="url(#amber)"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <rect x="100.5" y="100.5" width="823" height="823" rx="194" fill="#0A0B0C" stroke="#34383C" stroke-width="1"/>
+  <rect x="241.000" y="241.000" width="295.000" height="238.000" rx="37" fill="#D62718"/>
+  <rect x="241.000" y="545.000" width="295.000" height="238.000" rx="37" fill="#2FD07A"/>
+  <rect x="602.000" y="241.000" width="181.000" height="542.000" rx="37" fill="#3C4145"/>
+  <rect x="602.000" y="544.520" width="181.000" height="107.000" rx="37" fill="#EDEDEA"/>
 </svg>
