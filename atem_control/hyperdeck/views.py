@@ -13,6 +13,7 @@ from django.http import HttpResponseBadRequest, JsonResponse
 from django.views.decorators.http import require_GET, require_POST
 
 from atem_control.hyperdeck.connection import with_deck
+from atem_control.hooks import access_required
 from atem_control.netutil import is_valid_ip
 from hyperdeckwire import HyperdeckError
 
@@ -88,6 +89,7 @@ def _read_status(hd):
 
 
 @require_GET
+@access_required
 def hyperdeck_state(request):
     """Full snapshot (slots + per-card clips + transport + name). Fetched on
     modal open / deck switch / manual refresh."""
@@ -103,6 +105,7 @@ def hyperdeck_state(request):
 
 
 @require_GET
+@access_required
 def hyperdeck_status(request):
     """Live transport status only — polled ~1 Hz while the modal is open."""
     ip = (request.GET.get('ip') or '').strip()
@@ -115,6 +118,7 @@ def hyperdeck_status(request):
 
 
 @require_POST
+@access_required
 def hyperdeck_transport(request):
     """Run one transport action on a deck and return the fresh status.
 

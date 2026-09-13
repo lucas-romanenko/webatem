@@ -805,4 +805,7 @@
     <script src="{% static_v 'js/atem_profile.js' %}"></script>
     <script src="{% static_v 'js/atem_hyperdeck.js' %}"></script>
 
+{# A hosting platform adds its own panels and scripts here (a template that
+   extends control.html and fills control_extra), leaving this file alone. #}
+{% block control_extra %}{% endblock %}
 {% endblock %}

@@ -1,9 +1,11 @@
-"""Media-pool drag-drop upload — in-process.
+"""Media-pool drag-drop upload.
 
-One image, one slot, one ATEM, always skip tally. The upload runs on a
-background thread in THIS process via ``atem_control.uploader.execute_upload``
-(its own short-lived atemwire socket with ``aggressive_drain``), so the watcher
-lockout and the post-upload thumbnail refresh are direct in-process calls.
+One image, one slot, one ATEM. The view validates and stores the file, then
+hands it to the host (``hooks.upload_still``). Standalone WebATEM's default
+runs the upload on a background thread in THIS process via
+``atem_control.uploader.execute_upload`` (its own short-lived atemwire socket
+with ``aggressive_drain``), so the watcher lockout and the post-upload
+thumbnail refresh are direct in-process calls; a hosting platform queues it.
 
 Response contract (relied on by ``atem_control.js`` ``uploadSlot``):
 ``{'success': bool, 'error': str?}``. The slot tile clears its "uploading"
@@ -19,9 +21,10 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 from PIL import Image
 
+from atem_control import hooks
+from atem_control.hooks import access_required
 from atem_control.media_pool import watcher as media_pool_service
 from atem_control.storage import UPLOADS_DIR, ensure_dir
-from atem_control.uploader import execute_upload
 
 logger = logging.getLogger(__name__)
 
@@ -73,9 +76,21 @@ def resize_image_to_1920x1080(file_path):
         return False, f"Resize failed: {e}"
 
 
+def start_in_process_upload(ip, slot, file_path, job_dir):
+    """The default ``hooks.upload_still``: lock out the watcher's downloads
+    for this ATEM BEFORE any upload traffic starts, then push on a
+    background thread."""
+    media_pool_service.note_upload_started(ip, slot)
+    threading.Thread(
+        target=_run_upload, args=(ip, slot, file_path, job_dir),
+        name=f"dragdrop-upload-{ip}-{slot}", daemon=True,
+    ).start()
+
+
 def _run_upload(ip, slot, file_path, job_dir):
     """Background-thread body: push the still, then release the watcher
     lockout (which re-queues the slot's thumbnail download) and clean up."""
+    from atem_control.uploader import execute_upload
     try:
         results = execute_upload([(ip, slot, file_path)], skip_tally=True)
         failed = [r for r in results if not r.success]
@@ -96,6 +111,7 @@ def _run_upload(ip, slot, file_path, job_dir):
         shutil.rmtree(job_dir, ignore_errors=True)
 
 
+@access_required
 @require_POST
 def media_pool_upload(request):
     ip = (request.POST.get('ip') or '').strip()
@@ -139,14 +155,10 @@ def media_pool_upload(request):
 
         logger.info(f"Drag-drop upload queued: ip={ip} slot={slot} file={file_name}")
 
-        # Lock out the watcher's downloads for this ATEM BEFORE any upload
-        # traffic starts, then push on a background thread.
-        media_pool_service.note_upload_started(ip, slot)
-        threading.Thread(
-            target=_run_upload, args=(ip, slot, file_path, job_dir),
-            name=f"dragdrop-upload-{ip}-{slot}", daemon=True,
-        ).start()
-
+        ok, err = hooks.get().upload_still(ip, slot, file_path, job_dir, user=getattr(request, 'user', None))
+        if not ok:
+            shutil.rmtree(job_dir, ignore_errors=True)
+            return JsonResponse({'success': False, 'error': err or 'Upload refused'}, status=400)
         return JsonResponse({'success': True, 'slot': slot})
 
     except Exception as e:

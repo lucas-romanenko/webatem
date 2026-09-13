@@ -124,6 +124,10 @@ MEDIA_ROOT = DATA_DIR / 'uploads'
 # Branding shown in the navbar / browser title.
 APP_TITLE = os.getenv('APP_TITLE', 'WebATEM')
 
+# The seam for a platform hosting the ATEM control app (atem_control/hooks.py):
+# a dotted path to a Hooks subclass. Unset = standalone WebATEM's defaults.
+WEBATEM_HOOKS = os.getenv('WEBATEM_HOOKS') or None
+
 # 24h vs 12h operator-facing timestamps (capture filenames etc.)
 TIME_FORMAT_24HR = _env_bool('TIME_FORMAT_24HR', True)
 

@@ -37,6 +37,7 @@ from atem_control.activity import ActivityLog
 from atem_control.activity import record_activity
 from atem_control.uploader import execute_upload
 from atem_control.ip_upload_lock import hold_ip_upload_lock
+from atem_control.hooks import access_required
 from atem_control.netutil import is_valid_ip
 
 logger = logging.getLogger(__name__)
@@ -99,6 +100,7 @@ def _build_apply_options(sections: dict) -> ApplyOptions:
     )
 
 
+@access_required
 def profile_save_dialog_init(request):
     """Return the section descriptor the save dialog renders.
 
@@ -123,6 +125,7 @@ def profile_save_dialog_init(request):
         return JsonResponse({'error': f'{type(e).__name__}: {e}'}, status=500)
 
 
+@access_required
 def profile_save(request):
     """Build the profile and deliver as a single download.
 
@@ -222,6 +225,7 @@ def profile_save(request):
 
 
 @require_POST
+@access_required
 def profile_save_cancel(request):
     """Cancel an in-flight profile save's media-pool capture phase
     (2026-07-07). The save runs in a separate long-lived POST; this marks
@@ -242,6 +246,7 @@ def profile_save_cancel(request):
 
 
 @require_POST
+@access_required
 def profile_load_xml(request):
     """Parse an uploaded profile XML and return the section descriptor +
     referenced images list.
@@ -290,6 +295,7 @@ def profile_load_xml(request):
 
 
 @require_POST
+@access_required
 def profile_load(request):
     """Apply a profile XML to a connected ATEM, optionally with images.
 

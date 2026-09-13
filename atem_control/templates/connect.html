@@ -67,6 +67,7 @@
                 </div>
                 {% endif %}
 
+                {% if discovery_enabled %}
                 <!-- On your network: mDNS-discovered ATEMs + opt-in subnet scan.
                      Populated by atem_discovery.js; hidden entirely on a network
                      where nothing is found and no scan has run. -->
@@ -92,6 +93,7 @@
                         <span class="font-medium">Rescan</span>.
                     </p>
                 </div>
+                {% endif %}
 
                 <button type="submit" class="btn btn-primary w-full" id="connectBtn">
                     <i class="bi bi-plug mr-2"></i>
@@ -151,7 +153,10 @@
 {% endblock %}
 
 {% block extra_js %}
+{# The host's switcher list for the name-or-IP suggestions (json_script
+   escapes it); empty standalone, where discovery fills the page live. #}
+{{ atem_equipment|json_script:"atem-equipment-data" }}
 <script src="{% static_v 'js/atem_connect.js' %}"></script>
-<script src="{% static_v 'js/atem_discovery.js' %}"></script>
+{% if discovery_enabled %}<script src="{% static_v 'js/atem_discovery.js' %}"></script>{% endif %}
 <script src="{% static_v 'js/atem_server_settings.js' %}"></script>
 {% endblock %}

@@ -1,14 +1,15 @@
-"""Stand-in for upstream's ``av_equipment.atem_setup`` sightings.
+"""What a switcher or deck reports about itself, handed to the host.
 
-Upstream records what a switcher reports about itself (its video mode, its
-stored name, its model) on the switcher's inventory row; the synced uploader
-calls ``record_video_mode`` after every session. There is no inventory in
-this app, so the calls are accepted and dropped. Keeping the call sites
-intact (rather than patching them out of the synced module) is what lets
-``tools/sync_from_av_server.py`` copy the uploader verbatim.
+The uploader and the consumer call these after a session; standalone
+WebATEM has nowhere to keep a sighting (the default hooks drop it), a hosting
+platform records it on the device's inventory row (``atem_control.hooks``).
 """
+from atem_control import hooks
 
 
 def record_video_mode(ip, label):
-    """Accept the sighting; nothing to record it on."""
-    return None
+    return hooks.get().record_video_mode(ip, label)
+
+
+def record_deck_model(ip, model):
+    return hooks.get().record_deck_model(ip, model)

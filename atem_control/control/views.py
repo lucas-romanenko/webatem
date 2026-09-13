@@ -17,34 +17,47 @@ from django.views.decorators.http import require_GET, require_POST
 from atemwire._state import build_full_state
 from atemwire.pool import ATEMInstanceManager
 
-from atem_control import discovery
+from atem_control import discovery, hooks
 from atem_control.control.device_api import get_device_info, set_device_name
-from atem_control.models import get_recent_atems
+from atem_control.hooks import access_required
 from atem_control.netutil import is_valid_ip
 from atem_control.activity import ActivityLog, record_activity
 
 logger = logging.getLogger(__name__)
 
 
+def _page_context(request):
+    """What both pages get from the host: the recent list, the switcher
+    suggestions, deck names, whether discovery is on, anything extra."""
+    h = hooks.get()
+    return {
+        'recent_atems': h.recent_atems(request, limit=5),
+        'atem_equipment': h.switchers(),
+        'hyperdeck_names': h.hyperdeck_names(),
+        'discovery_enabled': h.discovery_enabled(),
+        **h.template_context(request),
+    }
+
+
+@access_required
 def atem_connect(request):
     """ATEM connection landing page."""
     return render(request, 'connect.html', {
         'initial_ip': request.GET.get('ip', ''),
-        'recent_atems': get_recent_atems(limit=5),
+        **_page_context(request),
     })
 
 
+@access_required
 def atem_control(request):
     """ATEM control interface."""
     return render(request, 'control.html', {
         'initial_ip': request.GET.get('ip', '192.168.1.100'),
-        'recent_atems': get_recent_atems(limit=5),
-        # Settings > HyperDecks labels a bound slot with an inventory name
-        # upstream; there is no inventory here, so slots show their IP.
-        'hyperdeck_names': {},
+        **_page_context(request),
     })
 
 
+@access_required
 def atem_status(request):
     """Check ATEM instance statuses. Optionally filter by ?ip= for a single instance."""
     try:
@@ -109,25 +122,23 @@ def atem_status(request):
         }, status=500)
 
 
+@access_required
 def atem_lookup_name(request):
-    """Lookup equipment name by IP address"""
+    """The switcher's friendly name for an IP, from the host (an inventory,
+    or what discovery has seen)."""
     ip_address = request.GET.get('ip', '').strip()
-
     if not ip_address:
-        return JsonResponse({
-            'found': False,
-            'name': None
-        })
-
-    # No equipment database in this build, but mDNS discovery may know a
-    # friendly name for this IP — use it so the control page titles the
-    # switcher rather than showing a bare address.
-    name, _model = discovery._name_for_ip(ip_address)
+        return JsonResponse({'found': False, 'name': None})
+    name = hooks.get().name_for_ip(ip_address)
     if name:
         return JsonResponse({'found': True, 'name': name})
     return JsonResponse({'found': False, 'name': None})
 
 
+_DISCOVERY_OFF = {'available': False, 'atems': [], 'subnet': None, 'disabled': True}
+
+
+@access_required
 @require_GET
 def atem_discovered(request):
     """ATEMs seen on the network via passive mDNS/Bonjour listening.
@@ -136,6 +147,8 @@ def atem_discovered(request):
     the next second or two as announcements arrive, so the Connect page
     polls this. Sends nothing to any switcher.
     """
+    if not hooks.get().discovery_enabled():
+        return JsonResponse(_DISCOVERY_OFF)
     available = discovery.ensure_mdns_started()
     return JsonResponse({
         'available': available,
@@ -147,12 +160,15 @@ def atem_discovered(request):
     })
 
 
+@access_required
 @require_GET
 def atem_scan(request):
     """On-demand light subnet sweep for ATEMs that don't advertise over
-    mDNS. Optional ``?subnet=192.168.81`` overrides the host's own /24.
+    mDNS. Optional ``?subnet=192.168.1`` overrides the host's own /24.
     Half-open handshakes only — no session is established on any switcher.
     """
+    if not hooks.get().discovery_enabled():
+        return JsonResponse({'atems': [], 'disabled': True})
     subnet = request.GET.get('subnet', '').strip() or None
     result = discovery.scan_atems(subnet)
     return JsonResponse(result)
@@ -176,6 +192,7 @@ def _clean_device_name(raw):
     return name.strip()[:_MAX_DEVICE_NAME].strip()
 
 
+@access_required
 @require_GET
 def atem_device_info(request):
     """Read-only device info for the Switcher Name section: the ATEM's REST
@@ -197,6 +214,7 @@ def atem_device_info(request):
     })
 
 
+@access_required
 @require_POST
 def atem_set_device_name(request):
     """Set the ATEM's stored device name (the ATEM Setup name) via its REST API."""

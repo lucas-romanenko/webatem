@@ -27,9 +27,9 @@ class ATEMConnectionLoggingMixin:
     """
     Mixin providing connection/disconnection event logging for the ATEM consumer.
 
-    No user identity is involved — the app is unauthenticated by design, so
-    log entries carry connection metadata only (IP address, timestamps,
-    disconnect reason and session duration).
+    The event goes to the host through ``atem_control.hooks`` with whatever
+    ``scope['user']`` the host's ASGI stack put there (None standalone), plus
+    the connection metadata (IP address, disconnect reason, duration).
 
     Expects the consumer to have:
         - self.connected_ip (str or None)
@@ -66,24 +66,20 @@ class ATEMConnectionLoggingMixin:
         self.connect_time = None
 
     async def _write_connection_log(self, event_type, ip_address, reason=None, duration_seconds=None):
-        """Write connection/disconnection event to database."""
+        """Hand the connect/disconnect event to the host (atem_control.hooks)."""
         try:
-            from atem_control.models import ATEMControlLog
-
+            from atem_control import hooks
             log_data = {
                 'ip_address': ip_address,
             }
-
             if reason:
                 log_data['disconnect_reason'] = reason
-
             if duration_seconds is not None:
                 log_data['duration_seconds'] = round(duration_seconds, 1)
                 log_data['duration_formatted'] = _format_duration(duration_seconds)
-
-            await sync_to_async(ATEMControlLog.objects.create)(
-                type=event_type,
-                data=log_data
+            user = self.scope.get('user') if getattr(self, 'scope', None) else None
+            await sync_to_async(hooks.get().record_connection)(
+                user=user, event_type=event_type, ip=ip_address, data=log_data,
             )
 
             # Mirror into the activity log (2026-07-07). The

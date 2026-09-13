@@ -319,3 +319,42 @@ your own risk.
 Independent project. Not affiliated with or endorsed by the switcher
 manufacturer. The red and green are broadcast convention, sampled to their
 own values; the brand lives in [docs/brand/](docs/brand/).
+
+## Hosting the control app inside another Django project
+
+`atem_control` is a normal Django app (label `webatem_atem`), and everything
+it needs from its surroundings goes through one class,
+`atem_control.hooks.Hooks`: who may open the page and drive the socket, where
+operator actions and connect/disconnect events are recorded, what a switcher
+is called, the switcher list for the suggestions, HyperDeck names, sightings
+(video mode, deck model, binding differences), where a dropped still goes,
+and extra template context. Every method has a working default — the
+standalone app *is* the defaults — so a host subclasses it and overrides what
+it has:
+
+```python
+# settings.py
+INSTALLED_APPS += ['atem_control']
+WEBATEM_HOOKS = 'myplatform.webatem_hooks.PlatformHooks'
+```
+
+```python
+# myplatform/webatem_hooks.py
+from atem_control.hooks import Hooks
+
+class PlatformHooks(Hooks):
+    def check_access(self, request):        # None = allowed, else the response
+        ...
+    def can_use(self, user):                # the WebSocket gate
+        ...
+    def record_activity(self, **event):     # the audit log
+        ...
+    def name_for_ip(self, ip):              # the inventory's name
+        ...
+```
+
+Templates are overridden the Django way (a `base.html`, a
+`control/_header.html` in the host's own template directory), and
+`control.html` carries a `control_extra` block for the host's panels and
+scripts. Discovery is off with `discovery_enabled` returning False.
+

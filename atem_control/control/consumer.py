@@ -20,6 +20,7 @@ from atemwire.messages.fairlight import enable_fairlight_levels
 from atemwire.pool import ATEMInstanceManager
 from atem_control.control.commands import dispatch as dispatch_command
 from atem_control.control.logging import ATEMConnectionLoggingMixin
+from atem_control import hooks
 from atem_control.activity import ActivityLog
 from atem_control.activity import arecord_activity
 from atem_control.netutil import is_valid_ip
@@ -191,7 +192,13 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
     # =========================================================================
 
     async def connect(self):
-        """Accept WebSocket connection and notify client."""
+        """Accept WebSocket connection and notify client. The host decides
+        who may drive a switcher (``hooks.can_use``): the socket is the
+        hardware, so it enforces the same gate as the page."""
+        user = self.scope.get('user') if getattr(self, 'scope', None) else None
+        if not hooks.get().can_use(user):
+            await self.close()
+            return
         await self.accept()
         await self.send_json({'type': 'websocket_ready'})
 
@@ -396,8 +403,8 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
 
     @staticmethod
     def _lookup_equipment_name(ip_address):
-        # No name database in this build — sessions are labeled by IP.
-        return None
+        # The host's name for the switcher (an inventory, or discovery).
+        return hooks.get().name_for_ip(ip_address)
 
     # (build_full_state itself carries atem_name since the WhoI reader was
     # upstreamed — the old _state_with_name wrapper is gone.)
@@ -485,6 +492,14 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
         if success:
             if not is_test_connection:
                 await self._log_connect(ip_address)
+                # A sighting for the host: what this switcher runs. Best
+                # effort, off the protocol lane.
+                try:
+                    _vm = self.connection.mixerstate.get('video-mode')
+                    if _vm is not None:
+                        await sync_to_async(hooks.get().record_video_mode)(ip_address, _vm.get_label())
+                except Exception:
+                    logger.debug('video-mode sighting skipped', exc_info=True)
 
             # Cache the ATEM's friendly name for activity-log rows (one
             # lookup per connect, not per command).
@@ -500,6 +515,14 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
             })
 
             await self._subscribe_media_pool(ip_address)
+            # The host may compare the switcher's HyperDeck bindings with
+            # what it knows and have the page list the decks it does not.
+            try:
+                diff = await sync_to_async(hooks.get().hyperdeck_binding_diff)(self.connection, ip_address)
+                if diff and diff.get('orphans'):
+                    await self.send_json({'type': 'hyperdeck_unknown_decks', 'decks': diff['orphans']})
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"HyperDeck binding diff failed for {ip_address}: {e}")
             # NOTE: audio meter subscription is now tab-gated. The frontend
             # sends `subscribe_audio_meters` when the audio panel opens (and
             # the browser tab is visible) and `unsubscribe_audio_meters` when

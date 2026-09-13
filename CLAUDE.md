@@ -86,6 +86,26 @@ WebATEM-only style in `atem_control/static/brand/brand.css`**, which
 `atem_discovery.js`, `atem_server_settings.js`. Discovery is WebATEM-only by
 decision — upstream has an equipment database and will not get mDNS.
 
+## The seam — `atem_control/hooks.py` (since 0.4.0)
+
+`atem_control` is meant to be HOSTED by a larger platform as well as run
+standalone, so nothing in the app reaches past one class for anything the
+host might own: `Hooks` (access for pages and the socket, activity and
+connection records, name-for-IP, the switcher list for suggestions, HyperDeck
+names, sightings, the HyperDeck binding diff, the dropped-still upload,
+template context, discovery on/off). `settings.WEBATEM_HOOKS` names the
+host's subclass; unset = the defaults, which ARE standalone WebATEM. The
+`activity` and `sightings` modules are facades over it — keep call sites on
+them. The app's label is `webatem_atem` (tables `webatem_atem_*`), on
+purpose: the host may own an app called `atem_control` with its own history,
+and Django keys migrations and tables on the label. Migration 0002 copies a
+0.3-era `atem_control_atemcontrollog` (no user column) into the new table;
+a table WITH a user column is somebody else's and is left alone. Templates:
+the host overrides `base.html` / `control/_header.html` by path and fills
+`control_extra` in control.html. The hooks are pinned by
+`tests/unit/test_hooks.py`; a new dependency on the surroundings goes
+through a new hook method with a working default, never a direct import.
+
 ## The launcher (`webatem/launcher.py`) — Companion, literally
 
 Lucas's standard is Bitfocus Companion: an icon in the menu bar / tray, a
