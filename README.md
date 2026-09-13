@@ -1,8 +1,10 @@
-# WebATEM
+<p align="center"><img src="docs/brand/banner.png" alt="webATEM — Browser control for ATEM switchers. Run the server, open a tab, cut the show." width="100%"></p>
 
-**Control your Blackmagic ATEM switcher from any browser.** WebATEM finds the
-ATEMs on your network and gives you a full control surface — switching,
-keyers, audio, media pool, macros — at a URL, on any device.
+**Browser control for ATEM switchers.** Run the server on a Mac, a Windows
+PC or a Linux box, and control your ATEMs from any device on the network —
+desktop, laptop, tablet or phone — in a browser. WebATEM finds the switchers
+for you and gives you the whole control surface: switching, keyers, audio,
+media pool, macros. Run the server, open a tab, cut the show.
 
 <p align="center">
   <a href="https://github.com/lucas-romanenko/webatem/releases/latest/download/webatem-windows-x64.exe"><img src="https://img.shields.io/badge/Download-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows"></a>
@@ -311,3 +313,9 @@ Security posture and how to report vulnerabilities: [SECURITY.md](SECURITY.md).
 Not affiliated with or endorsed by Blackmagic Design. ATEM and HyperDeck are
 trademarks of Blackmagic Design Pty Ltd. Use against production hardware at
 your own risk.
+
+---
+
+Independent project. Not affiliated with or endorsed by the switcher
+manufacturer. The red and green are broadcast convention, sampled to their
+own values; the brand lives in [docs/brand/](docs/brand/).

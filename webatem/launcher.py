@@ -534,11 +534,12 @@ def _on_ui_thread(fn) -> None:
 
 
 _LOADING_HTML = """<!doctype html><html><head><meta charset="utf-8"><title>WebATEM</title>
-<style>html,body{height:100%;margin:0;background:#111;color:#bbb;font:15px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-.c{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px}
-.s{width:26px;height:26px;border:3px solid #333;border-top-color:#f68b2a;border-radius:50%;animation:r 1s linear infinite}
+<style>html,body{height:100%;margin:0;background:#0E0F10;color:#7E8386;font:13px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.c{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px}
+.w{font:800 26px Archivo,-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,sans-serif;letter-spacing:-.03em;color:#EDEDEA}.w span{font-weight:400;color:#9A9E9F}
+.s{width:22px;height:22px;border:2px solid #26292C;border-top-color:#7E8386;border-radius:50%;animation:r 1s linear infinite}
 @keyframes r{to{transform:rotate(360deg)}}</style></head>
-<body><div class="c"><div class="s"></div><div>WebATEM is starting…</div></div></body></html>"""
+<body><div class="c"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADgAAAA4CAYAAACohjseAAAJhklEQVR4nO1aa2xcxRX+zszcvXvXr12/iRMSKC3gNBKhmBQVs2nKQ5RKVKBNaamQilRQU/q/D6gx/UWFyp9KpSo/WgkhpYH2X6VKpYl5WIEQ8ZJNXiSNDEHYju317np9HzOnP/auvcb27l0nxLHEJ83Kvpq593xzzsw5c84QVkA6nVZDQ0MBAKTvuOfrQeB9X/v+d/3A3260aQbAAGilsV80CAgs2/5ACjmslNr/6n//PQxADwwMiMHBQQ5lq+y/dPzAwAANDg6aXbfu3iWEeLKQz+8u5HPxQj4Hz3Xh+x6IaOlbLgEIADNDSgk77sBxEmhsauaGpqZ3pZJPDx96ZT8AZDIZeeDAAV05bsk7AOCW9HeenMvnH5+aHJfnJycQBIGmEgTRuiiuAgxj2DAzCyFkSzKJzq5NaGxu3p+dnNs3Onp4qpJkWVoCgB07diQbkx3PzWZn9p49c4o9zzVKWbJMivlS620VEC1oVGttAPDmK7fJ9s6ud4zxHj4yPPxuaLJGAEA6nZYA0NDS/peZmam9J4+NeFprWFZMInzRZUMOACrkUUoJpaQ8e+Yj/9OPx3YKsv7R19fXNljqSVTeUG7p//aTs7PZgZPHRjylrFiFxW4IEBE81/V7rtxqdW3a/J83Xzt4RzqdVgQA/f17bswVC2+eOv4haa2FEIIuK41FBBEh8P3gmmuvVy2p5L7hoYN/EgCEZ/Tvz0+MK89zsVHJlUFCyHMfj7Hr+r/btWtPl7jt9tuvnS8W+6cmJ1gpS0YhR2tsXzRCN0KFQo4Ludk2K0H3Kt/nH+TzuZgf+MayYjW1JwH4AAwDUT1GOSqwwr9X+gIRgY2puuqFEJE2OyKBmelpbk6mHlRG67sK+RyIRCRhc4aRkgRb1OfsGcB4YBATtEC0EkHgw7JiIYnPSwyAGZ7nQQiBar6YmSGEEHNzeQS+368C39/uui6ISNSaHc3AYy02HmiyEKNQixHJCQBD8xrPzLiY0QxFiySZGT1btqKz6wqQoOWBYPh/dnoaY2fPIAiCqiSJCDoI4HkeKWNMUzn8Wg0SJc09lrTxVCqOCWOA0ERrabHsbJiAh5sstAnCIxNzUKDSrhf46NmyDduuvga+760+Sczo3tQDZVk48eEISAgsV/UijDHwfQ8CAFedDZTWXEoSfthgYUIbeAwE4fOgRiv30Qx8ohm7HYWdtkKRAWKGZcXQ2d0N3/dgjFkIKj7fAMB1XSRTrWhqboGuoUWgpEmFCFbGAGwiWLRobmvZFcvjGggwAMAMosU1VVPg8FdIWdc3I6G8+12M7d5c6Avq8NORCW5UfElwo+NLghsdXxK82LjUB7G6/CDhwnyYCT94KUnWJMgoHXMmtMGr8xqdUsAAdbcAQJsgnPA13vM0HHERHH4EqCidGEAMhKenXbQKwm5H1R3REIARz+CX5+dRMAxHEHTNUReOyAQVAVnD+OnEHL5hKyRE6bgUBeUTxTuuRoGBBFHksReKSASB0FQJsEA44uo1rSOHgAStbpq1gu215IoiEwTCjUYKNPi6roB3YbwlS5pbYayUAp7nVyVhKVVzEj6PuggCQDBbhGptgLBVfTPKgP4sB7IVyJLLSGZnc0glk7BjMRg2qDy3lLPYE5OTcJxEXSTr06A26Nh3K5KZG1YUsiqIUHj9NMafPQQ9M79kvNYGP3noR7jn7jthKQvMvJDQ4vBHCMKbbx3F8399AUHgRyYZiSBJgWC2iI59t6L7iTsRTBaiEwvBzEg9dBNkawJjP38JgiSElCjMFfDA3vvwi30/QzY7Fa6D5cIbY3D/ffeira0V993/euTv1nb0BBhfQ7U2IJm5AcFkAexpcGDqatCM4NwsGm+7Gs7OHpiCj8BotKaS+N7dd2F2dgaeHyDQGkEQLGvGGIyPj2PXzTdh+/br4c4XI2kxmokyh2tHhDkLWmPOggAiiERsoYASi8WgVGk9C6KqQpdThgnHCc24thDRY1Hmi5izWFy7xphS0jfCei731Tp6iLBupwkGw1IKE5Pn8dbbR5FMpmCMWbUFgUYqmcSZ/53F6IfHEbPjMKZ2sFe3m7iYYGbYMRt/fv5vaG9vx66+G1c0O2ZAEOHEqY/wzLN/RLFYhIyYWVt3gkpZyOVy+PUTT2F773VwHGeZZggEBmN09BjmXQ+OE0dxrgAhahvguhIESiQtS0EpC+9/MAJjeNWMuWPb4QRE97/rThBYLJEnEonq/YyOtO4qcVkQLKOm8BGLPZW49LvoJc5Z1OcHiaIfAleC4dVzFhH84FqOSyHBKgMZIEsimMij8PppyI4GsDElYetoHBjItgTck5MovncOwrFAIHiei+z0NKxYrKKSxGFgETaUnluxGIrFAvK5WUgpIxBmKACBEEqB/dVr0sygmML4Hw5BtibQeNvV0evX5fkTwPzoZ/j08X/BFFyIRAxsGEIIjJ09A2VZSKZaKwYtrYASEQqFPE6fPAGtdU2CRAQhJNPN30q/f/b0qR0z01NGKbV6lZcI7GtAGzg7N0MkLHCUEm+5UMrA/HvnoENylaZe1lxTczOEkFg5JmTkczlorSv6rPJJZijLwlev7YWSUrwRdxI7eOp8dX0zl85wlsTc0bE1rUWRsJaRA0qzTUTIzWarLkUpZSTNGaNNPB4nIcRxJYV6oamp+ZHPRO0affnroiEWmdSy8VUmRsrqXivqlTJjDLckW4Vt2y+KqfHkESeRONaSTEFrbSKdlOvcYBZazflbuXxdz105Ywzbdpyam1s89s3fxejoAc+yY7/t7N5UcgIb+ZZT6XaF7rqiR8Tj8eeGhw8eF+l0Wg0feuXlRGPjS5uv3KZ8z/PX/05o/SAi+J6nU23tqq2t44wlzG8ymYwUQ0NDOpPJSPLnH23t6Pzgip4tlue6IcmNQbRMrqklKbdsvWrOAHuHhobyvb29LABwb28vHz58eEprfnDT5i0ne7ZstQLfD4zRTDXSCOuJMBPAnucFqbZ2edVXvpaTQj56ZHjo7UwmIwcHB82C5OUbstf19bWlnKYXs9PTd376yRgKhbwpOU1xGVxnLqG06Rg2xhjbjsuu7h60d3SehNY/Pnz4tbcqL9UvlXhgQGBw0ADAN/v3PKYD/1e52eym7MwUCvk8tNYwWtcXxVxUlO7VSKkQd+JoSbaipSVZsB3neTc/M3D06NFstUvpi89KgTX39aW7403xe33P3et7Xr/necr3PVrnW/dsx+NQSo3Ydny/8YJ/vvHGwREASxRUxv8B0ChMe8ZGi48AAAAASUVORK5CYII=" width="56" height="56" alt=""><div class="w"><span>web</span>ATEM</div><div class="s"></div><div>starting…</div></div></body></html>"""
 
 
 def _window_process(url: str) -> None:
@@ -647,16 +648,61 @@ class _WindowChild:
 # shape). The server runs supervised in threads; Quit stops everything.
 # ---------------------------------------------------------------------------
 
+def _brand_dir() -> Path:
+    import atem_control
+    return Path(atem_control.__file__).parent / 'static' / 'brand'
+
+
 def _tray_image():
-    """The app icon for the tray, from the package's static files; a plain
-    orange square if that ever goes missing."""
+    """The mark for the menu bar / tray, per platform (handoff §5: below
+    30 px the T-bar is dropped — two bars only). macOS: a template image
+    (black + alpha; the system tints it per appearance), 22 pt. Windows: the
+    colour mark at the system's small-icon size (16 → two-bar form, 32 →
+    full). Linux: 24 px, two-bar. A solid PGM square if the files are ever
+    missing."""
     from PIL import Image
     try:
-        import atem_control
-        icon = Path(atem_control.__file__).parent / 'static' / 'icon.png'
-        return Image.open(icon).convert('RGBA')
-    except Exception:
-        return Image.new('RGBA', (64, 64), (246, 139, 42, 255))
+        tray = _brand_dir() / 'tray'
+        if sys.platform == 'darwin':
+            name = 'mac-template-22.png'
+        elif os.name == 'nt':
+            try:
+                import ctypes
+                small = ctypes.windll.user32.GetSystemMetrics(49)      # SM_CXSMICON
+            except Exception:  # noqa: BLE001
+                small = 16
+            name = 'win-32.png' if small >= 30 else 'win-16.png'
+        else:
+            name = 'linux-24.png'
+        return Image.open(tray / name).convert('RGBA')
+    except Exception:  # noqa: BLE001
+        return Image.new('RGBA', (32, 32), (0xD6, 0x27, 0x18, 255))
+
+
+def _mac_menu_bar_icon(icon) -> None:
+    """pystray builds a 1x NSImage from the PIL image. The menu bar wants a
+    TEMPLATE image (the system draws it black or white per appearance) with
+    a 2x backing for Retina, so once pystray has set its own, swap in ours:
+    the 44 px template at 22 pt, flagged template."""
+    try:
+        import AppKit
+        import Foundation
+        png = (_brand_dir() / 'tray' / 'mac-template-44.png').read_bytes()
+        original = icon._assert_image
+
+        def assert_image():
+            original()
+            try:
+                img = AppKit.NSImage.alloc().initWithData_(Foundation.NSData(png))
+                img.setSize_(Foundation.NSMakeSize(22, 22))
+                img.setTemplate_(True)
+                icon._icon_image = img
+                icon._status_item.button().setImage_(img)
+            except Exception:  # noqa: BLE001 — pystray's own image stays
+                pass
+        icon._assert_image = assert_image
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _run_tray(supervisor, controller, window) -> None:
@@ -703,6 +749,8 @@ def _run_tray(supervisor, controller, window) -> None:
             MenuItem('Quit', quit_app),
         )
     icon = pystray.Icon(APP_NAME, _tray_image(), APP_NAME, menu)
+    if sys.platform == 'darwin':
+        _mac_menu_bar_icon(icon)
     supervisor.on_change = icon.update_menu
     controller.on_quit = lambda: quit_app(icon)
 

@@ -66,6 +66,17 @@ MIT — the same license and copyright as Alpine.js above (Caleb Porzio and
 contributors). Vendored as `atem_control/static/vendor/alpinejs-collapse-3.14.3.min.js`
 for the settings accordion's height animation.
 
+## Archivo and IBM Plex Mono (fonts)
+
+The brand's two families (docs/brand/handoff): **Archivo** — Copyright 2020
+The Archivo Project Authors (https://github.com/Omnibus-Type/Archivo) — and
+**IBM Plex Mono** — Copyright © 2017 IBM Corp. with Reserved Font Name
+"Plex" (https://github.com/IBM/plex). Both are licensed under the SIL Open
+Font License, Version 1.1; the full texts are
+`atem_control/static/brand/fonts/OFL-Archivo.txt` and
+`atem_control/static/brand/fonts/OFL-IBMPlexMono.txt`, beside the woff2
+files (latin and latin-ext subsets, as served by Google Fonts).
+
 ## Poppins (font)
 
 Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins).

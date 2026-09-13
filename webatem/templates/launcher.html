@@ -3,36 +3,46 @@
 {% block title %}WebATEM{% endblock %}
 {% block extra_css %}
 <style>
-  /* The launcher window: a fixed-size panel, no scroller of its own. */
+  /* The launcher window: a fixed-size panel in the brand — header lockup,
+     status card, the form, the three buttons. No scroller of its own. */
   main { padding: 0 !important; max-width: none !important; }
-  .lw { min-height: 100vh; display: flex; flex-direction: column; }
-  .lw-head { background: #000; padding: 1.75rem 1.5rem 1.25rem; text-align: center; }
-  .lw-head img { width: 88px; height: 88px; border-radius: 22px; }
-  .lw-status { background: oklch(var(--p)); color: oklch(var(--pc)); text-align: center; padding: 1.1rem 1.5rem; }
-  .lw-status .state { font-size: 2rem; font-weight: 600; letter-spacing: .01em; line-height: 1.1; }
-  .lw-status .addr { font-family: ui-monospace, monospace; font-size: 1.05rem; margin-top: .3rem; word-break: break-all; }
-  .lw-body { padding: 1.25rem 1.5rem 1.5rem; display: flex; flex-direction: column; gap: 1rem; flex: 1; }
+  .lw { min-height: 100vh; display: flex; flex-direction: column; background: var(--ink); }
+  .lw-head { padding: 22px 24px 18px; display: flex; align-items: center; gap: 14px; border-bottom: 1px solid var(--border); }
+  .lw-head .brand-mark { width: 44px; height: 44px; }
+  .lw-head .brand-wordmark { font-size: 27px; }
+  .lw-head .ver { margin-left: auto; font-family: var(--font-mono); font-size: 12px; color: var(--text-faint); }
+  .lw-status { padding: 22px 24px; border-bottom: 1px solid var(--border); background: var(--surface); }
+  .lw-status .state { display: flex; align-items: center; gap: 10px; font-size: 22px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; color: var(--text); }
+  .lw-status .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--text-faint); flex: none; }
+  .lw-status .dot.on { background: var(--pvw); }
+  .lw-status .addr { font-family: var(--font-mono); font-size: 15px; color: var(--link); margin-top: 8px; word-break: break-all; min-height: 1.4em; }
+  .lw-body { padding: 22px 24px 20px; display: flex; flex-direction: column; gap: 18px; flex: 1; }
+  .lw label.brand-overline { display: block; margin-bottom: 6px; }
+  .lw-check { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text); cursor: pointer; }
+  .lw-actions { margin-top: auto; display: flex; gap: 8px; padding-top: 16px; border-top: 1px solid var(--border); }
+  .lw-legal { font-size: 12px; color: var(--text-faint); line-height: 1.5; margin: 0; }
 </style>
 {% endblock %}
 {% block content %}
 <div class="lw" id="launcherWindow"
      data-settings="{% url 'server_settings' %}">
   <div class="lw-head">
-    <img src="{% static 'icon.png' %}" alt="">
-    <div class="mt-3 text-base-content/80 text-sm">WebATEM <span class="font-mono">{{ version }}</span></div>
+    <span class="brand-mark">{% include "brand/_mark.svg" %}</span>
+    <span class="brand-wordmark"><span>web</span>ATEM</span>
+    <span class="ver">v{{ version }}</span>
   </div>
   <div class="lw-status">
-    <div class="state" id="lwState">Starting…</div>
+    <div class="state"><span class="dot" id="lwDot"></span><span id="lwState">Starting…</span></div>
     <div class="addr" id="lwAddr">&nbsp;</div>
   </div>
   <div class="lw-body">
     <div class="grid grid-cols-[1fr_auto] gap-3 items-end">
-      <div class="form-control">
-        <label class="label py-1" for="lwHost"><span class="label-text">Interface</span></label>
+      <div>
+        <label class="brand-overline" for="lwHost">Interface</label>
         <select id="lwHost" class="select select-bordered select-sm w-full"></select>
       </div>
-      <div class="form-control">
-        <label class="label py-1" for="lwPort"><span class="label-text">Port</span></label>
+      <div>
+        <label class="brand-overline" for="lwPort">Port</label>
         <div class="join">
           <input id="lwPort" type="number" min="1" max="65535" class="input input-bordered input-sm join-item w-24 font-mono">
           <button id="lwPortApply" class="btn btn-sm join-item">Change</button>
@@ -40,16 +50,17 @@
       </div>
     </div>
     <div class="flex flex-wrap gap-x-6 gap-y-2">
-      <label class="label cursor-pointer gap-2 py-0"><input id="lwMinimized" type="checkbox" class="checkbox checkbox-sm checkbox-primary"><span class="label-text">Start minimized</span></label>
-      <label class="label cursor-pointer gap-2 py-0" id="lwAutoRow"><input id="lwAutostart" type="checkbox" class="checkbox checkbox-sm checkbox-primary"><span class="label-text">Run at login</span></label>
+      <label class="lw-check"><input id="lwMinimized" type="checkbox" class="checkbox checkbox-sm">Start minimized</label>
+      <label class="lw-check" id="lwAutoRow"><input id="lwAutostart" type="checkbox" class="checkbox checkbox-sm">Run at login</label>
     </div>
-    <p class="text-xs text-base-content/60 hidden" id="lwNote"></p>
+    <p class="text-xs hidden" id="lwNote" style="color: var(--text-faint)"></p>
     <p class="text-sm hidden" id="lwStatus"></p>
-    <div class="mt-auto flex gap-2 pt-3 border-t border-base-300">
-      <button id="lwLaunch" class="btn btn-primary flex-1">Launch GUI</button>
-      <button id="lwHide" class="btn" hidden>Hide</button>
-      <button id="lwQuit" class="btn btn-outline btn-error" hidden>Quit</button>
+    <div class="lw-actions">
+      <button id="lwLaunch" class="btn flex-1">Launch GUI</button>
+      <button id="lwHide" class="btn btn-ghost" hidden>Hide</button>
+      <button id="lwQuit" class="btn btn-ghost" hidden>Quit</button>
     </div>
+    <p class="lw-legal">Not affiliated with or endorsed by the switcher manufacturer.</p>
   </div>
 </div>
 {% endblock %}
@@ -61,7 +72,7 @@
   var ENDPOINT = root.dataset.settings;
   var QUIT = ENDPOINT.replace('settings/', 'quit/');
   var el = function (id) { return document.getElementById(id); };
-  var hostSel = el('lwHost'), portInp = el('lwPort'), state = el('lwState'), addr = el('lwAddr');
+  var hostSel = el('lwHost'), portInp = el('lwPort'), state = el('lwState'), addr = el('lwAddr'), dot = el('lwDot');
   var minim = el('lwMinimized'), auto = el('lwAutostart'), autoRow = el('lwAutoRow');
   var note = el('lwNote'), status = el('lwStatus');
   var current = null, native = false, pollTimer = null;
@@ -76,6 +87,7 @@
     if (d.restarting) { state.textContent = 'Restarting…'; addr.textContent = '\u00a0'; schedule(500); }
     else if (d.running === false) { state.textContent = 'Not running'; addr.textContent = '\u00a0'; }
     else { state.textContent = 'Running'; addr.textContent = d.url; }
+    dot.classList.toggle('on', !d.restarting && d.running !== false);
     el('lwLaunch').disabled = !!d.restarting || d.running === false;
     hostSel.innerHTML = '';
     var ph = opt('', 'Change network interface…'); ph.disabled = true; hostSel.appendChild(ph);
@@ -106,7 +118,7 @@
 
   function load() {
     fetch(ENDPOINT, { cache: 'no-store' }).then(function (r) { return r.json(); }).then(render)
-      .catch(function () { state.textContent = 'Starting…'; schedule(1000); });
+      .catch(function () { state.textContent = 'Starting…'; dot.classList.remove('on'); schedule(1000); });
   }
 
   function post(body, after) {
@@ -114,7 +126,7 @@
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
       .then(function (res) {
         if (!res.ok) { say(res.d.error || 'Not saved.', 'text-error'); load(); return; }
-        if (after) after(res.d); else if (res.d.restarting) { state.textContent = 'Restarting…'; addr.textContent = '\u00a0'; el('lwLaunch').disabled = true; schedule(700); }
+        if (after) after(res.d); else if (res.d.restarting) { state.textContent = 'Restarting…'; addr.textContent = '\u00a0'; dot.classList.remove('on'); el('lwLaunch').disabled = true; schedule(700); }
         else if (res.d.note) say(res.d.note, 'text-warning');
         else status.classList.add('hidden');
       })
@@ -145,7 +157,7 @@
   el('lwHide').addEventListener('click', function () { if (native) window.pywebview.api.hide(); });
   el('lwQuit').addEventListener('click', function () {
     fetch(QUIT, { method: 'POST', headers: { 'X-CSRFToken': csrf() } })
-      .then(function () { state.textContent = 'Stopped'; addr.textContent = ''; if (native) setTimeout(function () { window.pywebview.api.hide(); }, 300); })
+      .then(function () { state.textContent = 'Stopped'; addr.textContent = ''; dot.classList.remove('on'); if (native) setTimeout(function () { window.pywebview.api.hide(); }, 300); })
       .catch(function () { say('Could not stop the server from here.', 'text-error'); });
   });
   window.addEventListener('pywebviewready', function () {

@@ -6,20 +6,23 @@
                      wrap instead of overflowing into its neighbours). -->
                 <div class="grid grid-cols-1 lg:grid-cols-[auto_minmax(0,1fr)_auto] gap-6 items-center">
                     
-                    <!-- Left: Page Name & Connection Status -->
-                    <div class="flex items-center gap-4 justify-center lg:justify-start">
+                    <!-- Left: the lockup, a rule, the connection (handoff §4:
+                         30 px mark + webATEM 17/800, 1×24 rule, mono 12 status —
+                         dot pvw when connected / faint when not, name in text,
+                         IP in faint — then the version, mono, faint). -->
+                    <div class="flex items-center gap-[18px] justify-center lg:justify-start flex-wrap">
                         <div class="flex items-center gap-3">
-                            <div :class="$store.atem.statusDotClass"></div>
-                            <div>
-                                <h1 class="text-2xl font-bold text-base-content">ATEM Control Panel</h1>
-                                <!-- Connected Device Info - Inline Below Title -->
-                                <div class="mt-1 flex items-baseline gap-2" x-show="$store.atem.currentIP">
-                                    <span class="text-lg font-bold text-success" x-text="$store.atem.state.atem_name" x-show="$store.atem.state.atem_name"></span>
-                                    <span class="text-sm text-base-content/40" x-show="$store.atem.state.atem_name">—</span>
-                                    <span class="text-lg font-mono font-semibold text-base-content/70" x-text="$store.atem.currentIP"></span>
-                                </div>
-                            </div>
+                            <span class="brand-mark" style="width:30px;height:30px">{% include "brand/_mark.svg" %}</span>
+                            <h1 class="brand-wordmark" style="font-size:17px"><span>web</span>ATEM</h1>
                         </div>
+                        <span class="hidden sm:block" style="width:1px;height:24px;background:var(--border)"></span>
+                        <div class="brand-data flex items-center gap-[9px]" style="font-size:12px;color:var(--text)">
+                            <span class="rounded-full" style="width:7px;height:7px;flex:none"
+                                  :style="{ background: $store.atem.connected ? 'var(--pvw)' : 'var(--text-faint)' }"></span>
+                            <span x-text="$store.atem.state.atem_name || ($store.atem.connected ? 'Connected' : 'Not connected')"></span>
+                            <span x-show="$store.atem.currentIP" x-text="$store.atem.currentIP" style="color:var(--text-faint)"></span>
+                        </div>
+                        <span class="brand-data hidden sm:inline" style="font-size:12px;color:var(--text-faint)">v{{ app_version }}</span>
                     </div>
                     
                     <!-- Center: Action Buttons. Labels collapse to icon-only chips
