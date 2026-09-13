@@ -14,37 +14,35 @@ authors = [{ name = "Lucas Romanenko" }]
 # environment (pipx, Docker, the desktop bundle), and one list here is what
 # Dependabot bumps. The two device libraries come from
 # github.com/lucas-romanenko/bmdwire.
+# Framework requirements are RANGES: WebATEM is also installed as a library
+# by a larger Django project that pins its own framework versions, and an
+# exact pin here would make the two unresolvable. The two device libraries
+# are exact — WebATEM decides which protocol code its host runs. WebATEM's
+# own builds (the image, the desktop bundles, CI) are reproducible through
+# requirements.txt, the exact-pin lock applied on top of these ranges.
 dependencies = [
-    "Django==6.0.7",
-    "channels==4.3.2",
-    "uvicorn[standard]==0.52.0",
-    "pillow==12.3.0",
-    "whitenoise==6.12.0",
-    "zeroconf==0.147.2",
-    "pystray==0.19.5",
-    "pywebview==6.2.1",
+    "Django>=6.0,<7",
+    "channels>=4.3,<5",
+    "uvicorn[standard]>=0.30,<1",
+    "pillow>=10,<14",
+    "whitenoise>=6,<7",
+    "zeroconf>=0.140,<1",
+    "ifaddr>=0.2,<1",
     "atemwire==0.15.0.dev1",
     "hyperdeckwire==0.1.0.dev1",
 ]
-classifiers = [
-    "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Programming Language :: Python :: 3.14",
-    "Development Status :: 4 - Beta",
-    "Environment :: Web Environment",
-    "Framework :: Django",
-    "Topic :: Multimedia :: Video",
-]
 
 [project.optional-dependencies]
+# The menu-bar / tray launcher and its window: the downloads and pipx users
+# want them; a server (Docker, or a project hosting the app) never does.
+desktop = [
+    "pystray>=0.19,<1",
+    "pywebview>=6,<7",
+]
 test = [
-    "pytest==9.1.1",
-    "pytest-django==4.12.0",
-    "pytest-timeout==2.4.0",
+    "pytest>=9,<10",
+    "pytest-django>=4.11,<5",
+    "pytest-timeout>=2.3,<3",
 ]
 
 [project.scripts]

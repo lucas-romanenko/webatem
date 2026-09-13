@@ -23,7 +23,7 @@ Three ways to run it, all simple:
   Software Control, but in your browser — and on every device on the network.
 - **Your whole team, always on** → **host it** on a Linux box, VM or Raspberry
   Pi with one Docker command; everyone opens a URL — no installs, no accounts.
-- **Already have Python?** → `pipx install webatem`, then `webatem`.
+- **Already have Python?** → `pipx install "webatem[desktop]"`, then `webatem`.
 
 Every way of running it **auto-discovers the ATEMs on your network**
 (Bonjour/mDNS) and lists them by name, exactly like ATEM Software Control.
@@ -119,7 +119,7 @@ Keep it up with a systemd unit, `tmux` or `nohup`.
 ### Option C — pipx  *(you already have Python 3.10+)*
 
 ```bash
-pipx install webatem      # or: uvx webatem, with no install at all
+pipx install "webatem[desktop]"      # or: uvx --from "webatem[desktop]" webatem, with no install at all
 webatem
 ```
 

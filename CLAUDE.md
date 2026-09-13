@@ -32,8 +32,13 @@ that fails in `actions/upload-artifact` (GitHub timeout, seen once) is fixed
 by `gh run rerun <id> --failed`; each job attaches its own asset. Never
 re-tag; a broken release gets the next number. `main` has no ruleset.
 
-Dependencies are exact pins in `pyproject.toml` (the ONE dependency list;
-`test` extra). The device libraries `atemwire` and `hyperdeckwire` come from
+Dependencies: `pyproject.toml` carries RANGES for the framework (WebATEM is
+also a library inside a project with its own pins) and exact pins for the
+two device libraries; `requirements.txt` is the exact-pin lock WebATEM's own
+builds apply on top (`pip install -r requirements.txt ".[desktop]"`). The
+tray and window libraries are the `desktop` extra — a server never installs
+them; `pipx install "webatem[desktop]"` is the launcher, plain `webatem` the
+headless server. The device libraries `atemwire` and `hyperdeckwire` come from
 the `lucas-romanenko/bmdwire` monorepo via PyPI; Dependabot opens the bump
 PRs (`.github/dependabot.yml`, cooldown excluded for those two) and
 `dependabot-automerge.yml` merges them once CI is green.
