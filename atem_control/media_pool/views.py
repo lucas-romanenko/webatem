@@ -62,6 +62,20 @@ def validate_and_process_image(file_path, file_name):
         return False, False, (0, 0), f"Error processing image {file_name}: {e}"
 
 
+def validate_and_resize_1080p(file_path, file_name):
+    """The default ``hooks.validate_still``: 1920x1080 exactly, or a larger
+    16:9 image resized down to it, in place. Returns (ok, error)."""
+    ok, needs_resize, original_dims, err = validate_and_process_image(file_path, file_name)
+    if not ok:
+        return False, err
+    if needs_resize:
+        resized, resize_msg = resize_image_to_1920x1080(file_path)
+        if not resized:
+            return False, resize_msg
+        logger.info(f"Resized {file_name} from {original_dims[0]}x{original_dims[1]}")
+    return True, None
+
+
 def resize_image_to_1920x1080(file_path):
     """Resize a validated oversized 16:9 image to exactly 1920x1080."""
     try:
@@ -139,19 +153,10 @@ def media_pool_upload(request):
             for chunk in upload_file.chunks():
                 destination.write(chunk)
 
-        ok, needs_resize, original_dims, err = validate_and_process_image(file_path, file_name)
+        ok, err = hooks.get().validate_still(ip, file_path, file_name)
         if not ok:
             shutil.rmtree(job_dir, ignore_errors=True)
             return JsonResponse({'success': False, 'error': err}, status=400)
-
-        if needs_resize:
-            resized, resize_msg = resize_image_to_1920x1080(file_path)
-            if not resized:
-                shutil.rmtree(job_dir, ignore_errors=True)
-                return JsonResponse({'success': False, 'error': resize_msg}, status=400)
-            logger.info(
-                f"Resized {file_name} from {original_dims[0]}x{original_dims[1]}"
-            )
 
         logger.info(f"Drag-drop upload queued: ip={ip} slot={slot} file={file_name}")
 

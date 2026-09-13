@@ -137,6 +137,13 @@ class Hooks:
         return None
 
     # ---- uploads ----------------------------------------------------------
+    def validate_still(self, ip, file_path, file_name):
+        """Check (and, if the host allows, resize in place) a still dropped
+        on a media-pool slot of ``ip``. Return (ok, error). Default: exactly
+        1920x1080, or a larger 16:9 image resized down to it."""
+        from atem_control.media_pool import views as media_pool_views
+        return media_pool_views.validate_and_resize_1080p(file_path, file_name)
+
     def upload_still(self, ip, slot, file_path, job_dir, user=None):
         """A validated 1920x1080 file dropped on media-pool slot ``slot`` of
         ``ip``. Must return (ok, error). The caller keeps nothing: delete

@@ -55,6 +55,10 @@ class RecordingHooks(hooks.Hooks):
     def record_deck_model(self, ip, model):
         self.calls.append(('deck_model', ip, model))
 
+    def validate_still(self, ip, file_path, file_name):
+        self.calls.append(('validate', ip, file_name))
+        return (False, 'wrong size for this switcher') if file_name.startswith('bad') else (True, None)
+
     def upload_still(self, ip, slot, file_path, job_dir, user=None):
         self.calls.append(('upload', ip, slot))
         return False, 'queued elsewhere'
@@ -166,7 +170,12 @@ def test_upload_hands_the_file_to_the_host(client, host_hooks, tmp_path, setting
     with open(img, 'rb') as f:
         r = client.post('/atem/media-pool-upload/', {'ip': '10.1.1.1', 'slot': 3, 'image': f})
     assert r.status_code == 400 and r.json()['error'] == 'queued elsewhere'
-    assert ('upload', '10.1.1.1', 3) in host_hooks.calls
+    assert ('validate', '10.1.1.1', 'still.jpg') in host_hooks.calls and ('upload', '10.1.1.1', 3) in host_hooks.calls
+    bad = tmp_path / 'bad.jpg'
+    Image.new('RGB', (640, 480)).save(bad, 'JPEG')
+    with open(bad, 'rb') as f:
+        r = client.post('/atem/media-pool-upload/', {'ip': '10.1.1.1', 'slot': 3, 'image': f})
+    assert r.status_code == 400 and 'wrong size' in r.json()['error']
 
 
 def test_profile_filenames_take_the_host_s_name_and_clock(host_hooks):
@@ -186,3 +195,13 @@ def test_connection_log_carries_the_switcher_name(host_hooks):
         current_atem_name = 'Host Room 1'
     asyncio.run(Probe()._log_connect('10.1.1.1'))
     assert ('connection', 'connection', '10.1.1.1', None) in host_hooks.calls
+
+
+def test_default_still_check_is_1080p(tmp_path, settings):
+    from PIL import Image
+    from atem_control.media_pool.views import validate_and_resize_1080p
+    big = tmp_path / 'big.jpg'; Image.new('RGB', (3840, 2160)).save(big, 'JPEG')
+    assert validate_and_resize_1080p(str(big), 'big.jpg') == (True, None) and Image.open(big).size == (1920, 1080)
+    small = tmp_path / 'small.jpg'; Image.new('RGB', (1280, 720)).save(small, 'JPEG')
+    ok, err = validate_and_resize_1080p(str(small), 'small.jpg')
+    assert not ok and 'too small' in err
