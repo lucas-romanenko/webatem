@@ -34,7 +34,7 @@ COPY --from=css /build/webatem.css /app/atem_control/static/vendor/webatem.css
 RUN apt-get update \
     && apt-get install -y --no-install-recommends gcc libc6-dev \
     && pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt ".[test]" \
+    && pip install --no-cache-dir -c requirements.txt ".[test]" \
     && python3 -c 'import atemwire.mediaconvert, hyperdeckwire, webatem, atem_control; print("webatem + libraries OK")' \
     && apt-get remove -y --purge gcc libc6-dev \
     && apt-get autoremove -y \

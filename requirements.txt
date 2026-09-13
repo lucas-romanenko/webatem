@@ -1,7 +1,9 @@
 # The exact-pin lock for WebATEM's OWN builds (the Docker image, the desktop
-# bundles, CI): pyproject.toml carries ranges so the app can be installed as
-# a library into a project with its own pins; this file applies the exact
-# versions those builds were verified with. Dependabot bumps the device
+# bundles): pyproject.toml carries ranges so the app can be installed as a
+# library into a project with its own pins; this file is applied as a
+# CONSTRAINTS file (pip install -c requirements.txt ".[desktop]") so those
+# builds get exactly the versions they were verified with without pulling in
+# anything the chosen extras do not ask for. Dependabot bumps the device
 # libraries here and in pyproject.toml together.
 Django==6.0.7
 channels==4.3.2

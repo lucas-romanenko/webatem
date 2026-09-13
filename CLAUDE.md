@@ -35,7 +35,7 @@ re-tag; a broken release gets the next number. `main` has no ruleset.
 Dependencies: `pyproject.toml` carries RANGES for the framework (WebATEM is
 also a library inside a project with its own pins) and exact pins for the
 two device libraries; `requirements.txt` is the exact-pin lock WebATEM's own
-builds apply on top (`pip install -r requirements.txt ".[desktop]"`). The
+builds apply as constraints (`pip install -c requirements.txt ".[desktop]"`). The
 tray and window libraries are the `desktop` extra — a server never installs
 them; `pipx install "webatem[desktop]"` is the launcher, plain `webatem` the
 headless server. The device libraries `atemwire` and `hyperdeckwire` come from

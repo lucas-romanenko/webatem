@@ -164,7 +164,7 @@ like ASC if you want).
 | **Access from** | Any device on the network | The machine it’s installed on |
 | **Multiple operators** | One shared switcher session, many operators | Each machine opens its own session |
 | **Phones / tablets** | ✓ Responsive | ✗ |
-| **How to run** | Download it, host one instance for everyone (Docker), or `pipx install webatem` | Install on each machine |
+| **How to run** | Download it, host one instance for everyone (Docker), or `pipx install "webatem[desktop]"` | Install on each machine |
 | **Price** | Free, open source | Free (proprietary) |
 | **Feature breadth** | Core: switching, keyers, Fairlight audio, media pool, macros, profiles, HyperDeck | Everything, incl. camera control (CCU), streaming & recording, SuperSource |
 | **Support** | Community / self-hosted | Official Blackmagic |
