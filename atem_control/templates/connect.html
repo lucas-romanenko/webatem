@@ -14,11 +14,13 @@
         <div class="card-body">
             <!-- Header -->
             <div class="text-center mb-6 relative">
+                {% if server_settings_enabled %}
                 <button type="button" class="btn btn-sm btn-ghost btn-circle absolute right-0 top-0"
                         id="serverSettingsBtn" title="Server settings: address, port, start at login"
                         onclick="document.getElementById('serverSettings').showModal()">
                     <i class="bi bi-gear text-lg text-base-content/60"></i>
                 </button>
+                {% endif %}
                 <div class="flex items-center justify-center gap-[14px] mb-3">
                     <span class="brand-mark" style="width:44px;height:44px">{% include "brand/_mark.svg" %}</span>
                     <span class="brand-wordmark" style="font-size:30px"><span>web</span>ATEM</span>

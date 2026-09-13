@@ -78,6 +78,11 @@ class ATEMConnectionLoggingMixin:
                 log_data['duration_seconds'] = round(duration_seconds, 1)
                 log_data['duration_formatted'] = _format_duration(duration_seconds)
             user = self.scope.get('user') if getattr(self, 'scope', None) else None
+            eq_name = getattr(self, 'current_atem_name', None) or ''
+            if eq_name:
+                log_data['equipment_name'] = eq_name
+            if getattr(user, 'is_authenticated', False):
+                log_data['username'] = user.username
             await sync_to_async(hooks.get().record_connection)(
                 user=user, event_type=event_type, ip=ip_address, data=log_data,
             )
@@ -88,7 +93,6 @@ class ATEMConnectionLoggingMixin:
             # same events show in the application activity log.
             from atem_control.activity import ActivityLog
             from atem_control.activity import arecord_activity
-            eq_name = ''
             if event_type == 'connection':
                 action = 'connect'
                 summary = f"Connected to {eq_name or ip_address}"
@@ -99,7 +103,7 @@ class ATEMConnectionLoggingMixin:
                            + (f" (session {dur})" if dur else ""))
             await arecord_activity(
                 feature=ActivityLog.FEATURE_ATEM_CONTROL, device=ActivityLog.DEVICE_ATEM,
-                action=action,
+                action=action, user=user if getattr(user, 'is_authenticated', False) else None,
                 target=ip_address, target_name=eq_name,
                 summary=summary, reason=reason,
                 duration_seconds=log_data.get('duration_seconds'),

@@ -116,6 +116,11 @@ class Hooks:
         """Show the On Your Network section and serve the discovery API."""
         return True
 
+    def server_settings_enabled(self) -> bool:
+        """Show the Connect page's gear (the listen address / start-at-login
+        dialog): a launcher thing, not a hosting platform's."""
+        return True
+
     # ---- sightings ------------------------------------------------------
     def record_video_mode(self, ip, label):
         """The switcher at ``ip`` reported video mode ``label``."""

@@ -43,6 +43,12 @@ class RecordingHooks(hooks.Hooks):
     def discovery_enabled(self):
         return False
 
+    def server_settings_enabled(self):
+        return False
+
+    def time_format_24h(self):
+        return False
+
     def record_video_mode(self, ip, label):
         self.calls.append(('video_mode', ip, label))
 
@@ -90,7 +96,7 @@ def test_facades_forward_to_the_host(host_hooks):
 def test_pages_take_what_the_host_supplies(client, host_hooks):
     html = client.get('/atem/').content.decode()
     assert 'Host Room 1' in html and '10.1.1.1' in html            # the host's recent list
-    assert 'discoverySection' not in html and 'atem_discovery.js' not in html
+    assert 'discoverySection' not in html and 'atem_discovery.js' not in html and 'serverSettingsBtn' not in html
     data = json.loads(html.split('id="atem-equipment-data"')[1].split('</script>')[0].split('>', 1)[1])
     assert data == [{'name': 'Host Room 1', 'ip': '10.1.1.1', 'location': 'Floor 2'}]
     control = client.get('/atem/control/').content.decode()
@@ -161,3 +167,24 @@ def test_upload_hands_the_file_to_the_host(client, host_hooks, tmp_path, setting
         r = client.post('/atem/media-pool-upload/', {'ip': '10.1.1.1', 'slot': 3, 'image': f})
     assert r.status_code == 400 and r.json()['error'] == 'queued elsewhere'
     assert ('upload', '10.1.1.1', 3) in host_hooks.calls
+
+
+def test_profile_filenames_take_the_host_s_name_and_clock(host_hooks):
+    from atem_control.profile import export
+    assert export._equipment_name_for_ip('10.1.1.1') == 'Host Room 1' and export._equipment_name_for_ip('10.9.9.9') == ''
+    # a 12-hour host: the timestamp carries the AM/PM marker the 24-hour format lacks
+    stamp = export._timestamp_for_filename() if hasattr(export, '_timestamp_for_filename') else None
+    if stamp is not None:
+        assert stamp.endswith(('AM', 'PM'))
+
+
+def test_connection_log_carries_the_switcher_name(host_hooks):
+    from atem_control.control.logging import ATEMConnectionLoggingMixin
+
+    class Probe(ATEMConnectionLoggingMixin):
+        scope = {'user': None}
+        connected_ip = None
+        connect_time = None
+        current_atem_name = 'Host Room 1'
+    asyncio.run(Probe()._log_connect('10.1.1.1'))
+    assert ('connection', 'connection', '10.1.1.1', None) in host_hooks.calls

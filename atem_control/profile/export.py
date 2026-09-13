@@ -86,7 +86,7 @@ def _clear_capture_cancel(session_id: str) -> None:
 # Read once at module load (matches the convention used in
 # the drag-drop uploader). True (24-hour) is the
 # fallback when settings doesn't have the attribute.
-_PROFILE_SAVE_USE_24HR = getattr(settings, 'TIME_FORMAT_24HR', True)
+# (time format read at call time from the host: hooks.time_format_24h)
 
 
 # NOTE (2026-07-02): the historical 5 s pre-session settle is GONE. It
@@ -169,7 +169,8 @@ def _format_save_timestamp() -> str:
     fine on Linux/Docker; would need a manual conversion if this ever
     runs on Windows.
     """
-    fmt = ('%Y-%m-%d_%H-%M-%S' if _PROFILE_SAVE_USE_24HR
+    from atem_control import hooks
+    fmt = ('%Y-%m-%d_%H-%M-%S' if hooks.get().time_format_24h()
            else '%Y-%m-%d_%-I-%M-%S-%p')
     # Studio wall time (settings.TIME_ZONE), not the container clock —
     # the containers run UTC, which put filenames hours off local.
@@ -177,8 +178,10 @@ def _format_save_timestamp() -> str:
 
 
 def _resolve_atem_db_name(ip: str) -> str:
-    """No name database in this build — filenames fall back to the IP."""
-    return ''
+    """The host's name for the switcher at ``ip`` (an inventory, or what
+    discovery saw); empty when there is none — filenames fall back to the IP."""
+    from atem_control import hooks
+    return hooks.get().name_for_ip(ip) or ''
 
 
 # ---------------------------------------------------------------------------

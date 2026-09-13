@@ -35,6 +35,7 @@ def _page_context(request):
         'atem_equipment': h.switchers(),
         'hyperdeck_names': h.hyperdeck_names(),
         'discovery_enabled': h.discovery_enabled(),
+        'server_settings_enabled': h.server_settings_enabled(),
         **h.template_context(request),
     }
 

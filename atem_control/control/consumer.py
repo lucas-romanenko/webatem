@@ -490,6 +490,11 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
                 await asyncio.sleep(1)
 
         if success:
+            # The host's name for the switcher first (one lookup per
+            # connect): the connection log and every activity row carry it.
+            self.current_atem_name = await sync_to_async(
+                self._lookup_equipment_name)(ip_address)
+
             if not is_test_connection:
                 await self._log_connect(ip_address)
                 # A sighting for the host: what this switcher runs. Best
@@ -500,11 +505,6 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
                         await sync_to_async(hooks.get().record_video_mode)(ip_address, _vm.get_label())
                 except Exception:
                     logger.debug('video-mode sighting skipped', exc_info=True)
-
-            # Cache the ATEM's friendly name for activity-log rows (one
-            # lookup per connect, not per command).
-            self.current_atem_name = await sync_to_async(
-                self._lookup_equipment_name)(ip_address)
 
             self.last_command_time = asyncio.get_event_loop().time()
 
