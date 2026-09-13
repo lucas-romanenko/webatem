@@ -77,7 +77,7 @@ def _decode(value) -> str:
 def _instance_name(service_name: str) -> str:
     """The operator-set switcher name from an mDNS instance name. Strips
     the service suffix and un-escapes DNS label dots (``1\\.1`` → ``1.1``)
-    so a room named 'ATEM TO-BC 1.1 CL 01' reads back with its dots."""
+    so a switcher named 'ATEM Studio 1.1' reads back with its dots."""
     friendly = service_name.replace('.' + _MDNS_SERVICE, '').replace(_MDNS_SERVICE, '').rstrip('.')
     return friendly.replace('\\.', '.').replace('\\032', ' ')
 
@@ -249,7 +249,7 @@ def local_network():
 
 
 def local_subnet() -> str | None:
-    """Display label for the host's own subnet, e.g. ``'192.168.80.0/22'``
+    """Display label for the host's own subnet, e.g. ``'192.168.0.0/22'``
     (or the /24 prefix string on fallback). Used by the Connect page."""
     net = local_network()
     return str(net) if net else None
@@ -312,8 +312,8 @@ def sweep_ips(ips, *, settle: float = 2.0) -> list[str]:
 
 
 def _hosts_for(subnet: str | None):
-    """The list of host IPs to sweep. A 3-octet prefix like ``192.168.81``
-    means that /24; a full CIDR like ``192.168.80.0/22`` means that
+    """The list of host IPs to sweep. A 3-octet prefix like ``192.168.1``
+    means that /24; a full CIDR like ``192.168.0.0/22`` means that
     network; None means the host's own network (real prefix, clamped to
     _MAX_SWEEP_HOSTS)."""
     import ipaddress

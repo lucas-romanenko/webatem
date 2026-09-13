@@ -223,6 +223,11 @@ def _theme_css(text: str) -> str:
     text = text.replace('Pragmatic Orange', 'the accent orange').replace('Pragmatic Play', 'the upstream')
     text = re.sub(r'pragmatic', 'upstream', text, flags=re.I)
     text = text.replace('pp-light', 'the light theme').replace('pp-dark', 'dark')
+    # the initials too — the company must not be in the public sheet
+    text = re.sub(r'\bthe PP\b', 'the upstream', text)
+    text = re.sub(r'\boriginal PP\b', 'original upstream', text)
+    text = re.sub(r'\bPP handoff\b', 'upstream handoff', text)
+    text = re.sub(r'\bPP palette\b', 'upstream palette', text)
     return text
 
 

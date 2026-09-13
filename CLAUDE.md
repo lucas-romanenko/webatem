@@ -177,7 +177,7 @@ hand in repository settings).
   the host network on a spare port (`-e PORT=8895 -e DATA_DIR=/tmp/wd`), then
   Playwright from the host (`~/.local/node20/bin/node`, playwright out of the
   npx cache, `channel: 'chrome'`, deviceScaleFactor 2); the control page
-  needs a switcher — the test ATEM is 192.168.81.85 (never a BC-* room);
+  needs a switcher on the network — a bench unit, never a live room;
   wait for `Alpine.store('atem').stateReady && state.sources`.
 - CSS is compiled (`npm run build:css` → `atem_control/static/vendor/webatem.css`,
   not committed; CI and the image build it). A new utility class needs the

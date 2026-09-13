@@ -14,8 +14,8 @@
  * The --chrome/--line/--ink-* custom properties are not DaisyUI roles; they are
  * plain hex values used directly where the designs call for them. The navbar
  * (chrome) is styled independently of the content area via the --chrome-*
- * set: black on dark, light on the light theme (operator preference — the PP
- * handoff originally ran it black in both themes).
+ * set: black on dark, light on the light theme (operator preference — the
+ * upstream handoff originally ran it black in both themes).
  */
 
 /* Poppins 400/500/600/700 + 400-italic — self-hosted (fonts/poppins/ beside
@@ -78,8 +78,8 @@ body {
 /* Navbar: --chrome with a --chrome-line hairline, no shadow (design header).
  * Chrome-side text/accent colours come from the --chrome-* custom
  * properties (per theme, below), NOT from base-content — the chrome
- * surface is styled independently of the content area. (The original PP
- * handoff ran the chrome black in both themes; the light theme now uses a
+ * surface is styled independently of the content area. (The original
+ * upstream handoff ran the chrome black in both themes; the light theme now uses a
  * light chrome by operator preference — flipping back is just the
  * --chrome-* values in the the light theme block.) */
 .pp-chrome {
@@ -557,7 +557,7 @@ select option:disabled {
      * (4.7:1). the light theme keeps the true brand grape. */
     --s:   61.20% 0.1329 309.86;
     --sc:  0% 0 0;
-    /* accent: not in the PP palette — aliased to primary orange */
+    /* accent: not in the upstream palette — aliased to primary orange */
     --a:   73.85% 0.1646 56.80;
     --ac:  0% 0 0;
     /* neutral: #26282B / content white */

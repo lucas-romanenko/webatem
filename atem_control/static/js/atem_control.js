@@ -2460,7 +2460,7 @@
       currentIP: "---.---.---.---",
       currentName: "",
       // Live program-monitor (see atem_pgm_monitor.js). pgmStreamUrl is the
-      // room's Pragmatic stream, resolved from the IP via the lookup-name
+      // room's program stream, resolved from the IP via the lookup-name
       // API; null when this ATEM has no stream mapping (the Live PGM button
       // hides). pgmMonitorOpen mirrors the floating panel's open state so
       // the header button can show an active style.
@@ -2868,8 +2868,8 @@
         return e.name.toLowerCase().includes(t) || (e.location || "").toLowerCase().includes(t) || ("." + e.ip).includes("." + t);
       },
       // Token search: every space-separated token must hit somewhere
-      // across name + IP + location, so "1.1 entain" finds
-      // "BC 1.1 CL 01 - Entain". Rows whose NAME alone satisfies every
+      // across name + IP + location, so "2 north" finds
+      // "Studio 2 - North Hall". Rows whose NAME alone satisfies every
       // token rank first.
       _atemEquipmentMatches(query) {
         const tokens = this._queryTokens(query);
