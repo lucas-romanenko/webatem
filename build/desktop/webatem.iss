@@ -93,8 +93,15 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Start {#MyAppName}"; Flags: nowait postinstall skipifsilent
 
+[Registry]
+; Start at login is written by the app itself (HKCU Run), so nothing else
+; would clear it: without this, Windows keeps trying to launch a program
+; that is no longer there at every login.
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "{#MyAppName}"; ValueType: none; Flags: dontcreatekey uninsdeletevalue
+
 [UninstallDelete]
-; collectstatic writes here at every start; the database, the settings and
-; the log are the user's and are deliberately left behind (the same rule as
-; every other application: uninstalling is not "throw away my setup").
-Type: filesandordirs; Name: "{localappdata}\{#MyAppName}\staticfiles"
+; Uninstalling means gone: the settings, the connection history, the
+; generated key and the log go with the program (Lucas, 2026-09-14).
+; UPDATING does not come through here — Inno installs over the existing
+; copy and never runs the uninstaller — so an upgrade keeps everything.
+Type: filesandordirs; Name: "{localappdata}\{#MyAppName}"

@@ -228,7 +228,15 @@ jobs:
           # single slashes here too, for the same reason
           taskkill /F /IM webatem.exe /T >/dev/null 2>&1 || true
           sleep 2
+          # Uninstalling must take the user's data with it. Plant the data
+          # folder the app would have written, then prove it is gone.
+          mkdir -p "$LOCALAPPDATA/WebATEM" && echo '{"host": "127.0.0.1"}' > "$LOCALAPPDATA/WebATEM/server.json"
           timeout 120 "$LOCALAPPDATA/Programs/WebATEM/unins000.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART || true
+          sleep 5
+          if [ -e "$LOCALAPPDATA/WebATEM" ]; then
+            echo "::error::uninstalling left the data folder behind"; ls -la "$LOCALAPPDATA/WebATEM"; exit 1
+          fi
+          echo "uninstall took the data folder with it"
           [ -n "$ok" ] || { echo "::error::the INSTALLED app never served /atem/"; exit 1; }
           echo "installed, ran, served $(wc -c < smoke2/page.html) bytes of the connect page"
 
