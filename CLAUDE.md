@@ -214,6 +214,15 @@ what the user chose. Decisions that were paid for on his Mac:
   platform in this launcher is unverified now.
 - Unsigned build: macOS says "could not verify" → Privacy & Security → Open
   Anyway. Notarization needs an Apple Developer ID (declined so far).
+- **Uninstalling removes the user's data; updating keeps it.** The installer's
+  `[UninstallDelete]` takes the whole `{localappdata}\WebATEM` folder
+  (settings, connection history, key, log) and a `[Registry]` entry drops the
+  app's own HKCU Run value, which nothing else would clear — Windows would
+  otherwise try to launch a missing program at every login. An UPDATE never
+  runs the uninstaller (Inno installs over the existing copy), so it keeps
+  everything. Lucas's rule, 2026-09-14: "if a user wants to uninstall that
+  does mean everything should go away; if we update the app, the data should
+  stay". CI plants a data folder and proves the uninstall removes it.
 - **Windows ships an Inno Setup installer** (`build/desktop/webatem.iss`,
   built in the Package step): per-user into `{autopf}` with
   `PrivilegesRequired=lowest` (no admin), Start menu entry, an uninstaller in
