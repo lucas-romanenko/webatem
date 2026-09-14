@@ -1,8 +1,8 @@
-<p align="center"><img src="docs/brand/banner.png" alt="webATEM — Browser control for ATEM switchers. Run the server, open a tab, cut the show." width="100%"></p>
+<p align="center"><img src="docs/brand/banner.png" alt="webATEM. Browser control for ATEM switchers. Run the server, open a tab, cut the show." width="100%"></p>
 
 **Browser control for ATEM switchers.** Run the server on a Mac, a Windows
-PC or a Linux box, and control your ATEMs from any device on the network —
-desktop, laptop, tablet or phone — in a browser. WebATEM finds the switchers
+PC or a Linux box, and control your ATEMs in a browser from any device on
+the network: desktop, laptop, tablet or phone. WebATEM finds the switchers
 for you and gives you the whole control surface: switching, keyers, audio,
 media pool, macros. Run the server, open a tab, cut the show.
 
@@ -22,73 +22,73 @@ media pool, macros. Run the server, open a tab, cut the show.
   &nbsp;
   <a href="https://github.com/lucas-romanenko/webatem/releases/latest/download/webatem-linux-x64"><img src="https://img.shields.io/badge/Download-Linux-E95420?style=for-the-badge&logo=linux&logoColor=white" alt="Download for Linux"></a>
 </p>
-<p align="center"><sub>Download it, open it, and your switchers appear. &nbsp;·&nbsp; Windows installs per-user — no admin needed. &nbsp;·&nbsp; The Linux build runs on desktop <b>and</b> headless servers.</sub></p>
+<p align="center"><sub>Download it, open it, and your switchers appear. &nbsp;·&nbsp; Windows installs per-user, no admin needed. &nbsp;·&nbsp; The Linux build runs on desktop <b>and</b> headless servers.</sub></p>
 
 Three ways to run it, all simple:
 
 - **Just you, right now** → **download it** for your Mac or Windows machine
   and open it. It lives in your menu bar / system tray (with a *Start at
   login* switch), opens your browser, and your switchers appear. Like ATEM
-  Software Control, but in your browser — and on every device on the network.
+  Software Control, but in your browser, and on every device on the network.
 - **Your whole team, always on** → **host it** on a Linux box, VM or Raspberry
-  Pi with one Docker command; everyone opens a URL — no installs, no accounts.
+  Pi with one Docker command; everyone opens a URL. No installs, no accounts.
 - **Already have Python?** → `pipx install "webatem[desktop]"`, then `webatem`.
 
 Every way of running it **auto-discovers the ATEMs on your network**
-(Bonjour/mDNS) and lists them by name, exactly like ATEM Software Control —
-open the page and they are already there:
+(Bonjour/mDNS) and lists them by name, exactly like ATEM Software Control.
+Open the page and they are already there:
 
 <p align="center">
-  <img src="docs/screenshot-connect.png" alt="WebATEM connect page — recent connections and the switchers found on the network, each listed by name and address" width="900">
+  <img src="docs/screenshot-connect.png" alt="WebATEM connect page: recent connections and the switchers found on the network, each listed by name and address" width="900">
 </p>
 
 <p align="center">
-  <img src="docs/screenshot-control.png" alt="WebATEM control surface — program/preview buses, T-bar, keyers, transitions and macros" width="900">
+  <img src="docs/screenshot-control.png" alt="WebATEM control surface: program/preview buses, T-bar, keyers, transitions and macros" width="900">
 </p>
 
 ## What you get
 
-- **Full switcher control** — program/preview buses per M/E, cut/auto,
+- **Full switcher control.** Program/preview buses per M/E, cut/auto,
   transition styles (mix, dip, wipe, DVE, stinger) with per-style settings,
   fade to black, color generators, aux routing, source renaming that follows
   live switcher labels.
-- **Upstream & downstream keyers** — USK 1–4 (luma, chroma, pattern, DVE with
+- **Upstream and downstream keyers.** USK 1 to 4 (luma, chroma, pattern, DVE with
   fly keyframes, masks), DSKs with tie/rate/clip/gain, on-air countdowns.
-- **Fairlight audio** — per-strip faders, EQ, dynamics, master bus, and live
+- **Fairlight audio.** Per-strip faders, EQ, dynamics, master bus, and live
   audio meters streamed over WebSocket (tab-gated so idle pages cost nothing).
-- **Media pool** — live thumbnails of every still slot, and drag-and-drop
+- **Media pool.** Live thumbnails of every still slot, and drag-and-drop
   image upload straight onto a slot (validated and resized to 1080p
   server-side).
-- **Macros** — browse and run switcher macros.
-- **Save/restore switcher state** — full switcher profile export/import as
+- **Macros.** Browse and run switcher macros.
+- **Save and restore switcher state.** Full switcher profile export/import as
   XML, compatible with ATEM Software Control’s “Save Switcher State”,
   including media pool images and macro bytecode.
-- **HyperDeck transport** — clip browser and play/pause/stop/loop for decks
+- **HyperDeck transport.** Clip browser and play/pause/stop/loop for decks
   bound to the ATEM (TCP/9993), from the same page.
-- **Multi-operator by design** — one pooled connection per switcher shared by
+- **Multi-operator by design.** One pooled connection per switcher shared by
   all operators; state fan-out over WebSockets with adaptive polling
   (30 ms during transitions, relaxed when idle).
 
-Deep per-switcher settings live in the Settings panel — color generators,
+Deep per-switcher settings live in the Settings panel: color generators,
 each upstream keyer (luma / chroma / pattern / DVE), downstream keyers,
 transitions, video mode, input labels, outputs and HyperDecks:
 
 <p align="center">
-  <img src="docs/screenshot-settings.png" alt="WebATEM settings panel — color generators and an upstream keyer expanded, showing HSL controls, fill-source dropdown and wipe patterns" width="900">
+  <img src="docs/screenshot-settings.png" alt="WebATEM settings panel: color generators and an upstream keyer expanded, showing HSL controls, fill-source dropdown and wipe patterns" width="900">
 </p>
 
-Full **Fairlight audio** — a per-strip mixer with input gain, EQ and dynamics
+Full **Fairlight audio**, a per-strip mixer with input gain, EQ and dynamics
 curves, faders, pan and live meters, and a writable 6-band parametric EQ
 behind each strip:
 
 <p align="center">
-  <img src="docs/screenshot-audio.png" alt="WebATEM Fairlight audio mixer — 14 strips with input, EQ, dynamics, faders, pan and meters" width="900">
+  <img src="docs/screenshot-audio.png" alt="WebATEM Fairlight audio mixer: 14 strips with input, EQ, dynamics, faders, pan and meters" width="900">
 </p>
 ---
 
 ## Get started
 
-### Option A — Download it  *(Mac, Windows)*
+### Option A. Download it  *(Mac, Windows)*
 
 1. Click your platform's **Download** button at the top (or the
    [Releases](https://github.com/lucas-romanenko/webatem/releases) page).
@@ -97,25 +97,25 @@ behind each strip:
    **Launch GUI** opens the control page in your browser with the ATEMs on
    your network listed. Pick one and you're controlling it.
 
-That's the whole setup — nothing to install alongside it, no Python, no Docker.
+That's the whole setup. Nothing to install alongside it, no Python, no Docker.
 
 While it runs it is a small window plus an icon in the **menu bar (Mac) /
-system tray (Windows)**, the way Bitfocus Companion works — nothing in the
+system tray (Windows)**, the way Bitfocus Companion works, with nothing in the
 Dock or on the taskbar, only the icon. The window shows
 **Running** and the address other devices use, and holds the settings:
 **Interface** (all of them, one adapter, or this computer only), **Port**,
 **Start minimized**, **Run at login**, with **Launch GUI** (opens the control
 page in your browser), **Hide** and **Quit**. Closing the window just hides
-it; the tray menu is three items — **Show/Hide window**, **Launch GUI**,
+it; the tray menu is three items: **Show/Hide window**, **Launch GUI**,
 **Quit**. Changing the interface or port restarts the server on the new
 address right there; handy on a laptop with Wi-Fi, Ethernet and a VPN at
-once. **Launch GUI** opens the address shown — the real interface and port,
+once. **Launch GUI** opens the address shown, the real interface and port,
 the same one other devices use (this computer also answers at `127.0.0.1`
 whichever interface is chosen). Nothing listens until you have picked an
 interface in the window: it opens on **Not running** and waits for your
 choice. Tick **Run at login** (or **Start minimized**) and it comes back up
 on that interface by itself from then on, including when the machine boots
-— no window, no second choice. The default port is **8880** (Bitfocus Companion has 8000); if
+with no window and no second choice. The default port is **8880** (Bitfocus Companion has 8000); if
 the port is taken anyway, the next free one is used and the window says so.
 
 <details>
@@ -131,10 +131,10 @@ warns you the first time. One-time, then it opens normally:
   code-signed: Windows warns about any unsigned program the first time.)
 
 Removing the warning entirely requires paid Apple/Microsoft signing
-certificates — planned, not done yet.
+certificates, planned but not done yet.
 </details>
 
-### Option B — Host it  *(a whole team; always on)*
+### Option B. Host it  *(a whole team; always on)*
 
 Run it on a **Linux box, VM or Raspberry Pi on the same network as your
 ATEMs** (the ATEM-Software-Control-on-a-server model). The published image
@@ -146,14 +146,14 @@ docker run -d --name webatem --network host --restart unless-stopped \
 ```
 
 Open `http://<that-box>:8880` from any device on the network. It comes back
-automatically on reboot. No `.env` file needed — every setting has a working
+automatically on reboot. No `.env` file needed: every setting has a working
 default (SQLite DB + a generated secret key live in the `webatem-data`
 volume); see [.env.example](.env.example) for knobs like `PORT`, `TIME_ZONE`,
 `ALLOWED_HOSTS`. (In Docker the address and port come from that environment.) Prefer Compose? The repository's
 [compose.yml](compose.yml) runs the same image: `docker compose up -d`.
 
 Without Docker: the `webatem-linux-x64` binary from the Releases page runs
-headless too — on a machine with no display it skips the browser and tray and
+headless too: on a machine with no display it skips the browser and tray and
 prints the address to open from another device:
 
 ```
@@ -167,10 +167,10 @@ Keep it up with a systemd unit, `tmux` or `nohup`.
 > **Why Linux for hosting?** Discovery needs the app to see your LAN directly.
 > That works natively on Linux (the container uses host networking). Docker
 > Desktop on **Mac/Windows** runs containers in a VM that can’t see LAN
-> discovery traffic — so on a Mac or PC, use the download (Option A) or pipx
+> discovery traffic, so on a Mac or PC use the download (Option A) or pipx
 > (Option C), not Docker.
 
-### Option C — pipx  *(you already have Python 3.10+)*
+### Option C. pipx  *(you already have Python 3.10+)*
 
 ```bash
 pipx install "webatem[desktop]"      # or: uvx --from "webatem[desktop]" webatem, with no install at all
@@ -192,11 +192,11 @@ Three ways, in order of magic:
    up under **“On Your Network”** with their names, no typing. This is what
    ATEM Software Control does.
 2. **Scan subnet.** For ATEMs that don’t advertise over Bonjour, type your
-   subnet (e.g. `192.168.1`) and hit **Scan** — it finds them by IP.
+   subnet (e.g. `192.168.1`) and hit **Scan**, which finds them by IP.
 3. **Manual IP.** Type an address and connect. Recent connections are
    remembered for one-click reconnect.
 
-> Automatic discovery is **same-network only** — Bonjour/mDNS is link-local
+> Automatic discovery is **same-network only**: Bonjour/mDNS is link-local
 > and doesn’t cross a router or VPN (this is true of ASC too). Reaching your
 > ATEMs over a **VPN**? Auto-discovery won’t see them, but **Scan** and
 > **manual IP** work fine over the tunnel.
@@ -206,15 +206,15 @@ Three ways, in order of magic:
 ## WebATEM vs. ATEM Software Control
 
 ATEM Software Control (ASC) is Blackmagic’s own free control app, and it’s
-excellent — WebATEM isn’t trying to replace all of it. The difference is
+excellent, and WebATEM isn’t trying to replace all of it. The difference is
 *access*: ASC is a desktop app tied to one machine; WebATEM is a control
 surface any device on your network can open (and you can still run it locally
 like ASC if you want).
 
 |  | **WebATEM** | **ATEM Software Control** |
 |---|---|---|
-| **Runs on** | Any browser — Windows, macOS, **Linux**, ChromeOS, iPad, phone | Windows & macOS desktop only |
-| **Client install** | None — just open a URL | Installed per machine |
+| **Runs on** | Any browser: Windows, macOS, **Linux**, ChromeOS, iPad, phone | Windows & macOS desktop only |
+| **Client install** | None, just open a URL | Installed per machine |
 | **Access from** | Any device on the network | The machine it’s installed on |
 | **Multiple operators** | One shared switcher session, many operators | Each machine opens its own session |
 | **Phones / tablets** | ✓ Responsive | ✗ |
@@ -224,15 +224,15 @@ like ASC if you want).
 | **Support** | Community / self-hosted | Official Blackmagic |
 
 **Reach for ASC** when you need the full feature set on one operator’s machine
-— camera control, streaming/recording, SuperSource, recording macros.
+camera control, streaming/recording, SuperSource, recording macros.
 
 **Reach for WebATEM** when you want the core control surface available to
-anyone on the network, on any device or OS — a second operator on an iPad, a
+anyone on the network, on any device or OS: a second operator on an iPad, a
 Linux box in the rack room, a phone at the camera position.
 
 ## Running it for real
 
-- **There is no login — by design.** Like the hardware panel, anyone who can
+- **There is no login, by design.** Like the hardware panel, anyone who can
   reach the page can control your switchers. Keep it on the studio network. If
   you must expose it further, put your reverse proxy’s auth (basic auth, SSO)
   and TLS in front, and set `CSRF_TRUSTED_ORIGINS=https://your.host`.
@@ -242,7 +242,7 @@ Linux box in the rack room, a phone at the camera position.
   If your reverse proxy rewrites `Host`, list the browser-facing host in
   `WEBSOCKET_ALLOWED_ORIGINS`.
 - It talks raw UDP to switchers on port 9910 (the ATEM protocol has no
-  authentication — that’s the hardware, not this app), so it needs to be on a
+  authentication, which is the hardware and not this app), so it needs to be on a
   network that can reach them.
 - **Single instance, by design.** The switcher connection pool, media-pool
   watcher, and channel layer are process-local; one instance handles many
@@ -262,7 +262,7 @@ Django + Channels (single ASGI worker, uvicorn)
 ATEM switchers (UDP 9910) · HyperDecks (TCP 9993 / FTP)
 ```
 
-- **[atemwire](https://github.com/lucas-romanenko/bmdwire/tree/main/atemwire)** (PyPI) — the
+- **[atemwire](https://github.com/lucas-romanenko/bmdwire/tree/main/atemwire)** (PyPI) is the
   ATEM protocol library, a substantially modified fork of Martijn Braam's
   pyatem: declarative wire-format DSL, hardened UDP transport (in-order
   delivery, retransmit serving, clean session close), ref-counted connection
@@ -271,24 +271,24 @@ ATEM switchers (UDP 9910) · HyperDecks (TCP 9993 / FTP)
   conversion. **[hyperdeckwire](https://github.com/lucas-romanenko/bmdwire/tree/main/hyperdeckwire)**
   (PyPI) drives the HyperDecks. Both are pinned in `pyproject.toml`; a
   library change is a release there and a pin bump here.
-- **`atem_control/`** — the Django app: the WebSocket consumer, a declarative
+- **`atem_control/`** is the Django app: the WebSocket consumer, a declarative
   command dispatch table, the media-pool watcher, LAN discovery, and the UI.
-- **`webatem/`** — the project package: settings, the ASGI entry, the
-  WebSocket origin guard, and `launcher.py` — the `webatem` command that runs
+- **`webatem/`** is the project package: settings, the ASGI entry, the
+  WebSocket origin guard, and `launcher.py`, the `webatem` command that runs
   the same web app locally and lives in the tray with its launcher window. The
   downloads are that launcher frozen per OS by PyInstaller
   (`build/desktop/`); the PyPI package is the same code installed by pip.
 - **One tag, three deliverables.** A `v*` tag publishes the Mac / Windows /
   Linux downloads to the GitHub release, the Docker image to GHCR (amd64 +
   arm64) and the `webatem` package to PyPI.
-- **SQLite** for persistence (connection history) — no external database.
+- **SQLite** for persistence (connection history). No external database.
 
 ## Development
 
 ```bash
 git clone https://github.com/lucas-romanenko/webatem.git
 cd webatem
-npm install && npm run build:css      # the stylesheet — without it the app renders unstyled
+npm install && npm run build:css      # the stylesheet; without it the app renders unstyled
 pip install -e ".[test]"              # Python 3.10+; the device libraries install as wheels
 python -m webatem                     # the launcher: server + tray + window
 python -m pytest tests/ -q            # the suite (no hardware needed)
@@ -309,7 +309,7 @@ per-OS downloads are built by the **Desktop builds** workflow
 ## Removing it
 
 **Windows:** Settings → Installed apps → WebATEM → Uninstall. That takes
-everything with it — the program, your interface and port, the connection
+everything with it: the program, your interface and port, the connection
 history and the start-at-login entry. **Updating keeps all of that**: run the
 new installer over the old one, don't uninstall first.
 
@@ -331,7 +331,7 @@ wherever `DATA_DIR` points.
   WebATEM uses it as an installed dependency, unmodified.
   [hyperdeckwire](https://github.com/lucas-romanenko/bmdwire/tree/main/hyperdeckwire) is MIT.
 - Bundled frontend assets (Alpine.js and its collapse plugin, Bootstrap Icons,
-  Tailwind/daisyUI) are MIT and the Poppins font is OFL — notices in
+  Tailwind/daisyUI) are MIT and the Poppins font is OFL, with notices in
   [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
 
 Security posture and how to report vulnerabilities: [SECURITY.md](SECURITY.md).
@@ -354,8 +354,8 @@ it needs from its surroundings goes through one class,
 operator actions and connect/disconnect events are recorded, what a switcher
 is called, the switcher list for the suggestions, HyperDeck names, sightings
 (video mode, deck model, binding differences), where a dropped still goes,
-and extra template context. Every method has a working default — the
-standalone app *is* the defaults — so a host subclasses it and overrides what
+and extra template context. Every method has a working default, because the
+standalone app *is* the defaults, so a host subclasses it and overrides what
 it has:
 
 ```python
