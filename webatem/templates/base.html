@@ -21,7 +21,11 @@
          control-surface rules. WebATEM's own, loads last, wins. -->
     <link rel="stylesheet" href="{% static_v 'brand/brand.css' %}">
 
-    <!-- PWA meta tags -->
+    <!-- Installed to a home screen: the manifest names it and hands over the
+         icons (Android masks the maskable one to its launcher shape); the
+         apple-* tags are the same thing for older iOS, which reads them
+         instead. -->
+    <link rel="manifest" href="{% static_v 'brand/manifest.webmanifest' %}">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="application-name" content="{{ app_title }}">
@@ -31,10 +35,11 @@
     <link rel="icon" type="image/png" sizes="32x32" href="{% static 'brand/favicon-32.png' %}">
     <link rel="icon" type="image/png" sizes="192x192" href="{% static 'brand/icon-192.png' %}">
     <link rel="apple-touch-icon" href="{% static 'brand/apple-touch-icon.png' %}">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
-    <!-- The select facade (any <select data-pp-select>) and our own scrollbar
+    <!-- The select facade (any <select data-wa-select>) and our own scrollbar
          overlay for every scroller — both synced from upstream. -->
-    <script src="{% static_v 'js/pp-select.js' %}" defer></script>
+    <script src="{% static_v 'js/wa-select.js' %}" defer></script>
     <script src="{% static_v 'js/custom-scrollbar.js' %}" defer></script>
     <style>
         /* APP-SHELL: the window never scrolls; <main> is the scroller, so no

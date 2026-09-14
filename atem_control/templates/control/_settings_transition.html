@@ -107,7 +107,7 @@
                                 <div>
                                     <label class="text-sm font-medium block mb-2 opacity-70">Dip Source:</label>
                                     <select 
-                                        data-pp-select class="select select-bordered select-sm w-full text-sm"
+                                        data-wa-select class="select select-bordered select-sm w-full text-sm"
                                         :value="$store.atem.state.mes[$store.atem.activeMe].transition?.dip_source || 0"
                                         @change="$store.atem.send('set_dip_source', {input_source: parseInt($event.target.value)})"
                                     >
@@ -453,7 +453,7 @@
                                     <div>
                                         <label class="text-sm font-medium block mb-2 opacity-70">Fill Source:</label>
                                         <select 
-                                            data-pp-select class="select select-bordered select-sm w-full text-sm"
+                                            data-wa-select class="select select-bordered select-sm w-full text-sm"
                                             :value="$store.atem.state.mes[$store.atem.activeMe].transition?.wipe_fill_source || 0"
                                             @change="$store.atem.send('set_wipe_fill_source', {fillSource: parseInt($event.target.value)})"
                                         >
@@ -647,7 +647,7 @@
                                     <div>
                                         <label class="text-sm font-medium block mb-2 opacity-70">Fill Source:</label>
                                         <select 
-                                            data-pp-select class="select select-bordered select-sm w-full text-sm"
+                                            data-wa-select class="select select-bordered select-sm w-full text-sm"
                                             :value="$store.atem.state.mes[$store.atem.activeMe].transition?.dve?.fill_source ?? 1"
                                             @change="$store.atem.send('set_dve_fill_source', {fillSource: parseInt($event.target.value)})"
                                         >
@@ -673,7 +673,7 @@
                                     <div>
                                         <label class="text-sm font-medium block mb-2 opacity-70">Key Source:</label>
                                         <select 
-                                            data-pp-select class="select select-bordered select-sm w-full text-sm"
+                                            data-wa-select class="select select-bordered select-sm w-full text-sm"
                                             :value="$store.atem.state.mes[$store.atem.activeMe].transition?.dve?.key_source ?? 1"
                                             @change="$store.atem.send('set_dve_key_source', {keySource: parseInt($event.target.value)})"
                                         >
@@ -743,7 +743,7 @@
                                 <div>
                                     <label class="text-sm font-medium block mb-2 opacity-70">Stinger Source:</label>
                                     <select
-                                        data-pp-select class="select select-bordered select-sm w-full text-sm"
+                                        data-wa-select class="select select-bordered select-sm w-full text-sm"
                                         :value="$store.atem.state.mes[$store.atem.activeMe].transition?.stinger?.source ?? 1"
                                         @change="$store.atem.send('set_stinger_source', {source: parseInt($event.target.value)})"
                                     >

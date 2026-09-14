@@ -61,7 +61,7 @@
                                     <div>
                                         <label class="text-sm font-medium block mb-2 opacity-70">Fill Source:</label>
                                         <select 
-                                            data-pp-select class="select select-bordered select-sm w-full text-sm"
+                                            data-wa-select class="select select-bordered select-sm w-full text-sm"
                                             :value="$store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.fill_source ?? 0"
                                             @change="$store.atem.setUSKFillSource(k, parseInt($event.target.value))">
                                             <template x-for="s in $store.atem.sourcesFor('fill')" :key="s.source">
@@ -73,7 +73,7 @@
                                     <div>
                                         <label class="text-sm font-medium block mb-2 opacity-70">Key Source:</label>
                                         <select 
-                                            data-pp-select class="select select-bordered select-sm w-full text-sm"
+                                            data-wa-select class="select select-bordered select-sm w-full text-sm"
                                             :value="$store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.key_source ?? 0"
                                             @change="$store.atem.setUSKKeySource(k, parseInt($event.target.value))">
                                             <template x-for="s in $store.atem.sourcesFor('key_source')" :key="s.source">
@@ -138,7 +138,7 @@
                                 <div>
                                     <label class="text-sm font-medium block mb-2 opacity-70">Fill Source:</label>
                                     <select 
-                                        data-pp-select class="select select-bordered select-sm w-full text-sm"
+                                        data-wa-select class="select select-bordered select-sm w-full text-sm"
                                         :value="$store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.fill_source ?? 0"
                                         @change="$store.atem.setUSKFillSource(k, parseInt($event.target.value))">
                                         <template x-for="s in $store.atem.sourcesFor('fill')" :key="s.source">
@@ -575,7 +575,7 @@
                                 <div>
                                     <label class="text-sm font-medium block mb-2 opacity-70">Fill Source:</label>
                                     <select 
-                                        data-pp-select class="select select-bordered select-sm w-full text-sm"
+                                        data-wa-select class="select select-bordered select-sm w-full text-sm"
                                         :value="$store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.fill_source ?? 0"
                                         @change="$store.atem.setUSKFillSource(k, parseInt($event.target.value))">
                                         <template x-for="s in $store.atem.sourcesFor('fill')" :key="s.source">
@@ -876,7 +876,7 @@
                                 <div>
                                     <label class="text-sm font-medium block mb-2 opacity-70">Fill Source:</label>
                                     <select 
-                                        data-pp-select class="select select-bordered select-sm w-full text-sm"
+                                        data-wa-select class="select select-bordered select-sm w-full text-sm"
                                         :value="$store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.fill_source ?? 0"
                                         @change="$store.atem.setUSKFillSource(k, parseInt($event.target.value))">
                                         <template x-for="s in $store.atem.sourcesFor('fill')" :key="s.source">
@@ -1288,7 +1288,7 @@
                                     <div class="pl-6"
                                             :class="!($store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.dve_border_enabled) ? 'opacity-50 pointer-events-none' : ''">
                                         <label class="text-sm opacity-70 block mb-2">Style:</label>
-                                        <select data-pp-select class="select select-bordered select-sm w-full" disabled>
+                                        <select data-wa-select class="select select-bordered select-sm w-full" disabled>
                                             <option>None</option>
                                             <option>Solid</option>
                                             <option>Bevel</option>

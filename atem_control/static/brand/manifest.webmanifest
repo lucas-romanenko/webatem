@@ -1,0 +1,18 @@
+{
+  "name": "webATEM",
+  "short_name": "webATEM",
+  "description": "Browser control for ATEM switchers.",
+  "id": "/atem/",
+  "start_url": "/atem/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0E0F10",
+  "theme_color": "#0E0F10",
+  "icons": [
+    { "src": "favicon-32.png", "sizes": "32x32", "type": "image/png" },
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
