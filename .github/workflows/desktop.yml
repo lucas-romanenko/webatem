@@ -212,18 +212,23 @@ jobs:
           APP_PID=$!
           ok=
           for i in $(seq 1 60); do
-            curl -fsS -o /dev/null http://127.0.0.1:8898/atem/ && { ok=1; break; }
+            # -o a real file, not /dev/null: with path conversion off (above)
+            # Git Bash no longer maps /dev/null to NUL, and curl fails to
+            # write the body it just fetched — which looked exactly like the
+            # app not answering.
+            curl -fsS -o smoke2/page.html http://127.0.0.1:8898/atem/ && { ok=1; break; }
             kill -0 "$APP_PID" 2>/dev/null || break
             sleep 2
           done
           echo "--- installed app output ---"; cat smoke2/stdout.txt 2>/dev/null; cat smoke2/webatem.log 2>/dev/null
           # taskkill, not kill: a bash signal does not reliably end a native
           # Windows process, and the uninstaller then waits on it.
-          taskkill //F //IM webatem.exe //T >/dev/null 2>&1 || true
+          # single slashes here too, for the same reason
+          taskkill /F /IM webatem.exe /T >/dev/null 2>&1 || true
           sleep 2
           timeout 120 "$LOCALAPPDATA/Programs/WebATEM/unins000.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART || true
           [ -n "$ok" ] || { echo "::error::the INSTALLED app never served /atem/"; exit 1; }
-          echo "installed, ran, served"
+          echo "installed, ran, served $(wc -c < smoke2/page.html) bytes of the connect page"
 
       - uses: actions/upload-artifact@v4
         with:
