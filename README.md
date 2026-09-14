@@ -299,6 +299,22 @@ libraries carry their own suites in [bmdwire](https://github.com/lucas-romanenko
 per-OS downloads are built by the **Desktop builds** workflow
 (`pyinstaller build/desktop/webatem.spec`).
 
+## Removing it
+
+**Windows:** Settings → Installed apps → WebATEM → Uninstall. That takes
+everything with it — the program, your interface and port, the connection
+history and the start-at-login entry. **Updating keeps all of that**: run the
+new installer over the old one, don't uninstall first.
+
+**macOS:** drag `WebATEM.app` to the Trash, then, to remove what it
+remembered, `~/Library/Application Support/WebATEM` and (if you used Run at
+login) `~/Library/LaunchAgents/com.webatem.app.plist`.
+
+**Linux / pipx / Docker:** the data lives in `$XDG_DATA_HOME/WebATEM`
+(usually `~/.local/share/WebATEM`), the container's `webatem-data` volume, or
+wherever `DATA_DIR` points.
+
+
 ## License
 
 - Application code: [MIT](LICENSE).
