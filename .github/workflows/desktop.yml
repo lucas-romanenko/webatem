@@ -109,7 +109,7 @@ jobs:
       - name: Smoke test the frozen build
         timeout-minutes: 6
         run: |
-          set -uxo pipefail
+          set +e -ux          # this step decides its own failures (GitHub's shell adds -e)
           mkdir -p smoke
           case "$RUNNER_OS" in
             Windows) APP="dist/WebATEM/webatem.exe" ;;
@@ -198,7 +198,7 @@ jobs:
           MSYS_NO_PATHCONV: 1
           MSYS2_ARG_CONV_EXCL: '*'
         run: |
-          set -uxo pipefail
+          set +e -ux          # this step decides its own failures (GitHub's shell adds -e)
           # Bounded anyway: a silent installer that decides to wait, waits
           # forever, and this step must not hold a runner for hours.
           timeout 180 ./out/${{ matrix.asset }} /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /NOCANCEL /LOG=install.log || true
@@ -220,7 +220,9 @@ jobs:
             kill -0 "$APP_PID" 2>/dev/null || break
             sleep 2
           done
-          echo "--- installed app output ---"; cat smoke2/stdout.txt 2>/dev/null; cat smoke2/webatem.log 2>/dev/null
+          echo "--- installed app output ---"
+          cat smoke2/stdout.txt 2>/dev/null || true
+          cat smoke2/webatem.log 2>/dev/null || true
           # taskkill, not kill: a bash signal does not reliably end a native
           # Windows process, and the uninstaller then waits on it.
           # single slashes here too, for the same reason
