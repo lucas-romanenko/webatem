@@ -1,7 +1,7 @@
 /**
- * pp-select — styled popover facade over native <select> elements.
+ * wa-select — styled popover facade over native <select> elements.
  *
- * Tag any select with data-pp-select and it gets the app's anchored-popover
+ * Tag any select with data-wa-select and it gets the app's anchored-popover
  * look (same language as the equipment location picker) while the native
  * select stays in the DOM as an invisible overlay: form value, required-
  * validation bubbles, inline onchange= handlers and htmx
@@ -15,32 +15,32 @@
  * work). Still NOT for selects inside JS-cloned template rows — clones
  * lose the facade's listeners.
  *
- * Loaded globally from base.html (defer). Styles: pp-theme.css .pp-select-*.
+ * Loaded globally from base.html (defer). Styles: wa-theme.css .wa-select-*.
  */
 
 (function () {
     'use strict';
 
     function closeAllPPSelects(except) {
-        document.querySelectorAll('.pp-select-panel').forEach(function (p) {
+        document.querySelectorAll('.wa-select-panel').forEach(function (p) {
             if (p !== except) p.classList.add('hidden');
         });
-        document.querySelectorAll('.pp-select-trigger .pp-select-chevron').forEach(function (c) {
+        document.querySelectorAll('.wa-select-trigger .wa-select-chevron').forEach(function (c) {
             if (!except || !except.parentNode.contains(c)) c.classList.remove('rotate-180');
         });
     }
 
     function enhancePPSelects(root) {
-        (root || document).querySelectorAll('select[data-pp-select]').forEach(function (sel) {
-            if (sel.closest('.pp-select')) return; // already enhanced
+        (root || document).querySelectorAll('select[data-wa-select]').forEach(function (sel) {
+            if (sel.closest('.wa-select')) return; // already enhanced
 
             var wrap = document.createElement('div');
-            wrap.className = 'pp-select w-full';
+            wrap.className = 'wa-select w-full';
             sel.parentNode.insertBefore(wrap, sel);
 
             var trigger = document.createElement('button');
             trigger.type = 'button';
-            trigger.className = 'select select-bordered w-full flex items-center justify-between pr-3 pp-select-trigger';
+            trigger.className = 'select select-bordered w-full flex items-center justify-between pr-3 wa-select-trigger';
             // Carry the native select's size/text classes onto the trigger
             ['select-xs', 'select-sm', 'select-lg', 'text-sm', 'text-xs', 'font-mono'].forEach(function (cls) {
                 if (sel.classList.contains(cls)) trigger.classList.add(cls);
@@ -49,12 +49,12 @@
             var label = document.createElement('span');
             label.className = 'truncate text-left flex-1';
             var chevron = document.createElement('i');
-            chevron.className = 'bi bi-chevron-down text-xs transition-transform duration-200 pp-select-chevron';
+            chevron.className = 'bi bi-chevron-down text-xs transition-transform duration-200 wa-select-chevron';
             trigger.appendChild(label);
             trigger.appendChild(chevron);
 
             var panel = document.createElement('div');
-            panel.className = 'pp-select-panel hidden bg-base-200 rounded-lg shadow-lg border border-base-content/10';
+            panel.className = 'wa-select-panel hidden bg-base-200 rounded-lg shadow-lg border border-base-content/10';
 
             function currentText() {
                 var opt = sel.options[sel.selectedIndex];
@@ -71,7 +71,7 @@
                 panel.innerHTML = '';
                 Array.prototype.forEach.call(sel.options, function (opt) {
                     var row = document.createElement('div');
-                    row.className = 'pp-select-option' + (opt.selected ? ' selected' : '');
+                    row.className = 'wa-select-option' + (opt.selected ? ' selected' : '');
                     var text = document.createElement('span');
                     text.className = 'truncate';
                     text.textContent = opt.textContent.trim();
@@ -135,7 +135,7 @@
     window.enhancePPSelects = enhancePPSelects;
 
     document.addEventListener('click', function (event) {
-        if (!event.target.closest('.pp-select')) closeAllPPSelects();
+        if (!event.target.closest('.wa-select')) closeAllPPSelects();
     });
     document.addEventListener('keydown', function (event) {
         if (event.key === 'Escape') closeAllPPSelects();
@@ -149,7 +149,7 @@
         // the ATEM page render once switcher state arrives), then keep
         // every facade's label/disabled state mirroring its native select.
         enhancePPSelects();
-        document.querySelectorAll('.pp-select').forEach(function (wrap) {
+        document.querySelectorAll('.wa-select').forEach(function (wrap) {
             if (wrap._ppSync) wrap._ppSync();
         });
     }, 750);

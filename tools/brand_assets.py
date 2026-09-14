@@ -280,6 +280,10 @@ def main() -> None:
     (sb / 'mark.svg').write_text(mark_svg(1024, scalable=True))          # inline-able, scales with CSS
 
     # --- tray / menu bar -----------------------------------------------------
+    # Installed-to-the-home-screen icon. Android masks it to the launcher's
+    # own shape, so the mark sits at 62% on the brand ground — well inside
+    # the safe circle, whatever shape the phone crops to.
+    mark_png(320, canvas=512, square_bg='#0E0F10').save(sb / 'icon-maskable-512.png')
     mark_png(22, tbar=False).save(sb / 'tray' / 'mac-22.png')      # 22 pt: two-bar form (the 30 px rule)
     mark_png(44, tbar=False).save(sb / 'tray' / 'mac-44.png')      # its Retina backing, same form
     mark_png(16).save(sb / 'tray' / 'win-16.png')

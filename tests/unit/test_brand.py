@@ -59,3 +59,36 @@ def test_tray_image_per_platform(monkeypatch):
     monkeypatch.setattr(sys, 'platform', 'linux')
     monkeypatch.setattr(os, 'name', 'posix')
     assert launcher._tray_image().size == (24, 24)
+
+
+def test_the_app_installs_to_a_home_screen_as_itself():
+    """Saved to a phone's home screen it must be the app, not a bookmark: the
+    manifest names it with the wordmark's spelling and hands over icons,
+    including a maskable one for Android's launcher shapes."""
+    import json
+    manifest = json.loads((BRAND / 'manifest.webmanifest').read_text())
+    assert manifest['name'] == 'webATEM' and manifest['short_name'] == 'webATEM'
+    assert manifest['start_url'] == '/atem/' and manifest['display'] == 'standalone'
+    purposes = {i.get('purpose') for i in manifest['icons']}
+    assert 'maskable' in purposes, 'Android crops a non-maskable icon to a circle'
+    for icon in manifest['icons']:
+        f = BRAND / icon['src']
+        assert f.exists(), icon['src']
+        assert Image.open(f).size == tuple(int(n) for n in icon['sizes'].split('x'))
+
+
+@pytest.mark.django_db
+def test_the_pages_point_at_the_manifest(client):
+    html = client.get('/atem/').content.decode()
+    assert 'rel="manifest"' in html and 'brand/manifest.webmanifest' in html
+    assert 'apple-touch-icon' in html
+    assert 'webATEM' in html          # the tab, the home screen label
+
+
+@pytest.mark.django_db
+def test_the_manifest_is_served_as_a_manifest(client):
+    """WhiteNoise sends nosniff, so a generic content type means the phone
+    never reads the manifest and saves a bookmark instead of the app. It
+    keeps its own media-type table, separate from the stdlib one."""
+    from django.conf import settings
+    assert settings.WHITENOISE_MIMETYPES['.webmanifest'] == 'application/manifest+json'

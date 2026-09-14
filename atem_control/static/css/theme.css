@@ -82,7 +82,7 @@ body {
  * upstream handoff ran the chrome black in both themes; the light theme now uses a
  * light chrome by operator preference — flipping back is just the
  * --chrome-* values in the the light theme block.) */
-.pp-chrome {
+.wa-chrome {
     background: var(--chrome);
     border-bottom: 1px solid var(--chrome-line);
     color: var(--chrome-fg);
@@ -93,26 +93,26 @@ body {
  * is darkened on light chrome for contrast). Scoped with child
  * combinators so dropdown-panel links (which sit on a base-200 panel
  * that DOES follow the content theme) keep theme colours instead. */
-.pp-chrome .menu > li > a,
-.pp-chrome .menu > li > details > summary {
+.wa-chrome .menu > li > a,
+.wa-chrome .menu > li > details > summary {
     color: var(--chrome-muted);
     border-radius: 999px;
 }
-.pp-chrome .menu > li > a:hover,
-.pp-chrome .menu > li > details > summary:hover,
-.pp-chrome .menu > li > details[open] > summary,
-.pp-chrome .menu > li > a.pp-nav-active,
-.pp-chrome .menu > li > details > summary.pp-nav-active {
+.wa-chrome .menu > li > a:hover,
+.wa-chrome .menu > li > details > summary:hover,
+.wa-chrome .menu > li > details[open] > summary,
+.wa-chrome .menu > li > a.wa-nav-active,
+.wa-chrome .menu > li > details > summary.wa-nav-active {
     background-color: rgba(246, 139, 42, 0.14);
     color: var(--chrome-accent);
 }
-.pp-chrome .menu details > ul {
+.wa-chrome .menu details > ul {
     color: oklch(var(--bc));
 }
 /* Items inside an open dropdown panel get the same orange hover — via the
  * primary role, since the panel sits on base-200 and follows the content
  * theme (orange in both themes anyway). */
-.pp-chrome .menu details > ul li > a:hover {
+.wa-chrome .menu details > ul li > a:hover {
     background-color: rgba(246, 139, 42, 0.14);
     color: oklch(var(--p));
 }
@@ -122,7 +122,7 @@ body {
     background-color: rgba(246, 139, 42, 0.14);
     color: oklch(var(--p));
 }
-.pp-chrome .btn-ghost:hover {
+.wa-chrome .btn-ghost:hover {
     background-color: rgba(246, 139, 42, 0.14);
     color: var(--chrome-accent);
     border-color: transparent;
@@ -167,8 +167,8 @@ body {
    the row ran off the edge of the edit modal. Below md the input takes its own
    line and the buttons sit beneath it. */
 @media (max-width: 767.98px) {
-    .pp-name-row { flex-wrap: wrap; }
-    .pp-name-row > input { flex: 1 1 100%; }
+    .wa-name-row { flex-wrap: wrap; }
+    .wa-name-row > input { flex: 1 1 100%; }
 }
 
 @media (max-width: 1023.98px) {
@@ -376,7 +376,7 @@ input:-webkit-autofill:active {
 .row-action:disabled       { opacity: 0.35; cursor: not-allowed; }
 
 /* Native <select> option lists — the OS-rendered menus on selects that
- * can't take the pp-select facade (ATEM control page, JS-cloned rows,
+ * can't take the wa-select facade (ATEM control page, JS-cloned rows,
  * dynamically-built lists). Chromium honours page CSS on <option> rows,
  * so theme them to match: base-200 rows, orange checked row (Chromium
  * ignores plain background-color on option:checked — the gradient is
@@ -396,27 +396,27 @@ select option:disabled {
     color: oklch(var(--bc) / 0.4);
 }
 
-/* pp-select — a styled popover facade over a native <select> (equipment
+/* wa-select — a styled popover facade over a native <select> (equipment
  * add/edit modals: type / game type / HyperDeck fields). The native
  * element stays in the DOM as an invisible overlay so the form value,
  * required-validation bubbles, and htmx hx-trigger="change" bindings all
  * keep working; equipment-list.js builds the trigger + panel and syncs
  * value/change both ways. Same visual language as the location tree
  * picker (anchored panel, flip-up, orange hover/selected). */
-.pp-select { position: relative; }
-.pp-select > select {
+.wa-select { position: relative; }
+.wa-select > select {
     position: absolute;
     inset: 0;
     opacity: 0;
     pointer-events: none;
     /* kept focusable by the browser for validation bubbles; not tabbable */
 }
-.pp-select-trigger.select { background-image: none; }
-.pp-select-trigger:disabled {
+.wa-select-trigger.select { background-image: none; }
+.wa-select-trigger:disabled {
     opacity: 0.5;
     cursor: not-allowed;
 }
-.pp-select-panel {
+.wa-select-panel {
     position: absolute;
     left: 0;
     right: 0;
@@ -427,13 +427,13 @@ select option:disabled {
     overflow-y: auto;
     padding: 0.375rem;
 }
-.pp-select-panel.drop-up {
+.wa-select-panel.drop-up {
     top: auto;
     bottom: 100%;
     margin-top: 0;
     margin-bottom: 0.5rem;
 }
-.pp-select-option {
+.wa-select-option {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -443,8 +443,8 @@ select option:disabled {
     cursor: pointer;
     font-size: 0.8125rem;
 }
-.pp-select-option:hover { background: oklch(var(--p) / 0.1); }
-.pp-select-option.selected {
+.wa-select-option:hover { background: oklch(var(--p) / 0.1); }
+.wa-select-option.selected {
     background: oklch(var(--p) / 0.16);
     color: oklch(var(--p));
     font-weight: 500;
@@ -513,7 +513,7 @@ select option:disabled {
 }
 
 /* Current page's nav item — orange on an orange-tint pill, per the design. */
-.pp-nav-active {
+.wa-nav-active {
     background: rgba(246, 139, 42, 0.16);
     color: var(--chrome-accent);
     font-weight: 600;
@@ -533,7 +533,7 @@ select option:disabled {
 
 /* Navbar location chip — the deployment's location rendered as an orange
  * pill chip beside the "AV Server" brand line (design: navbar brand row). */
-.pp-location-chip {
+.wa-location-chip {
     padding: 3px 9px;
     background: rgba(246, 139, 42, 0.16);
     color: var(--chrome-accent);

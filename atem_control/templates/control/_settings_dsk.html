@@ -59,7 +59,7 @@
                                 <div>
                                     <label class="text-sm font-medium block mb-2 opacity-70">Fill Source:</label>
                                     <select 
-                                        data-pp-select class="select select-bordered select-sm w-full text-sm"
+                                        data-wa-select class="select select-bordered select-sm w-full text-sm"
                                         :value="$store.atem.state.dsks?.[d]?.fill_source ?? 3020"
                                         @change="$store.atem.setDSKFillSource(d, parseInt($event.target.value))">
                                         <template x-for="s in $store.atem.sourcesFor('fill')" :key="s.source">
@@ -71,7 +71,7 @@
                                 <div>
                                     <label class="text-sm font-medium block mb-2 opacity-70">Key Source:</label>
                                     <select 
-                                        data-pp-select class="select select-bordered select-sm w-full text-sm"
+                                        data-wa-select class="select select-bordered select-sm w-full text-sm"
                                         :value="$store.atem.state.dsks?.[d]?.key_source ?? 3021"
                                         @change="$store.atem.setDSKKeySource(d, parseInt($event.target.value))">
                                         <template x-for="s in $store.atem.sourcesFor('key_source')" :key="s.source">
