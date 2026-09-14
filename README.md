@@ -263,8 +263,7 @@ ATEM switchers (UDP 9910) · HyperDecks (TCP 9993 / FTP)
   ASC-compatible profile save/restore. A small C extension does YCbCr↔RGB
   conversion. **[hyperdeckwire](https://github.com/lucas-romanenko/bmdwire/tree/main/hyperdeckwire)**
   (PyPI) drives the HyperDecks. Both are pinned in `pyproject.toml`; a
-  library change is a release there and a pin bump here (Dependabot opens it,
-  CI runs, it merges itself).
+  library change is a release there and a pin bump here.
 - **`atem_control/`** — the Django app: the WebSocket consumer, a declarative
   command dispatch table, the media-pool watcher, LAN discovery, and the UI.
 - **`webatem/`** — the project package: settings, the ASGI entry, the

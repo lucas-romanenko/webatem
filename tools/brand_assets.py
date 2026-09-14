@@ -241,6 +241,57 @@ def write_icns(path: Path):
     icns.write(path)
 
 
+def _pil_font(weight: int, size: int):
+    """Archivo at a pixel size, for Pillow. The shipped faces are WOFF2 and
+    Pillow reads sfnt, so decompress in memory (the same trick _shape uses
+    for HarfBuzz)."""
+    from PIL import ImageFont
+    sfnt = io.BytesIO()
+    tt = _font(weight)
+    tt.flavor = None
+    tt.save(sfnt)
+    sfnt.seek(0)
+    return ImageFont.truetype(sfnt, size)
+
+
+def banner_png(width: int = 2560, height: int = 520) -> Image.Image:
+    """The README's header: the lockup and one line, on the brand ground.
+
+    Wide and short on purpose — a README image is rendered at the column
+    width, so a tall one pushes everything below the fold (Lucas, 2026-09-14:
+    "smaller in height, more banner like"). The two bus bars run along the
+    bottom edge as a hairline: the mark's own colours, at banner scale.
+    """
+    im = Image.new('RGB', (width, height), DARK['tile'])
+    d = ImageDraw.Draw(im)
+
+    mark_size = int(height * 0.30)
+    word = _pil_font(800, int(height * 0.24))
+    light = _pil_font(400, int(height * 0.24))
+    tag = _pil_font(400, int(height * 0.085))
+
+    web_w = d.textlength('web', font=light)
+    atem_w = d.textlength('ATEM', font=word)
+    gap = int(height * 0.055)
+    lockup_w = mark_size + gap + web_w + atem_w
+    x = (width - lockup_w) / 2
+    y = height * 0.30
+
+    mark = mark_png(mark_size)
+    im.paste(mark, (int(x), int(y - mark_size / 2)), mark)
+    tx = x + mark_size + gap
+    d.text((tx, y), 'web', font=light, fill=DARK['border'] if False else '#9A9E9F', anchor='lm')
+    d.text((tx + web_w, y), 'ATEM', font=word, fill='#EDEDEA', anchor='lm')
+
+    line = 'Browser control for ATEM switchers  ·  run the server, open a tab, cut the show'
+    d.text((width / 2, height * 0.62), line, font=tag, fill='#7E8386', anchor='mm')
+
+    bar_h = max(3, int(height * 0.012))
+    d.rectangle((0, height - bar_h * 2, width // 2, height - bar_h), fill=DARK['pgm'])
+    d.rectangle((width // 2, height - bar_h * 2, width, height - bar_h), fill=DARK['pvw'])
+    return im
+
+
 def main() -> None:
     brand = ROOT / 'docs' / 'brand'
     static = ROOT / 'atem_control' / 'static'
@@ -283,6 +334,7 @@ def main() -> None:
     # Installed-to-the-home-screen icon. Android masks it to the launcher's
     # own shape, so the mark sits at 62% on the brand ground — well inside
     # the safe circle, whatever shape the phone crops to.
+    banner_png().save(brand / 'banner.png')
     mark_png(320, canvas=512, square_bg='#0E0F10').save(sb / 'icon-maskable-512.png')
     mark_png(22, tbar=False).save(sb / 'tray' / 'mac-22.png')      # 22 pt: two-bar form (the 30 px rule)
     mark_png(44, tbar=False).save(sb / 'tray' / 'mac-44.png')      # its Retina backing, same form
