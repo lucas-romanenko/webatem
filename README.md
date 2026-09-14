@@ -7,6 +7,13 @@ for you and gives you the whole control surface: switching, keyers, audio,
 media pool, macros. Run the server, open a tab, cut the show.
 
 <p align="center">
+  <a href="https://github.com/lucas-romanenko/webatem/releases/latest"><img src="https://img.shields.io/github/v/release/lucas-romanenko/webatem?style=flat-square&color=2FD07A&label=release" alt="Latest release"></a>
+  <a href="https://pypi.org/project/webatem/"><img src="https://img.shields.io/pypi/v/webatem?style=flat-square&color=9A9E9F&label=pypi" alt="On PyPI"></a>
+  <a href="https://github.com/lucas-romanenko/webatem/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/lucas-romanenko/webatem/ci.yml?branch=main&style=flat-square&label=tests" alt="Tests"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-9A9E9F?style=flat-square" alt="MIT licensed"></a>
+</p>
+
+<p align="center">
   <a href="https://github.com/lucas-romanenko/webatem/releases/latest/download/webatem-windows-x64-setup.exe"><img src="https://img.shields.io/badge/Download-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows"></a>
   &nbsp;
   <a href="https://github.com/lucas-romanenko/webatem/releases/latest/download/webatem-macos-arm64.dmg"><img src="https://img.shields.io/badge/Download-macOS%20(Apple%20silicon)-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS, Apple silicon"></a>
