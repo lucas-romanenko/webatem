@@ -3,6 +3,7 @@
 Everything is env-configurable with working defaults — `docker compose up`
 needs no .env file. See .env.example for the knobs.
 """
+import mimetypes
 import os
 import secrets
 from pathlib import Path
@@ -122,7 +123,13 @@ STORAGES = {
 MEDIA_ROOT = DATA_DIR / 'uploads'
 
 # Branding shown in the navbar / browser title.
-APP_TITLE = os.getenv('APP_TITLE', 'WebATEM')
+# The web app manifest needs its own content type or a phone will not parse
+# it (WhiteNoise sends nosniff, so a generic type is fatal). WhiteNoise 6
+# keeps its OWN table — adding to the stdlib one is not enough, hence both.
+mimetypes.add_type('application/manifest+json', '.webmanifest')
+WHITENOISE_MIMETYPES = {'.webmanifest': 'application/manifest+json'}
+
+APP_TITLE = os.getenv('APP_TITLE', 'webATEM')      # the wordmark's spelling: tab, home screen, installed app
 
 # The seam for a platform hosting the ATEM control app (atem_control/hooks.py):
 # a dotted path to a Hooks subclass. Unset = standalone WebATEM's defaults.
