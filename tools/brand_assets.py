@@ -255,36 +255,53 @@ def _pil_font(weight: int, size: int):
 
 
 def banner_png(width: int = 2560, height: int = 520) -> Image.Image:
-    """The README's header: the lockup and one line, on the brand ground.
+    """The README's header, and (at 2:1) the repository's social card.
 
-    Wide and short on purpose — a README image is rendered at the column
-    width, so a tall one pushes everything below the fold (Lucas, 2026-09-14:
-    "smaller in height, more banner like"). The two bus bars run along the
-    bottom edge as a hairline: the mark's own colours, at banner scale.
+    Wide and short by default: a README image is rendered at the column
+    width, so a tall one pushes everything below the fold (Lucas,
+    2026-09-14: "smaller in height, more banner like"). The type is sized
+    from the height and then SHRUNK TO FIT the width, because the same
+    composition has to survive a 5:1 strip and a 2:1 card. The two bus bars
+    run along the bottom edge: the mark's own colours, at banner scale.
     """
+    from PIL import ImageDraw as _D
     im = Image.new('RGB', (width, height), DARK['tile'])
     d = ImageDraw.Draw(im)
+    probe = _D.Draw(Image.new('RGB', (8, 8)))
 
-    mark_size = int(height * 0.30)
-    word = _pil_font(800, int(height * 0.24))
-    light = _pil_font(400, int(height * 0.24))
-    tag = _pil_font(400, int(height * 0.085))
+    def layout(scale: float):
+        mark = max(16, int(height * 0.30 * scale))
+        word = _pil_font(800, max(8, int(height * 0.24 * scale)))
+        light = _pil_font(400, max(8, int(height * 0.24 * scale)))
+        web_w = probe.textlength('web', font=light)
+        atem_w = probe.textlength('ATEM', font=word)
+        gap = int(height * 0.055 * scale)
+        return mark, word, light, web_w, atem_w, gap, mark + gap + web_w + atem_w
 
-    web_w = d.textlength('web', font=light)
-    atem_w = d.textlength('ATEM', font=word)
-    gap = int(height * 0.055)
-    lockup_w = mark_size + gap + web_w + atem_w
+    scale = 1.0
+    for _ in range(12):                       # shrink until the lockup fits
+        mark_size, word, light, web_w, atem_w, gap, lockup_w = layout(scale)
+        if lockup_w <= width * 0.78:
+            break
+        scale *= width * 0.78 / lockup_w
+
+    line = 'Browser control for ATEM switchers  \u00b7  run the server, open a tab, cut the show'
+    tag_scale = 1.0
+    for _ in range(12):                       # and the same for the line under it
+        tag = _pil_font(400, max(8, int(height * 0.085 * tag_scale)))
+        tag_w = probe.textlength(line, font=tag)
+        if tag_w <= width * 0.88:
+            break
+        tag_scale *= width * 0.88 / tag_w
+
     x = (width - lockup_w) / 2
-    y = height * 0.30
-
+    y = height * 0.30 if width / height > 3 else height * 0.38
     mark = mark_png(mark_size)
     im.paste(mark, (int(x), int(y - mark_size / 2)), mark)
     tx = x + mark_size + gap
-    d.text((tx, y), 'web', font=light, fill=DARK['border'] if False else '#9A9E9F', anchor='lm')
+    d.text((tx, y), 'web', font=light, fill='#9A9E9F', anchor='lm')
     d.text((tx + web_w, y), 'ATEM', font=word, fill='#EDEDEA', anchor='lm')
-
-    line = 'Browser control for ATEM switchers  ·  run the server, open a tab, cut the show'
-    d.text((width / 2, height * 0.62), line, font=tag, fill='#7E8386', anchor='mm')
+    d.text((width / 2, y + mark_size * 0.95), line, font=tag, fill='#7E8386', anchor='mm')
 
     bar_h = max(3, int(height * 0.012))
     d.rectangle((0, height - bar_h * 2, width // 2, height - bar_h), fill=DARK['pgm'])
