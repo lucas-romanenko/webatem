@@ -188,12 +188,21 @@ jobs:
       - name: Install the installer and run what it installed
         if: runner.os == 'Windows'
         timeout-minutes: 8
+        env:
+          # Git Bash rewrites any argument that starts with "/" into a
+          # Windows path, so the installer received "C:/Program Files/Git/
+          # VERYSILENT" instead of /VERYSILENT, did not recognise it, and
+          # put up a dialog nobody could click — the hour-long hang on the
+          # 1.0.0 build. (The same trap ate ISCC's flags a few hours
+          # earlier.) These two switches turn that conversion off.
+          MSYS_NO_PATHCONV: 1
+          MSYS2_ARG_CONV_EXCL: '*'
         run: |
           set -uxo pipefail
-          # Every call is bounded: this step hung for an hour on the 1.0.0
-          # build, holding a runner, because a silent installer that decides
-          # to wait for something waits forever.
+          # Bounded anyway: a silent installer that decides to wait, waits
+          # forever, and this step must not hold a runner for hours.
           timeout 180 ./out/${{ matrix.asset }} /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /NOCANCEL /LOG=install.log || true
+          echo "--- installer log ---"; tail -25 install.log 2>/dev/null || echo "(no install log — it never got that far)"
           APP="$LOCALAPPDATA/Programs/WebATEM/webatem.exe"
           ls -la "$LOCALAPPDATA/Programs/WebATEM" | head -5
           [ -f "$APP" ] || { echo "::error::the installer did not put webatem.exe where it said"; tail -40 install.log; exit 1; }
