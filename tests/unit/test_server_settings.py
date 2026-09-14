@@ -289,15 +289,27 @@ def test_supervisor_does_not_start_when_the_saved_interface_is_gone():
         sup.join(20)
 
 
-def test_the_window_waits_for_a_choice_at_every_launch_the_others_do_not():
-    """A saved interface is never applied under the window (0.5.2: a
-    reinstall came up on a months-old VPN choice); without a window the
-    saved or default address is used, since nobody could choose."""
+def test_a_plain_launch_waits_for_a_choice():
+    """A saved interface is not applied on its own (a reinstall came up on a
+    months-old VPN choice); without a window the saved or default address is
+    used, since nobody could choose."""
     from webatem.launcher import _listen_host
     saved = {'host': '192.168.1.44', 'port': 8880, 'source': 'file', 'start_minimized': False}
     fresh = {'host': '0.0.0.0', 'port': 8880, 'source': 'default', 'start_minimized': False}
     assert _listen_host(saved, has_window=True) is None and _listen_host(fresh, has_window=True) is None
     assert _listen_host(saved, has_window=False) == '192.168.1.44' and _listen_host(fresh, has_window=False) == '0.0.0.0'
+
+
+def test_run_at_login_comes_up_on_the_interface_it_was_given():
+    """The point of Run at login — and of Start minimized, and of the login
+    start itself — is a machine that boots into a working server: no window,
+    no second choice. The saved interface is resumed then. A first run with
+    nothing chosen has nothing to resume, and still waits."""
+    from webatem.launcher import _listen_host
+    saved = {'host': '192.168.1.44', 'port': 8880, 'source': 'file', 'start_minimized': False}
+    fresh = {'host': '0.0.0.0', 'port': 8880, 'source': 'default', 'start_minimized': False}
+    assert _listen_host(saved, has_window=True, resume=True) == '192.168.1.44'
+    assert _listen_host(fresh, has_window=True, resume=True) is None
 
 
 def test_supervisor_waits_for_a_choice_then_starts_on_it():

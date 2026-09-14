@@ -62,9 +62,10 @@ address right there; handy on a laptop with Wi-Fi, Ethernet and a VPN at
 once. **Launch GUI** opens the address shown — the real interface and port,
 the same one other devices use (this computer also answers at `127.0.0.1`
 whichever interface is chosen). Nothing listens until you have picked an
-interface in the window — at every launch: the window opens on **Not
-running** and waits for your choice; port, Start minimized and Run at login
-are remembered. The default port is **8880** (Bitfocus Companion has 8000); if
+interface in the window: it opens on **Not running** and waits for your
+choice. Tick **Run at login** (or **Start minimized**) and it comes back up
+on that interface by itself from then on, including when the machine boots
+— no window, no second choice. The default port is **8880** (Bitfocus Companion has 8000); if
 the port is taken anyway, the next free one is used and the window says so.
 
 <details>

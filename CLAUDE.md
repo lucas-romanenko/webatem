@@ -161,7 +161,12 @@ what the user chose. Decisions that were paid for on his Mac:
   taken port or a gone interface is an OSError here; a specific interface
   ALWAYS gets a 127.0.0.1 socket beside it (a VPN address is not reachable
   from its own machine, seen live). Startup: **under the window, nothing
-  listens until the user has chosen an interface — at EVERY launch**
+  listens until the user has chosen an interface — at every launch UNLESS
+  the user asked for it to come up on its own** (`_listen_host(..., resume)`:
+  Run at login is on, this IS the login start `--autostart`, or Start
+  minimized is set — then the saved interface is used, because a machine
+  that boots into a working server is the whole point of those switches,
+  Lucas 2026-09-14). Otherwise
   (`_listen_host` → `_Supervisor(host=None)`, `decided` event,
   `startup_note`); the window and the tray say so and the choice starts it.
   The saved interface is never applied on its own: 0.5.1 applied it when
