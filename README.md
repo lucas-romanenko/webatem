@@ -7,7 +7,7 @@ for you and gives you the whole control surface: switching, keyers, audio,
 media pool, macros. Run the server, open a tab, cut the show.
 
 <p align="center">
-  <a href="https://github.com/lucas-romanenko/webatem/releases/latest/download/webatem-windows-x64.zip"><img src="https://img.shields.io/badge/Download-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows"></a>
+  <a href="https://github.com/lucas-romanenko/webatem/releases/latest/download/webatem-windows-x64-setup.exe"><img src="https://img.shields.io/badge/Download-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download for Windows"></a>
   &nbsp;
   <a href="https://github.com/lucas-romanenko/webatem/releases/latest/download/webatem-macos-arm64.dmg"><img src="https://img.shields.io/badge/Download-macOS%20(Apple%20silicon)-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS, Apple silicon"></a>
   &nbsp;
@@ -15,7 +15,7 @@ media pool, macros. Run the server, open a tab, cut the show.
   &nbsp;
   <a href="https://github.com/lucas-romanenko/webatem/releases/latest/download/webatem-linux-x64"><img src="https://img.shields.io/badge/Download-Linux-E95420?style=for-the-badge&logo=linux&logoColor=white" alt="Download for Linux"></a>
 </p>
-<p align="center"><sub>Download it, open it, and your switchers appear. &nbsp;·&nbsp; Windows is a zip: unzip the folder anywhere and run <b>webatem.exe</b> inside it. &nbsp;·&nbsp; The Linux build runs on desktop <b>and</b> headless servers.</sub></p>
+<p align="center"><sub>Download it, open it, and your switchers appear. &nbsp;·&nbsp; Windows installs per-user — no admin needed. &nbsp;·&nbsp; The Linux build runs on desktop <b>and</b> headless servers.</sub></p>
 
 Three ways to run it, all simple:
 
@@ -28,12 +28,55 @@ Three ways to run it, all simple:
 - **Already have Python?** → `pipx install "webatem[desktop]"`, then `webatem`.
 
 Every way of running it **auto-discovers the ATEMs on your network**
-(Bonjour/mDNS) and lists them by name, exactly like ATEM Software Control.
+(Bonjour/mDNS) and lists them by name, exactly like ATEM Software Control —
+open the page and they are already there:
+
+<p align="center">
+  <img src="docs/screenshot-connect.png" alt="WebATEM connect page — recent connections and the switchers found on the network, each listed by name and address" width="900">
+</p>
 
 <p align="center">
   <img src="docs/screenshot-control.png" alt="WebATEM control surface — program/preview buses, T-bar, keyers, transitions and macros" width="900">
 </p>
 
+## What you get
+
+- **Full switcher control** — program/preview buses per M/E, cut/auto,
+  transition styles (mix, dip, wipe, DVE, stinger) with per-style settings,
+  fade to black, color generators, aux routing, source renaming that follows
+  live switcher labels.
+- **Upstream & downstream keyers** — USK 1–4 (luma, chroma, pattern, DVE with
+  fly keyframes, masks), DSKs with tie/rate/clip/gain, on-air countdowns.
+- **Fairlight audio** — per-strip faders, EQ, dynamics, master bus, and live
+  audio meters streamed over WebSocket (tab-gated so idle pages cost nothing).
+- **Media pool** — live thumbnails of every still slot, and drag-and-drop
+  image upload straight onto a slot (validated and resized to 1080p
+  server-side).
+- **Macros** — browse and run switcher macros.
+- **Save/restore switcher state** — full switcher profile export/import as
+  XML, compatible with ATEM Software Control’s “Save Switcher State”,
+  including media pool images and macro bytecode.
+- **HyperDeck transport** — clip browser and play/pause/stop/loop for decks
+  bound to the ATEM (TCP/9993), from the same page.
+- **Multi-operator by design** — one pooled connection per switcher shared by
+  all operators; state fan-out over WebSockets with adaptive polling
+  (30 ms during transitions, relaxed when idle).
+
+Deep per-switcher settings live in the Settings panel — color generators,
+each upstream keyer (luma / chroma / pattern / DVE), downstream keyers,
+transitions, video mode, input labels, outputs and HyperDecks:
+
+<p align="center">
+  <img src="docs/screenshot-settings.png" alt="WebATEM settings panel — color generators and an upstream keyer expanded, showing HSL controls, fill-source dropdown and wipe patterns" width="900">
+</p>
+
+Full **Fairlight audio** — a per-strip mixer with input gain, EQ and dynamics
+curves, faders, pan and live meters, and a writable 6-band parametric EQ
+behind each strip:
+
+<p align="center">
+  <img src="docs/screenshot-audio.png" alt="WebATEM Fairlight audio mixer — 14 strips with input, EQ, dynamics, faders, pan and meters" width="900">
+</p>
 ---
 
 ## Get started
@@ -179,48 +222,6 @@ like ASC if you want).
 **Reach for WebATEM** when you want the core control surface available to
 anyone on the network, on any device or OS — a second operator on an iPad, a
 Linux box in the rack room, a phone at the camera position.
-
-## Features
-
-- **Full switcher control** — program/preview buses per M/E, cut/auto,
-  transition styles (mix, dip, wipe, DVE, stinger) with per-style settings,
-  fade to black, color generators, aux routing, source renaming that follows
-  live switcher labels.
-- **Upstream & downstream keyers** — USK 1–4 (luma, chroma, pattern, DVE with
-  fly keyframes, masks), DSKs with tie/rate/clip/gain, on-air countdowns.
-- **Fairlight audio** — per-strip faders, EQ, dynamics, master bus, and live
-  audio meters streamed over WebSocket (tab-gated so idle pages cost nothing).
-- **Media pool** — live thumbnails of every still slot, and drag-and-drop
-  image upload straight onto a slot (validated and resized to 1080p
-  server-side).
-- **Macros** — browse and run switcher macros.
-- **Save/restore switcher state** — full switcher profile export/import as
-  XML, compatible with ATEM Software Control’s “Save Switcher State”,
-  including media pool images and macro bytecode.
-- **HyperDeck transport** — clip browser and play/pause/stop/loop for decks
-  bound to the ATEM (TCP/9993), from the same page.
-- **Multi-operator by design** — one pooled connection per switcher shared by
-  all operators; state fan-out over WebSockets with adaptive polling
-  (30 ms during transitions, relaxed when idle).
-
-Deep per-switcher settings live in the Settings panel — color generators,
-each upstream keyer (luma / chroma / pattern / DVE), downstream keyers,
-transitions, video mode, input labels, outputs and HyperDecks:
-
-<p align="center">
-  <img src="docs/screenshot-settings.png" alt="WebATEM settings panel — color generators and an upstream keyer expanded, showing HSL controls, fill-source dropdown and wipe patterns" width="900">
-</p>
-
-Full **Fairlight audio** — a per-strip mixer with input gain, EQ and dynamics
-curves, faders, pan and live meters, plus a writable 6-band parametric EQ with
-a live frequency-response graph:
-
-<p align="center">
-  <img src="docs/screenshot-audio.png" alt="WebATEM Fairlight audio mixer — 14 strips with input, EQ, dynamics, faders, pan and meters" width="900">
-</p>
-<p align="center">
-  <img src="docs/screenshot-eq.png" alt="WebATEM 6-band parametric EQ — frequency-response curve with per-band type, frequency, gain and Q" width="900">
-</p>
 
 ## Running it for real
 

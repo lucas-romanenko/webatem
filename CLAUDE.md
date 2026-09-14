@@ -278,6 +278,15 @@ hand in repository settings).
   pytest ghcr.io/lucas-romanenko/webatem:latest tests/ -q` (mount
   `-v ./tests:/app/tests:ro` to run edited tests without a rebuild). The
   count is whatever the tail line says; don't write it down.
+- README screenshots are FRAMED: `tools/screenshot_frame.py` wraps a capture
+  in a browser window (traffic lights, address bar) in the brand's colours —
+  a bare page screenshot reads as a mock-up. Capture at deviceScaleFactor 2,
+  then frame with the address it should appear to be served from. **Never
+  publish a picture of the bench switcher's own labels**: the capture script
+  rewrites `state.sources[].short/.long`, the macro names and the audio
+  strips' text to CAM1…CAM10 / Open, Lower third, … and the header to
+  "Studio A / 192.168.1.240", and runs the container on a BRIDGE network so
+  mDNS finds none of the real switchers.
 - Screenshots (Lucas reviews through a published artifact): run the image on
   the host network on a spare port (`-e PORT=8895 -e DATA_DIR=/tmp/wd`), then
   Playwright from the host (`~/.local/node20/bin/node`, playwright out of the
