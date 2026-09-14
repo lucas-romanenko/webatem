@@ -1,0 +1,410 @@
+                <!-- Downstream Keys: one accordion section per keyer, count from
+                     topology (d = 0-based DSK index, bound to state.dsks[d]) -->
+                <template x-for="d in Array.from({length: $store.atem.state.topology?.dsks ?? 0}, (_, i) => i)" :key="d">
+                <div class="border-b border-base-300">
+                    <button
+                        class="w-full p-4 text-left font-medium text-base-content hover:bg-base-300 flex items-center justify-between transition-colors"
+                        @click="openSections.dsks[d] = !openSections.dsks[d]">
+                        <div class="flex items-center gap-2">
+                            <span x-text="'Downstream Key ' + (d + 1)"></span>
+                            <span x-show="$store.atem.state.dsks?.[d]?.on_air"
+                                class="badge badge-pgm badge-xs animate-pulse">
+                                LIVE
+                            </span>
+                        </div>
+                        <i class="bi bi-chevron-down transition-transform duration-200"
+                        :class="openSections.dsks[d] ? 'rotate-180' : ''"></i>
+                    </button>
+                    <div x-show="openSections.dsks[d]"
+                        x-collapse.duration.200ms
+                        class="px-4 acc-body">
+                        <div class="space-y-4 text-sm">
+
+                            <!-- Key Selection Header -->
+                            <div class="flex items-center justify-between">
+                                <div class="text-sm font-semibold opacity-70 pb-2 border-b border-base-300 flex-1" x-text="'Key ' + (d + 1)"></div>
+                            </div>
+
+                            <!-- ON AIR / AUTO actuators — DSK 2+ only (d > 0): DSK 1 is
+                                 actuated on the main-row cluster; its accordion stays
+                                 settings-only. DSK-indexed: dsk=d on the existing verbs. -->
+                            <div class="flex items-center gap-2" x-show="d > 0">
+                                <button
+                                    :class="$store.atem.getControlButtonClass('dsk', d)"
+                                    @click="$store.atem.send('toggle_dsk', {dsk: d})"
+                                    class="btn-sm flex-1 font-semibold">
+                                    ON AIR
+                                </button>
+                                <button
+                                    :class="$store.atem.getControlButtonClass('dsk_auto', d)"
+                                    @click="$store.atem.send('dsk_auto', {dsk: d})"
+                                    class="btn-sm flex-1 font-semibold">
+                                    AUTO
+                                </button>
+                            </div>
+
+                            <!-- Rate Control -->
+                            <div class="flex items-center gap-3">
+                                <label class="text-sm font-medium opacity-70 w-16">Rate:</label>
+                                <input
+                                    type="text"
+                                    class="input input-bordered input-sm w-20 text-center font-mono"
+                                    :value="ATEMControl.formatFramesToTimeCode($store.atem.state.dsks?.[d]?.rate ?? 25)"
+                                    @change="$store.atem.send('set_dsk_rate', {dsk: d, rate: $event.target.value})" @keydown.enter="$event.target.blur()"
+                                    placeholder="1:00">
+                            </div>
+                            
+                            <!-- Fill and Key Sources -->
+                            <div class="space-y-3">
+                                <div>
+                                    <label class="text-sm font-medium block mb-2 opacity-70">Fill Source:</label>
+                                    <select 
+                                        data-pp-select class="select select-bordered select-sm w-full text-sm"
+                                        :value="$store.atem.state.dsks?.[d]?.fill_source ?? 3020"
+                                        @change="$store.atem.setDSKFillSource(d, parseInt($event.target.value))">
+                                        <template x-for="s in $store.atem.sourcesFor('fill')" :key="s.source">
+                                            <option :value="s.source" x-text="s.long"></option>
+                                        </template>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label class="text-sm font-medium block mb-2 opacity-70">Key Source:</label>
+                                    <select 
+                                        data-pp-select class="select select-bordered select-sm w-full text-sm"
+                                        :value="$store.atem.state.dsks?.[d]?.key_source ?? 3021"
+                                        @change="$store.atem.setDSKKeySource(d, parseInt($event.target.value))">
+                                        <template x-for="s in $store.atem.sourcesFor('key_source')" :key="s.source">
+                                            <option :value="s.source" x-text="s.long"></option>
+                                        </template>
+                                        <option value="3021">Media Player 2 Key</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <!-- Divider -->
+                            <div class="divider my-3"></div>
+                            
+                            <!-- Mask Section -->
+                            <div class="space-y-3">
+                                <div class="flex items-center gap-2">
+                                    <input 
+                                        type="checkbox" 
+                                        class="checkbox checkbox-sm"
+                                        :checked="$store.atem.state.dsks?.[d]?.mask_enabled || false"
+                                        @change="$store.atem.setDSKMaskEnabled(d, $event.target.checked)">
+                                    <span class="text-sm font-medium">Mask</span>
+                                </div>
+                                
+                                <div class="grid grid-cols-2 gap-x-6 gap-y-3 pl-6"
+                                    :class="!($store.atem.state.dsks?.[d]?.mask_enabled) ? 'opacity-50 pointer-events-none' : ''">
+                                    <!-- Top -->
+                                    <div class="flex items-center justify-between">
+                                        <label class="text-sm opacity-70 mr-3">Top:</label>
+                                        <div class="flex items-center gap-1">
+                                            <input 
+                                                type="number" 
+                                                class="input input-bordered input-sm w-20 text-center font-mono text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" 
+                                                :value="($store.atem.state.dsks?.[d]?.mask_top ?? 9).toFixed(2)"
+                                                @change="$store.atem.setDSKMaskTop(d, $event.target.value)"
+                                                step="0.01"
+                                                min="-9" 
+                                                max="9">
+                                            <div class="flex flex-col">
+                                                <button class="btn btn-ghost btn-xs p-0 h-4 min-h-0" 
+                                                        @click="$store.atem.setDSKMaskTop(d, Math.min(9, ($store.atem.state.dsks?.[d]?.mask_top ?? 9) + 0.1))">
+                                                    <i class="bi bi-caret-up-fill text-sm"></i>
+                                                </button>
+                                                <button class="btn btn-ghost btn-xs p-0 h-4 min-h-0" 
+                                                        @click="$store.atem.setDSKMaskTop(d, Math.max(-9, ($store.atem.state.dsks?.[d]?.mask_top ?? 9) - 0.1))">
+                                                    <i class="bi bi-caret-down-fill text-sm"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Bottom -->
+                                    <div class="flex items-center justify-between">
+                                        <label class="text-sm opacity-70 mr-3">Bottom:</label>
+                                        <div class="flex items-center gap-1">
+                                            <input 
+                                                type="number" 
+                                                class="input input-bordered input-sm w-20 text-center font-mono text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" 
+                                                :value="($store.atem.state.dsks?.[d]?.mask_bottom ?? -9).toFixed(2)"
+                                                @change="$store.atem.setDSKMaskBottom(d, $event.target.value)"
+                                                step="0.01"
+                                                min="-9" 
+                                                max="9">
+                                            <div class="flex flex-col">
+                                                <button class="btn btn-ghost btn-xs p-0 h-4 min-h-0" 
+                                                        @click="$store.atem.setDSKMaskBottom(d, Math.min(9, ($store.atem.state.dsks?.[d]?.mask_bottom ?? -9) + 0.1))">
+                                                    <i class="bi bi-caret-up-fill text-sm"></i>
+                                                </button>
+                                                <button class="btn btn-ghost btn-xs p-0 h-4 min-h-0" 
+                                                        @click="$store.atem.setDSKMaskBottom(d, Math.max(-9, ($store.atem.state.dsks?.[d]?.mask_bottom ?? -9) - 0.1))">
+                                                    <i class="bi bi-caret-down-fill text-sm"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Left -->
+                                    <div class="flex items-center justify-between">
+                                        <label class="text-sm opacity-70 mr-3">Left:</label>
+                                        <div class="flex items-center gap-1">
+                                            <input 
+                                                type="number" 
+                                                class="input input-bordered input-sm w-20 text-center font-mono text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" 
+                                                :value="($store.atem.state.dsks?.[d]?.mask_left ?? -16).toFixed(2)"
+                                                @change="$store.atem.setDSKMaskLeft(d, $event.target.value)"
+                                                step="0.01"
+                                                min="-16" 
+                                                max="16">
+                                            <div class="flex flex-col">
+                                                <button class="btn btn-ghost btn-xs p-0 h-4 min-h-0" 
+                                                        @click="$store.atem.setDSKMaskLeft(d, Math.min(16, ($store.atem.state.dsks?.[d]?.mask_left ?? -16) + 0.1))">
+                                                    <i class="bi bi-caret-up-fill text-sm"></i>
+                                                </button>
+                                                <button class="btn btn-ghost btn-xs p-0 h-4 min-h-0" 
+                                                        @click="$store.atem.setDSKMaskLeft(d, Math.max(-16, ($store.atem.state.dsks?.[d]?.mask_left ?? -16) - 0.1))">
+                                                    <i class="bi bi-caret-down-fill text-sm"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Right -->
+                                    <div class="flex items-center justify-between">
+                                        <label class="text-sm opacity-70 mr-3">Right:</label>
+                                        <div class="flex items-center gap-1">
+                                            <input 
+                                                type="number" 
+                                                class="input input-bordered input-sm w-20 text-center font-mono text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" 
+                                                :value="($store.atem.state.dsks?.[d]?.mask_right ?? 16).toFixed(2)"
+                                                @change="$store.atem.setDSKMaskRight(d, $event.target.value)"
+                                                step="0.01"
+                                                min="-16" 
+                                                max="16">
+                                            <div class="flex flex-col">
+                                                <button class="btn btn-ghost btn-xs p-0 h-4 min-h-0" 
+                                                        @click="$store.atem.setDSKMaskRight(d, Math.min(16, ($store.atem.state.dsks?.[d]?.mask_right ?? 16) + 0.1))">
+                                                    <i class="bi bi-caret-up-fill text-sm"></i>
+                                                </button>
+                                                <button class="btn btn-ghost btn-xs p-0 h-4 min-h-0" 
+                                                        @click="$store.atem.setDSKMaskRight(d, Math.max(-16, ($store.atem.state.dsks?.[d]?.mask_right ?? 16) - 0.1))">
+                                                    <i class="bi bi-caret-down-fill text-sm"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Divider -->
+                            <div class="divider my-3"></div>
+                            
+                            <!-- Pre Multiplied Key Section -->
+                            <div class="space-y-3">
+                                <div class="flex items-center gap-2">
+                                    <input 
+                                        type="checkbox" 
+                                        class="checkbox checkbox-sm"
+                                        :checked="$store.atem.state.dsks?.[d]?.pre_multiplied || false"
+                                        @change="$store.atem.setDSKPreMultiplied(d, $event.target.checked)">
+                                    <span class="text-sm font-medium">Pre Multiplied Key</span>
+                                </div>
+                                
+                                <div class="space-y-4 pl-6"
+                                    :class="$store.atem.state.dsks?.[d]?.pre_multiplied ? 'opacity-50 pointer-events-none' : ''">
+                                    <!-- Clip -->
+                                    {% include 'control/_slider.html' with container='$store.atem.state.dsks?.[d]' idx='d' label='Clip' field='clip' base='DSKClip' fallback=22 decimals=1 min=0 max=100 step=0.1 scale=1 disp_min=0 disp_max=100 disp_step=0.1 suffix='%' %}
+                                    
+                                    <!-- Gain -->
+                                    {% include 'control/_slider.html' with container='$store.atem.state.dsks?.[d]' idx='d' label='Gain' field='gain' base='DSKGain' fallback=30 decimals=1 min=0 max=100 step=0.1 scale=1 disp_min=0 disp_max=100 disp_step=0.1 suffix='%' %}
+                                    
+                                    <!-- Invert Key -->
+                                    <div class="flex items-center gap-2">
+                                        <input
+                                            type="checkbox"
+                                            class="checkbox checkbox-sm"
+                                            :checked="$store.atem.state.dsks?.[d]?.invert_key || false"
+                                            @change="$store.atem.setDSKInvertKey(d, $event.target.checked)">
+                                        <span class="text-sm opacity-70">Invert key</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                </template>
+
+
+
+
+
+
+                <!-- Fade to Black - FIXED: Properly positioned after Transitions -->
+                <div class="border-b border-base-300">
+                    <button 
+                        class="w-full p-4 text-left font-medium text-base-content hover:bg-base-300 flex items-center justify-between transition-colors"
+                        @click="openSections.ftb = !openSections.ftb">
+                        <span>Fade to Black</span>
+                        <i class="bi bi-chevron-down transition-transform duration-200" 
+                           :class="openSections.ftb ? 'rotate-180' : ''"></i>
+                    </button>
+                    <div x-show="openSections.ftb"
+                         x-collapse.duration.200ms
+                         class="px-4 acc-body">
+                        <div class="space-y-3 text-sm">
+                            <!-- FTB Rate -->
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-medium whitespace-nowrap">Rate:</span>
+                                <input 
+                                    type="text" 
+                                    :class="$store.atem.getRateInputClass('ftb')"
+                                    class="input input-bordered input-sm w-20"
+                                    id="ftbRate2"
+                                    x-model="$store.atem.inputs.ftbRate"
+                                    placeholder="1:00"
+                                    @keydown.enter="$store.atem.send('set_ftb_rate', {rate: $store.atem.inputs.ftbRate}); $event.target.blur()"
+                                >
+                                <button 
+                                    class="btn btn-primary btn-xs"
+                                    @click="$store.atem.send('set_ftb_rate', {rate: $store.atem.inputs.ftbRate})">
+                                    Set
+                                </button>
+                            </div>
+                            
+                            <!-- FTB Disable — ME1 only: the FEna disable wire layout is
+                                 ambiguous per-M/E (disable-ME2 == enable-ME1), so the send
+                                 is pinned to ME1 in pyatem and the control hidden on
+                                 background M/E tabs until a multi-M/E capture settles it. -->
+                            <div class="form-control" x-show="$store.atem.activeMe === 0">
+                                <label class="label cursor-pointer justify-start gap-3 py-1">
+                                    <input
+                                        type="checkbox"
+                                        class="checkbox checkbox-error checkbox-sm"
+                                        :checked="$store.atem.state.mes[$store.atem.activeMe].ftb?.disabled || false"
+                                        @change="$store.atem.send('set_ftb_disabled', {disabled: $event.target.checked})"
+                                    >
+                                    <span class="label-text text-xs">Disable FTB</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Outputs - FIXED: Properly positioned after FTB -->
+                <div class="border-b border-base-300">
+                    <button 
+                        class="w-full p-4 text-left font-medium text-base-content hover:bg-base-300 flex items-center justify-between transition-colors"
+                        @click="openSections.outputs = !openSections.outputs">
+                        <span>Outputs</span>
+                        <i class="bi bi-chevron-down transition-transform duration-200" 
+                           :class="openSections.outputs ? 'rotate-180' : ''"></i>
+                    </button>
+                    <div x-show="openSections.outputs"
+                         x-collapse.duration.200ms
+                         class="px-4 acc-body">
+                        <div class="space-y-3 text-sm">
+                            <!-- One row per aux output, count from topology
+                                 (a = 1-based output number; aux_channel is
+                                 0-based on the wire, state keys are aux1..auxN) -->
+                            <template x-for="a in ($store.atem.state.topology?.auxOutputs ?? 0)" :key="a">
+                                <div>
+                                    <label class="block text-xs font-medium mb-1" x-text="'Output ' + a"></label>
+                                    <select class="select select-bordered select-sm w-full"
+                                            :value="$store.atem.state.auxOutputs?.['aux' + a] ?? 0"
+                                            @change="$store.atem.send('set_aux_output', {aux_channel: a - 1, input_source: parseInt($event.target.value)})">
+                                        <template x-for="s in $store.atem.sourcesFor('aux')" :key="s.source">
+                                            <option :value="s.source" x-text="s.long"></option>
+                                        </template>
+                                    </select>
+                                </div>
+                            </template>
+                            <div class="flex justify-center mb-3">
+                                <button
+                                    class="btn btn-primary btn-sm"
+                                    @click="$store.atem.setAllAuxToProgram()">
+                                    <i class="bi bi-broadcast"></i>
+                                    Set All to Program
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- HyperDecks — bind each deck slot to a network address and a
+                     switcher input, mirroring Software Control's HyperDecks
+                     palette. IP edits commit on blur (per-row local field synced
+                     from state only while unfocused, so a live state push doesn't
+                     clobber an in-progress edit). -->
+                <div class="border-b border-base-300">
+                    <button
+                        class="w-full p-4 text-left font-medium text-base-content hover:bg-base-300 flex items-center justify-between transition-colors"
+                        @click="openSections.hyperdecks = !openSections.hyperdecks">
+                        <span>HyperDecks</span>
+                        <i class="bi bi-chevron-down transition-transform duration-200"
+                           :class="openSections.hyperdecks ? 'rotate-180' : ''"></i>
+                    </button>
+                    <div x-show="openSections.hyperdecks"
+                         x-collapse.duration.200ms
+                         class="px-4 acc-body">
+                        <p class="text-xs opacity-60 mb-2">Bindings are managed in the Equipment list and pushed here automatically. You can still edit a slot directly below.</p>
+                        <div x-show="$store.atem.hyperdeckUnknownDecks.length"
+                             class="alert alert-warning text-xs mb-3 py-2">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            <div>
+                                <span>This ATEM has deck(s) not in the equipment list:</span>
+                                <template x-for="d in $store.atem.hyperdeckUnknownDecks" :key="d.ip">
+                                    <span class="font-mono ml-1" x-text="d.ip + ' (in ' + d.input + ')'"></span>
+                                </template>
+                                <span class="opacity-70">— add them in the Equipment list.</span>
+                            </div>
+                        </div>
+                        <div class="space-y-2 text-sm">
+                            <template x-for="hd in ($store.atem.state.hyperdecks || [])" :key="hd.slot">
+                                <!-- One slot, stacked so the full IP is readable in the narrow
+                                     panel: header [Deck N · <equipment name> | clear-X], then the
+                                     full-width IP, then [Input | switcher-input dropdown]. The
+                                     name comes from the inventory (window.ATEM_HYPERDECK_NAMES,
+                                     keyed by IP) — the ATEM itself only knows the IP. -->
+                                <div class="space-y-1.5 pb-2 border-b border-base-300/40 last:border-0 last:pb-0"
+                                     x-data="{ ip: '', focused: false, name: '' }"
+                                     x-effect="name = (window.ATEM_HYPERDECK_NAMES || {})[hd.network_address] || ''; if (!focused) ip = (hd.network_address && hd.network_address !== '0.0.0.0') ? hd.network_address : ''">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <span class="text-xs font-semibold truncate min-w-0">Deck <span x-text="hd.slot + 1"></span><span
+                                              class="opacity-60 font-normal" x-show="name" x-text="' · ' + name"></span></span>
+                                        <!-- Clear this slot (unbind on the ATEM — IP 0.0.0.0).
+                                             Broadcast-safe; only enabled when the slot is bound. -->
+                                        <button type="button"
+                                                class="btn btn-xs btn-ghost btn-square text-error shrink-0"
+                                                :class="(hd.network_address && hd.network_address !== '0.0.0.0') ? '' : 'btn-disabled opacity-40'"
+                                                :disabled="!(hd.network_address && hd.network_address !== '0.0.0.0')"
+                                                @click="ip = ''; $store.atem.send('set_hyperdeck', {slot: hd.slot, network_address: '0.0.0.0', switcher_input: 0})"
+                                                title="Clear this HyperDeck slot (unbind)">
+                                            <i class="bi bi-x-lg"></i>
+                                        </button>
+                                    </div>
+                                    <input type="text" inputmode="decimal" placeholder="IP address"
+                                           class="input input-bordered input-sm w-full font-mono"
+                                           x-model="ip"
+                                           @focus="focused = true"
+                                           @blur="focused = false; if ((ip || '0.0.0.0') !== (hd.network_address || '0.0.0.0')) $store.atem.send('set_hyperdeck', {slot: hd.slot, network_address: (ip.trim() || '0.0.0.0')})"
+                                           @keydown.enter="$event.target.blur()">
+                                    <div class="flex items-center gap-2">
+                                        <span class="w-14 shrink-0 text-xs opacity-50">Input</span>
+                                        <select class="select select-bordered select-sm flex-1 min-w-0"
+                                                :value="hd.input"
+                                                @change="$store.atem.send('set_hyperdeck', {slot: hd.slot, switcher_input: parseInt($event.target.value)})">
+                                            <option value="0">— None —</option>
+                                            <template x-for="s in (($store.atem.state.sources || []).filter(x => x.port_type === 0))" :key="s.source">
+                                                <option :value="s.source" x-text="'Input ' + s.source"></option>
+                                            </template>
+                                        </select>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>

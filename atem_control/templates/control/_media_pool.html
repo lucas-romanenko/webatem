@@ -1,0 +1,360 @@
+    <!-- Media Pool Panel Overlay -->
+    <div class="fixed inset-0 z-[200] pointer-events-none" x-show="mediaPoolOpen" x-cloak
+         @keydown.escape.window="mediaPoolOpen = false">
+        <!-- Backdrop -->
+        <div class="atem-overlay-backdrop absolute inset-0 pointer-events-auto"
+             @click="mediaPoolOpen = false"
+             x-transition:enter="transition-opacity ease-out duration-200"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100"
+             x-transition:leave="transition-opacity ease-in duration-150"
+             x-transition:leave-start="opacity-100"
+             x-transition:leave-end="opacity-0"></div>
+
+        <!-- Panel -->
+        <div class="absolute inset-0 md:inset-8 lg:inset-12 bg-base-200 border border-[var(--line)] shadow-2xl pointer-events-auto flex flex-col rounded-none md:rounded-xl overflow-hidden"
+            @click.stop
+            x-show="mediaPoolOpen"
+            x-transition:enter="transition ease-out duration-200"
+            x-transition:enter-start="transform scale-95 opacity-0"
+            x-transition:enter-end="transform scale-100 opacity-100"
+            x-transition:leave="transition ease-in duration-150"
+            x-transition:leave-start="transform scale-100 opacity-100"
+            x-transition:leave-end="transform scale-95 opacity-0">
+
+            <!-- Header -->
+            <div class="flex items-center justify-between p-4 border-b border-base-300 flex-shrink-0">
+                <h2 class="text-lg font-semibold flex items-center gap-2">
+                    <i class="bi bi-collection-play"></i>
+                    Media Pool
+                    <span class="text-sm text-base-content/50 font-normal ml-2"
+                          x-text="$store.atem.mediaPool.stats.loaded + ' / ' + $store.atem.mediaPool.stats.used + ' thumbnails loaded'"></span>
+                </h2>
+                <div class="flex items-center gap-2">
+                    <button class="btn btn-ghost btn-sm" @click="mediaPoolOpen = false" title="Close (Esc)">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Body -->
+            <div class="flex-1 min-h-0 overflow-y-auto p-4 space-y-6">
+
+                <!-- Media lock held by another client (automation software /
+                     stuck session): the ATEM refuses every preview download
+                     until it releases. Honest banner instead of anonymous
+                     forever-spinners; downloads keep retrying underneath and
+                     the banner clears itself the moment one succeeds. -->
+                <div x-show="$store.atem.mediaPool.locked" x-cloak
+                     class="alert alert-warning py-2">
+                    <i class="bi bi-lock-fill"></i>
+                    <span class="text-sm">
+                        Media pool is locked by another device (automation /
+                        another control app), so image previews can't be
+                        fetched right now. Names and slots are live; previews
+                        will load automatically as soon as the lock releases.
+                    </span>
+                </div>
+
+                <!-- Media Players -->
+                <div>
+                    <h3 class="font-semibold text-sm uppercase tracking-wider text-base-content/50 mb-2">Media Players</h3>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <template x-for="player in $store.atem.mediaPool.players" :key="player.index">
+                            <div class="card bg-base-300 overflow-hidden transition-shadow relative"
+                                 :class="[
+                                    dragOverPlayerIdx === player.index
+                                        ? 'ring-2 ring-success shadow-[0_0_14px_oklch(var(--su)/0.7)]'
+                                        : ($store.atem.isMediaPlayerOnAir(player.index)
+                                            ? 'ring-pgm-glow'
+                                            : (dragSlotIdx !== null ? 'ring-2 ring-success/40' : ''))
+                                 ]"
+                                 @dragover.prevent="if (dragSlotIdx !== null) { dragOverPlayerIdx = player.index; $event.dataTransfer.dropEffect = 'link'; _armDragOverWatchdog(); }"
+                                 @dragleave.prevent="if (dragOverPlayerIdx === player.index) dragOverPlayerIdx = null"
+                                 @drop.prevent="onPlayerDrop($event, player)">
+                                <div class="aspect-video bg-base-100 relative flex items-center justify-center">
+                                    <template x-if="player.type === 'still' && $store.atem.mediaPool.slots[player.stillIndex] && $store.atem.mediaPool.slots[player.stillIndex].thumb">
+                                        <img :src="$store.atem.mediaPool.slots[player.stillIndex].thumb"
+                                             class="w-full h-full object-contain"
+                                             :alt="'MP' + (player.index + 1)">
+                                    </template>
+                                    <template x-if="!(player.type === 'still' && $store.atem.mediaPool.slots[player.stillIndex] && $store.atem.mediaPool.slots[player.stillIndex].thumb)">
+                                        <div class="text-center text-base-content/40 text-xs p-2">
+                                            <i class="bi bi-image text-2xl block mb-1"></i>
+                                            <span x-text="player.type === 'clip' ? 'Clip ' + (player.clipIndex + 1) : (player.type === 'still' ? 'Slot ' + (player.stillIndex + 1) : '—')"></span>
+                                        </div>
+                                    </template>
+
+                                    <!-- ON AIR tally -->
+                                    <div x-show="$store.atem.isMediaPlayerOnAir(player.index)"
+                                         class="absolute top-1 right-1 badge badge-pgm gap-1 shadow">
+                                        <span class="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
+                                        <span class="text-[10px] font-bold tracking-wider">ON AIR</span>
+                                    </div>
+
+                                    <!-- Drop hint when dragging a slot -->
+                                    <div x-show="dragOverPlayerIdx === player.index"
+                                         class="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-success/25 backdrop-blur-sm pointer-events-none">
+                                        <i class="bi bi-arrow-down-circle text-success text-2xl"></i>
+                                        <span class="text-[10px] font-bold uppercase tracking-wider text-success"
+                                              x-text="'Load slot ' + (dragSlotIdx !== null ? dragSlotIdx + 1 : '') + ' → MP' + (player.index + 1)"></span>
+                                    </div>
+                                </div>
+                                <div class="px-2 py-1.5 flex items-center justify-between text-xs">
+                                    <span class="font-bold">MP<span x-text="player.index + 1"></span></span>
+                                    <span class="text-base-content/60"
+                                        x-text="player.type === 'clip' ? 'Clip ' + (player.clipIndex + 1) : 'Slot ' + (player.stillIndex + 1)"></span>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Slot grid -->
+                <div>
+                    <h3 class="font-semibold text-sm uppercase tracking-wider text-base-content/50 mb-2">Slots (1–20)</h3>
+                    <div class="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
+                        <template x-for="slot in $store.atem.mediaPool.slots" :key="slot.index">
+                            <div class="card bg-base-300 overflow-hidden transition-shadow relative group cursor-grab active:cursor-grabbing"
+                                 :class="[
+                                    dragOverSlotIdx === slot.index
+                                        ? 'ring-2 ring-info shadow-[0_0_12px_oklch(var(--in)/0.6)]'
+                                        : ($store.atem.isSlotOnAir(slot.index)
+                                            ? 'ring-pgm-glow'
+                                            : ($store.atem.mediaPool.playerSlotSet.has(slot.index) ? 'ring-2 ring-primary' : '')),
+                                    dragSlotIdx === slot.index ? 'opacity-60 scale-95' : ''
+                                 ]"
+                                 draggable="true"
+                                 @dragstart="onSlotDragStart($event, slot)"
+                                 @dragend="onSlotDragEnd()"
+                                 @dragover.prevent="if (isFileDrag($event)) { dragOverSlotIdx = slot.index; _armDragOverWatchdog(); }"
+                                 @dragleave.prevent="if (dragOverSlotIdx === slot.index) dragOverSlotIdx = null"
+                                 @drop.prevent="onSlotDrop($event, slot)">
+                                <div class="aspect-video bg-base-100 relative flex items-center justify-center">
+                                    <template x-if="slot.isUsed && slot.thumb">
+                                        <img :src="slot.thumb" class="w-full h-full object-contain pointer-events-none" :alt="'Slot ' + (slot.index + 1)">
+                                    </template>
+                                    <template x-if="slot.isUsed && !slot.thumb">
+                                        <span class="loading loading-spinner loading-sm text-base-content/40"></span>
+                                    </template>
+                                    <template x-if="!slot.isUsed">
+                                        <span class="text-base-content/20 text-xs pointer-events-none">empty</span>
+                                    </template>
+
+                                    <!-- MP badges on slots that are loaded into one or more players -->
+                                    <div class="absolute top-1 left-1 flex flex-wrap gap-0.5 max-w-[calc(100%-2rem)] pointer-events-none">
+                                        <template x-for="mp in $store.atem.mediaPool.slotPlayers(slot.index)" :key="mp">
+                                            <span class="badge badge-primary badge-sm font-mono"
+                                                  x-text="'MP' + (mp + 1)"></span>
+                                        </template>
+                                    </div>
+
+                                    <!-- Delete button (hover, only on used slots) -->
+                                    <button x-show="slot.isUsed && !$store.atem.isSlotUploading(slot.index)"
+                                        @click.stop="deleteSlotIdx = slot.index"
+                                        class="absolute top-1 right-1 btn btn-xs btn-square btn-error opacity-0 group-hover:opacity-100 transition-opacity shadow"
+                                        title="Delete slot">
+                                        <i class="bi bi-trash text-[10px]"></i>
+                                    </button>
+
+                                    <!-- Drop hint on empty slots -->
+                                    <div x-show="dragOverSlotIdx === slot.index && !$store.atem.isSlotUploading(slot.index)"
+                                         class="absolute inset-0 flex items-center justify-center bg-info/20 backdrop-blur-sm pointer-events-none">
+                                        <i class="bi bi-cloud-upload text-info text-2xl"></i>
+                                    </div>
+
+                                    <!-- Uploading progress ring. JS owns the fill via
+                                         direct DOM writes on [data-upload-ring] (see
+                                         _startUploadRing in atem_control.js) — do NOT bind
+                                         stroke-dashoffset with Alpine or the two fight. The
+                                         ring eases toward ~90% on a time estimate and snaps
+                                         to 100% on the real completion event; the overlay
+                                         then fades out, revealing the thumbnail. -->
+                                    <div x-show="$store.atem.isSlotUploading(slot.index)"
+                                         x-transition.opacity.duration.200ms
+                                         class="absolute inset-0 flex items-center justify-center bg-base-100/80 backdrop-blur-sm pointer-events-none">
+                                        <svg class="w-9 h-9 -rotate-90" viewBox="0 0 40 40">
+                                            <circle cx="20" cy="20" r="16" fill="none" stroke="currentColor"
+                                                    stroke-width="3.5" class="text-base-content/15"></circle>
+                                            <circle cx="20" cy="20" r="16" fill="none" stroke="currentColor"
+                                                    stroke-width="3.5" stroke-linecap="round" class="text-primary"
+                                                    style="transition:stroke-dashoffset 160ms linear"
+                                                    stroke-dasharray="100.53" stroke-dashoffset="100.53"
+                                                    :data-upload-ring="slot.index"></circle>
+                                        </svg>
+                                    </div>
+                                </div>
+                                <div class="px-2 py-1 text-[11px] flex items-center justify-between">
+                                    <span class="font-bold" x-text="slot.index + 1"></span>
+                                    <span class="truncate text-base-content/60 ml-1" :title="slot.fileName" x-text="slot.fileName || ''"></span>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Slot Confirmation Dialog -->
+    <div x-cloak x-show="deleteSlotIdx !== null"
+         class="fixed inset-0 z-[210] flex items-center justify-center p-4"
+         @keydown.escape.window="deleteSlotIdx = null"
+         @keydown.enter.window.prevent="if (deleteSlotIdx !== null) { const _idx = deleteSlotIdx; deleteSlotIdx = null; ATEMControl.cmd('media_pool_delete', { slot: _idx }); $store.atem.optimisticClearSlot(_idx); }">
+        <!-- Backdrop -->
+        <div class="atem-overlay-backdrop absolute inset-0"
+             @click="deleteSlotIdx = null"
+             x-transition:enter="transition-opacity ease-out duration-200"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100"
+             x-transition:leave="transition-opacity ease-in duration-150"
+             x-transition:leave-start="opacity-100"
+             x-transition:leave-end="opacity-0"></div>
+
+        <!-- Dialog -->
+        <div class="card bg-base-200 w-full max-w-md relative"
+             @click.stop
+             x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="opacity-0 scale-95"
+             x-transition:enter-end="opacity-100 scale-100"
+             x-transition:leave="transition ease-in duration-150"
+             x-transition:leave-start="opacity-100 scale-100"
+             x-transition:leave-end="opacity-0 scale-95">
+            <div class="card-body p-5">
+                <h3 class="text-lg font-bold flex items-center gap-2">
+                    <i class="bi bi-exclamation-triangle text-warning"></i>
+                    Delete slot <span x-text="deleteSlotIdx !== null ? deleteSlotIdx + 1 : ''"></span>?
+                </h3>
+
+                <!-- Slot preview -->
+                <div class="flex items-center gap-3 mt-2">
+                    <div class="w-32 aspect-video bg-base-300 rounded overflow-hidden flex items-center justify-center flex-shrink-0">
+                        <template x-if="$store.atem.getSlot(deleteSlotIdx) && $store.atem.getSlot(deleteSlotIdx).thumb">
+                            <img :src="$store.atem.getSlot(deleteSlotIdx).thumb" class="w-full h-full object-contain">
+                        </template>
+                        <template x-if="!($store.atem.getSlot(deleteSlotIdx) && $store.atem.getSlot(deleteSlotIdx).thumb)">
+                            <i class="bi bi-image text-base-content/30 text-2xl"></i>
+                        </template>
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <div class="text-sm text-base-content/60">Filename</div>
+                        <div class="font-mono text-sm truncate"
+                             :title="($store.atem.getSlot(deleteSlotIdx) || {}).fileName || ''"
+                             x-text="($store.atem.getSlot(deleteSlotIdx) || {}).fileName || '(no name)'"></div>
+                    </div>
+                </div>
+
+                <!-- On-air warning -->
+                <div x-show="deleteSlotIdx !== null && $store.atem.isSlotOnAir(deleteSlotIdx)"
+                     class="alert alert-error mt-4 py-3 text-sm">
+                    <i class="bi bi-broadcast"></i>
+                    <div>
+                        <div class="font-bold">This slot is currently ON AIR.</div>
+                        <div class="text-xs opacity-90">Deleting will pull the image off the program output.</div>
+                    </div>
+                </div>
+
+                <p class="text-sm text-base-content/70 mt-3">
+                    This clears the slot on the ATEM. The action cannot be undone from here.
+                </p>
+
+                <!-- Actions -->
+                <div class="card-actions justify-end mt-4 gap-2">
+                    <button class="btn btn-ghost" @click="deleteSlotIdx = null">Cancel</button>
+                    <button class="btn btn-error gap-2"
+                            @click="const _idx = deleteSlotIdx; deleteSlotIdx = null; ATEMControl.cmd('media_pool_delete', { slot: _idx }); $store.atem.optimisticClearSlot(_idx)">
+                        <i class="bi bi-trash"></i>
+                        <span x-text="(deleteSlotIdx !== null && $store.atem.isSlotOnAir(deleteSlotIdx)) ? 'Delete anyway' : 'Delete'"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Replace Slot Confirmation Dialog -->
+    <div x-cloak x-show="replaceSlotIdx !== null"
+         class="fixed inset-0 z-[210] flex items-center justify-center p-4"
+         @keydown.escape.window="cancelReplace()"
+         @keydown.enter.window.prevent="if (replaceSlotIdx !== null) confirmReplace()">
+        <div class="atem-overlay-backdrop absolute inset-0"
+             @click="cancelReplace()"
+             x-transition:enter="transition-opacity ease-out duration-200"
+             x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+             x-transition:leave="transition-opacity ease-in duration-150"
+             x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"></div>
+
+        <div class="card bg-base-200 w-full max-w-md relative"
+             @click.stop
+             x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100"
+             x-transition:leave="transition ease-in duration-150"
+             x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95">
+            <div class="card-body p-5">
+                <h3 class="text-lg font-bold flex items-center gap-2">
+                    <i class="bi bi-arrow-repeat text-warning"></i>
+                    Replace slot <span x-text="replaceSlotIdx !== null ? replaceSlotIdx + 1 : ''"></span>?
+                </h3>
+
+                <!-- Current slot preview + incoming file -->
+                <div class="flex items-center gap-3 mt-2">
+                    <div class="flex-1 text-center">
+                        <div class="text-[11px] uppercase tracking-wider text-base-content/50 mb-1">Current</div>
+                        <div class="w-full aspect-video bg-base-300 rounded overflow-hidden flex items-center justify-center">
+                            <template x-if="$store.atem.getSlot(replaceSlotIdx) && $store.atem.getSlot(replaceSlotIdx).thumb">
+                                <img :src="$store.atem.getSlot(replaceSlotIdx).thumb" class="w-full h-full object-contain">
+                            </template>
+                            <template x-if="!($store.atem.getSlot(replaceSlotIdx) && $store.atem.getSlot(replaceSlotIdx).thumb)">
+                                <i class="bi bi-image text-base-content/30 text-2xl"></i>
+                            </template>
+                        </div>
+                        <div class="mt-1 text-xs font-mono text-base-content/60 truncate"
+                             :title="($store.atem.getSlot(replaceSlotIdx) || {}).fileName || ''"
+                             x-text="($store.atem.getSlot(replaceSlotIdx) || {}).fileName || '—'"></div>
+                    </div>
+                    <i class="bi bi-arrow-right text-base-content/40 text-lg"></i>
+                    <div class="flex-1 text-center">
+                        <div class="text-[11px] uppercase tracking-wider text-base-content/50 mb-1">New</div>
+                        <div class="w-full aspect-video bg-base-300 rounded overflow-hidden flex items-center justify-center">
+                            <i class="bi bi-file-earmark-image text-base-content/30 text-2xl"></i>
+                        </div>
+                        <div class="mt-1 text-xs font-mono text-base-content/60 truncate"
+                             :title="pendingFile ? pendingFile.name : ''"
+                             x-text="pendingFile ? pendingFile.name : ''"></div>
+                    </div>
+                </div>
+
+                <!-- Player + on-air warnings -->
+                <div x-show="replaceSlotIdx !== null && $store.atem.isSlotOnAir(replaceSlotIdx)"
+                     class="alert alert-error mt-4 py-3 text-sm">
+                    <i class="bi bi-broadcast"></i>
+                    <div>
+                        <div class="font-bold">This slot is currently ON AIR.</div>
+                        <div class="text-xs opacity-90">Replacing will swap the image on the program output.</div>
+                    </div>
+                </div>
+                <div x-show="replaceSlotIdx !== null
+                             && !$store.atem.isSlotOnAir(replaceSlotIdx)
+                             && $store.atem.mediaPool.playerSlotSet.has(replaceSlotIdx)"
+                     class="alert alert-warning mt-4 py-3 text-sm">
+                    <i class="bi bi-collection-play"></i>
+                    <div>
+                        <div class="font-bold">This slot is loaded in a media player.</div>
+                        <div class="text-xs opacity-90">The media player will pick up the new image.</div>
+                    </div>
+                </div>
+
+                <p class="text-sm text-base-content/70 mt-3">
+                    The new image will be uploaded to the ATEM and replace the current contents of this slot.
+                </p>
+
+                <div class="card-actions justify-end mt-4 gap-2">
+                    <button class="btn btn-ghost" @click="cancelReplace()">Cancel</button>
+                    <button class="btn btn-warning gap-2" @click="confirmReplace()">
+                        <i class="bi bi-cloud-upload"></i>
+                        <span x-text="(replaceSlotIdx !== null && $store.atem.isSlotOnAir(replaceSlotIdx)) ? 'Replace anyway' : 'Replace'"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>

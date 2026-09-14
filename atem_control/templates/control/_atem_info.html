@@ -1,0 +1,93 @@
+{% comment %}
+Switcher Name settings section — set the ATEM's OWN stored name (the name set in
+ATEM Setup), via the ATEM's REST config API (control/device_api.py + the
+atem_device_info / atem_set_device_name views). A host that knows this address by
+another name (its own inventory; here, what mDNS advertises) offers it as
+"use <name>" — never in a host's vocabulary, this package has no inventory.
+Minimal by design (matches the other settings sections); self-contained inline
+Alpine (no bundle rebuild); loads on first open. openSections.switcherName is the
+outer scope.
+{% endcomment %}
+<div class="border-b border-base-300" x-data="{
+        loaded: false, loading: false, supported: false, err: '',
+        deviceName: '', equipmentName: '', nameInput: '', saving: false, saved: false,
+        async load() {
+            if (this.loaded || this.loading) return;
+            const ip = this.$store.atem.currentIP;
+            if (!ip || ip.indexOf('-') !== -1) { this.err = 'Connect to an ATEM first.'; return; }
+            this.loading = true; this.err = '';
+            try {
+                const r = await fetch('/atem/device-info/?ip=' + encodeURIComponent(ip));
+                const d = await r.json();
+                this.supported = !!d.supported;
+                this.deviceName = d.deviceName || '';
+                this.equipmentName = d.equipmentName || '';
+                this.nameInput = d.deviceName || '';
+                this.loaded = true;
+            } catch (e) { this.err = 'Could not read the switcher.'; }
+            finally { this.loading = false; }
+        },
+        _csrf() { const m = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/); return m ? m[1] : ''; },
+        useKnownName() { if (this.equipmentName) { this.nameInput = this.equipmentName; this.saved = false; } },
+        async save() {
+            const name = (this.nameInput || '').trim();
+            if (!name || this.saving) return;
+            this.saving = true; this.err = ''; this.saved = false;
+            try {
+                const r = await fetch('/atem/device-name/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': this._csrf() },
+                    body: JSON.stringify({ ip: this.$store.atem.currentIP, name: name })
+                });
+                const d = await r.json();
+                if (d.success) { this.deviceName = d.deviceName; this.nameInput = d.deviceName; this.saved = true; }
+                else { this.err = d.error ? ('Failed: ' + d.error) : 'Failed to set the name.'; }
+            } catch (e) { this.err = 'Failed to set the name.'; }
+            finally { this.saving = false; }
+        }
+    }">
+    <button
+        class="w-full p-4 text-left font-medium text-base-content hover:bg-base-300 flex items-center justify-between transition-colors"
+        @click="openSections.switcherName = !openSections.switcherName; if (openSections.switcherName) load()">
+        <span>Switcher Name</span>
+        <i class="bi bi-chevron-down transition-transform duration-200"
+           :class="openSections.switcherName ? 'rotate-180' : ''"></i>
+    </button>
+    <div x-show="openSections.switcherName"
+         x-collapse.duration.200ms
+         class="px-4 acc-body">
+
+        <div x-show="loading" class="text-sm text-base-content/50 py-1">Reading switcher…</div>
+        <div x-show="err" x-text="err" class="text-sm text-error py-1"></div>
+
+        <!-- Editable when the switcher has a web-config API -->
+        <template x-if="loaded && !err && supported">
+            <div class="space-y-2 text-sm">
+                <label class="block text-xs text-base-content/60">Name stored on the switcher (ATEM Setup software)</label>
+                <input type="text" maxlength="32"
+                       class="input input-bordered input-sm w-full"
+                       x-model="nameInput" @input="saved = false" @keydown.enter="save()">
+                <div class="flex items-center gap-3">
+                    <button class="btn btn-primary btn-sm"
+                            :disabled="saving || !nameInput.trim() || nameInput.trim() === deviceName"
+                            @click="save()">
+                        <span x-show="!saving">Set</span>
+                        <span x-show="saving">Setting…</span>
+                    </button>
+                    <button type="button" class="text-xs link-brand"
+                            x-show="equipmentName && equipmentName !== nameInput"
+                            @click="useKnownName()">use <span x-text="'“' + equipmentName + '”'"></span></button>
+                    <span x-show="saved" class="text-success text-xs">✓ Saved</span>
+                </div>
+            </div>
+        </template>
+
+        <!-- Older ATEM without a web-config API -->
+        <template x-if="loaded && !err && !supported">
+            <div class="text-xs text-base-content/60 py-1">
+                Not editable on this switcher model. Current name:
+                <span class="text-base-content" x-text="deviceName || '—'"></span>.
+            </div>
+        </template>
+    </div>
+</div>

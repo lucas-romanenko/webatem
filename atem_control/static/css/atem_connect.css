@@ -1,0 +1,22 @@
+/* static/css/atem_connect.css */
+
+/* Connect button: center spinner + text (override DaisyUI .btn if needed) */
+button#connectBtn {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 0.5rem;
+    text-align: center;
+}
+
+/* Single wrapper for loading state so the whole block is centered in the button */
+.atem-connect-btn-inner {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+/* An IP address is machine data: the field and its placeholder are the mono
+   face, upright (the italic light placeholder read as a different app —
+   Lucas, 2026-09-14). See .brand-data in brand.css. */

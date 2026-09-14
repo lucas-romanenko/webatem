@@ -1,0 +1,872 @@
+/* ATEM Control CSS - Complete Version with Rate Countdown */
+
+/* Section titles — small uppercase tracked labels (design 4a: PROGRAM /
+   PREVIEW / KEYS / …). Colour comes from each title's existing semantic
+   class (text-error Program, text-success Preview, etc.). */
+.atem-main-content .card-title {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+}
+
+/* =================================================================
+   Program / Preview bus — an ASC row on a desktop, a wrapped pad on
+   a phone.
+
+   busGeom() (js/store.js) builds two rows of fixed --atem-btn tracks
+   with a spacer track between the camera and internals sections: the
+   ATEM-panel shape, and the only one that keeps a 40-input
+   Constellation legible. It needs a control surface's width, which a
+   phone has not got — on an iPhone 13 that row measured 314px inside
+   a 244px card and scrolled sideways, which is not an operator
+   surface, it is a filing cabinet.
+
+   So below sm each row becomes an auto-fill grid of the same square
+   and wraps into as many lines as it needs (5 columns on a 390px
+   phone). The padding cells that keep the two rows' columns aligned
+   are dropped with the columns. The desktop overflow-x is a safety
+   valve for a narrow window on a big switcher, never a layout: at any
+   normal width the row fits and nothing scrolls.
+
+   The 4px padding pulled back by the negative margin is load-bearing
+   (2026-09-11): a scroller's overflow is measured from its padding edge,
+   and the buttons' hover:scale-105 pushes a bottom-row or right-edge
+   button 1.6px past its cell (measured at --atem-btn 4rem). Without the
+   room, that 2px of overflow made the strip scrollable for the 200ms
+   transition and its NATIVE bars flashed on every hover — this strip is
+   a scroller by rule, not by .overflow-x-auto, so the site-wide bar
+   hiding never covered it. Pinned by e2e/specs/11_bus_hover_no_overflow.
+================================================================= */
+.atem-bus { overflow-x: auto; padding: 4px; margin: -4px; }
+.atem-bus-row { grid-template-columns: var(--bus-tpl); }
+
+@media (max-width: 639.98px) {
+    .atem-bus { overflow-x: visible; }
+    .atem-bus-row { grid-template-columns: repeat(auto-fill, var(--atem-btn)); }
+    .atem-bus-row > .atem-bus-pad { display: none; }
+}
+
+/* Between a phone and a desktop the ASC row still fits the fleet's 1 M/E
+   Constellations (622px of card on an iPad Mini, 622px of row), so it stays.
+   A BANKED switcher — 20+ cameras, i.e. a 4 M/E Constellation — does not
+   (654px of row in that same card, measured), and .atem-bus-big wraps it
+   there too rather than making a tablet operator nudge the bus sideways. */
+@media (max-width: 1023.98px) {
+    .atem-bus-big { overflow-x: visible; }
+    .atem-bus-big .atem-bus-row { grid-template-columns: repeat(auto-fill, var(--atem-btn)); }
+    .atem-bus-big .atem-bus-row > .atem-bus-pad { display: none; }
+}
+
+/* =================================================================
+   T-Bar System - Only thing that really needs custom CSS
+================================================================= */
+.tbar-container-vertical {
+    position: relative;
+    height: 400px;
+    width: 3rem;
+    margin: 0 auto;
+}
+
+/* Design 4a fader: the track is a slot on the --input well with an
+   --input-line hairline; the handle is machined dark metal (fixed colours —
+   it's device chrome, like a physical fader, not a palette surface). */
+.tbar-track-vertical {
+    position: relative;
+    width: 2rem;
+    height: 100%;
+    background: var(--input);
+    border-radius: 3px;
+    border: 1px solid var(--input-line);
+    cursor: pointer;
+    user-select: none;
+    margin: 0 auto;
+}
+
+.tbar-handle-vertical {
+    position: absolute;
+    top: 0%;
+    left: -0.3125rem;
+    width: 2.625rem;
+    height: 1.375rem;
+    background: linear-gradient(180deg, #3A3E43, #1E2023);
+    border: 1px solid var(--chrome);
+    border-radius: 3px;
+    cursor: grab;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.55);
+    transition: none;
+    z-index: 10;
+    transform: translateY(-50%);
+}
+
+.tbar-handle-vertical:hover {
+    background: linear-gradient(180deg, #464B51, #26282B);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.6);
+}
+
+.tbar-handle-vertical.tbar-dragging {
+    cursor: grabbing;
+    background: linear-gradient(180deg, #464B51, #26282B);
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.65);
+    transform: translateY(-50%) scale(1.1);
+}
+
+.tbar-handle-inner-vertical {
+    width: 100%;
+    height: 100%;
+    position: relative;
+}
+
+.tbar-handle-inner-vertical::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0.125rem;
+    height: 0.625rem;
+    background: rgba(246, 246, 246, 0.22);
+    transform: translate(-50%, -50%);
+    border-radius: 0.0625rem;
+    box-shadow: 0.25rem 0 0 rgba(246, 246, 246, 0.22), -0.25rem 0 0 rgba(246, 246, 246, 0.22);
+}
+
+.tbar-progress-vertical {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    background: linear-gradient(180deg, oklch(var(--p) / 0.5), oklch(var(--p) / 0.8));
+    border-radius: 3px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+}
+
+/* Mobile T-Bar adjustments */
+@media (max-width: 640px) {
+    .tbar-container-vertical {
+        height: 250px;
+        width: 2.5rem;
+    }
+    
+    .tbar-handle-vertical {
+        width: 2.25rem;
+        height: 1.25rem;
+    }
+}
+
+/* =================================================================
+   Rate Countdown System - RESTORED
+================================================================= */
+.rate-countdown-active {
+    border-color: oklch(var(--in)) !important;
+    background-color: oklch(var(--in) / 0.15) !important;
+    color: oklch(var(--in)) !important;
+    font-weight: 600 !important;
+}
+
+.rate-countdown-ending {
+    animation: countdown-pulse 0.5s ease-in-out infinite alternate;
+    border-color: oklch(var(--wa)) !important;
+    background-color: oklch(var(--wa) / 0.15) !important;
+    color: oklch(var(--wa)) !important;
+    box-shadow: 0 0 0 2px oklch(var(--wa) / 0.3) !important;
+}
+
+@keyframes countdown-pulse {
+    0% {
+        transform: scale(1);
+        box-shadow: 0 0 0 2px oklch(var(--wa) / 0.3);
+    }
+    100% {
+        transform: scale(1.02);
+        box-shadow: 0 0 0 4px oklch(var(--wa) / 0.6);
+    }
+}
+
+/* =================================================================
+   T-Bar Column Responsive Visibility
+================================================================= */
+.tbar-column {
+    display: none;
+}
+
+@media (min-width: 1024px) {
+    .tbar-column {
+        display: block;
+        width: 120px;
+    }
+}
+
+@media (min-width: 1280px) {
+    .tbar-column {
+        width: 140px;
+    }
+}
+
+@media (min-width: 1536px) {
+    .tbar-column {
+        width: 160px;
+    }
+}
+
+/* =================================================================
+   Button Styling and Feedback
+================================================================= */
+
+/* Lit bus / key buttons — backlit hardware look. A lit panel button reads
+   as an illuminated cap: a top edge highlight, a lit-from-within wash, a
+   hot close bloom and a wide soft bloom in the tally colour. Targets the
+   active-state utility combos the JS emits (bg-red-600 program/ON AIR/FTB,
+   bg-green-600 preview); these compound selectors outrank the shadow-*
+   utilities, so the Tailwind shadow is replaced, not stacked. */
+.source-btn.bg-red-600,
+.control-btn.bg-red-600 {
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.25),
+        inset 0 0 12px rgba(255, 255, 255, 0.15),
+        0 0 10px 2px rgba(239, 68, 68, 0.55),
+        0 0 26px 6px rgba(239, 68, 68, 0.30);
+}
+.source-btn.bg-green-600 {
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.25),
+        inset 0 0 12px rgba(255, 255, 255, 0.15),
+        0 0 10px 2px rgba(34, 197, 94, 0.55),
+        0 0 26px 6px rgba(34, 197, 94, 0.30);
+}
+/* Selected next-transition buttons (BKGD / KEY1-4) — same treatment in the
+   warning colour, via the role so the bloom follows the theme (#FFD34D on
+   dark, #9A6700 on light). The big AUTO/momentary buttons lack .control-btn
+   and stay flat on purpose — only lit states glow. */
+.control-btn.btn-warning {
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.25),
+        inset 0 0 12px rgba(255, 255, 255, 0.15),
+        0 0 10px 2px oklch(var(--wa) / 0.55),
+        0 0 26px 6px oklch(var(--wa) / 0.30);
+}
+/* On-air ring + bloom for media pool tiles (player tiles, slot tiles) —
+   tally red, replacing the old ring-error + arbitrary --er shadow combo.
+   One class does ring AND glow so it can't fight Tailwind's ring vars. */
+.ring-pgm-glow {
+    box-shadow:
+        0 0 0 2px var(--pgm-red),
+        0 0 12px color-mix(in srgb, var(--pgm-red) 60%, transparent);
+}
+
+.source-btn {
+    transition: all 0.2s ease;
+}
+
+.source-btn:hover {
+    transform: translateY(-1px);
+}
+
+.source-btn:active {
+    transform: translateY(0) scale(0.98);
+}
+
+.control-btn {
+    transition: all 0.2s ease;
+}
+
+.control-btn:hover {
+    transform: translateY(-1px);
+}
+
+.control-btn:active {
+    transform: translateY(0) scale(0.98);
+}
+
+/* =================================================================
+   Fade to Black Warning (Body Effect)
+================================================================= */
+.ftb-warning-active {
+    background: rgba(239, 68, 68, 0.1) !important;
+    animation: ftb-pulse 1s ease-in-out infinite alternate;
+}
+
+@keyframes ftb-pulse {
+    0% {
+        background: rgba(239, 68, 68, 0.1);
+    }
+    100% {
+        background: rgba(239, 68, 68, 0.2);
+    }
+}
+
+/* =================================================================
+   Accessibility
+================================================================= */
+@media (prefers-reduced-motion: reduce) {
+    .tbar-handle-vertical,
+    .tbar-progress-vertical,
+    .rate-countdown-ending,
+    .atem-overlay-backdrop,
+    .settings-panel,
+    [x-collapse] {
+        animation: none !important;
+        transition: none !important;
+    }
+}
+
+@media (prefers-contrast: high) {
+    .tbar-track-vertical,
+    .tbar-handle-vertical {
+        border-width: 3px;
+        border-color: currentColor;
+    }
+    
+    .rate-countdown-active,
+    .rate-countdown-ending {
+        border-width: 3px !important;
+    }
+}
+
+/* USK1 Pattern Grid Styles - Separate from wipe patterns */
+.usk-pattern-button {
+    aspect-ratio: 1;
+    border: 2px solid oklch(var(--b3));
+    border-radius: 4px;
+    background: oklch(var(--b1));
+    padding: 4px;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.usk-pattern-button:hover {
+    border-color: oklch(var(--p));
+    background: oklch(var(--b3));
+}
+
+/* Selection is primary, not green — green means preview only. */
+.usk-pattern-button.usk-active {
+    border-color: oklch(var(--p));
+    background: oklch(var(--p) / 0.1);
+    box-shadow: 0 0 0 2px oklch(var(--p) / 0.3);
+}
+
+/* =================================================================
+   Overlay backdrop — ONE class for every overlay on the page (Settings
+   drawer, Media Pool, HyperDeck, Profile, the confirm dialogs).
+   The page underneath is dimmed + blurred THROUGH the backdrop
+   (backdrop-filter), not by filtering the content: the old
+   `filter: blur()` on .atem-main-content re-rasterized the whole
+   live-updating surface every frame and made it the containing block
+   for fixed descendants (why every overlay had to live "outside" it).
+   backdrop-filter runs in the compositor over the viewport only, and
+   the tally colours still read through, so the operator keeps context
+   while their attention goes to the panel. Overlays fade this in over
+   200 ms / out over 150 ms (the Tailwind classes on each x-transition).
+================================================================= */
+.atem-overlay-backdrop {
+    background-color: rgba(0, 0, 0, 0.55);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+}
+
+/* Settings accordion bodies animate open/closed with x-collapse (height
+   0 → auto). The bottom spacing is CONTENT (::after), not padding — with
+   border-box sizing a padding-bottom would floor the animated height at
+   16px and the section would pop at the end instead of closing smoothly. */
+.acc-body::after {
+    content: '';
+    display: block;
+    height: 1rem;
+}
+
+/* =================================================================
+   ATEM Control Disabled State - When Not Connected
+================================================================= */
+/* Alpine.js x-cloak - Hide elements until Alpine is ready */
+[x-cloak] {
+    display: none !important;
+}
+
+/* Smooth transition when controls become enabled */
+.controls-transition {
+    transition: opacity 0.3s ease;
+}
+
+/* =================================================================
+   Moved verbatim from the control.html inline <style> block
+   (Stage 1e item 1). Wipe-pattern grid + Fairlight mixer styles.
+================================================================= */
+/* ``[x-cloak]`` keeps elements hidden until Alpine has evaluated
+   their directives — without it a delayed-but-truthy x-show would
+   flash visible briefly on load. */
+[x-cloak] { display: none !important; }
+
+/* Wipe Pattern Grid Styles */
+.wipe-pattern-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 4px;
+    max-width: 100%;
+}
+
+.wipe-pattern-button {
+    aspect-ratio: 1;
+    border: 2px solid oklch(var(--b3));
+    border-radius: 4px;
+    background: oklch(var(--b1));
+    padding: 4px;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.wipe-pattern-button:hover {
+    border-color: oklch(var(--p));
+    background: oklch(var(--b3));
+}
+
+.wipe-pattern-button.active {
+    border-color: oklch(var(--p));
+    background: oklch(var(--p) / 0.1);
+    box-shadow: 0 0 0 2px oklch(var(--p) / 0.3);
+}
+
+.wipe-icon {
+    width: 100%;
+    height: 100%;
+}
+
+.pattern-bg {
+    fill: oklch(var(--b3));
+}
+
+.pattern-fill {
+    fill: oklch(var(--bc) / 0.5);
+}
+
+.wipe-pattern-button.active .pattern-fill {
+    fill: oklch(var(--p));
+}
+
+.wipe-pattern-button:focus,
+.wipe-pattern-button:active,
+.wipe-pattern-button:visited,
+.wipe-pattern-button:focus-within,
+.wipe-pattern-button:target {
+    border: 2px solid oklch(var(--b3)) !important;
+    background: oklch(var(--b1)) !important;
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+.wipe-pattern-button.active:focus,
+.wipe-pattern-button.active:active,
+.wipe-pattern-button.active:visited,
+.wipe-pattern-button.active:focus-within,
+.wipe-pattern-button.active:target {
+    border-color: oklch(var(--p)) !important;
+    background: oklch(var(--p) / 0.1) !important;
+    box-shadow: 0 0 0 2px oklch(var(--p) / 0.3) !important;
+    outline: none !important;
+}
+
+
+/* =============================================================================
+ * Fairlight audio mixer styles — DaisyUI-themed.
+ * Layout structure (CSS grid) matches ATEM Software Control's audio tab so
+ * controls line up across strips. Colours route through DaisyUI semantic
+ * tokens (base-100/200/300, primary, success/warning/error) so the mixer
+ * tracks the site theme instead of pinning a stand-alone dark look.
+ *
+ * Channel row uses minmax(0, 1fr) so the fader/meter section shrinks to
+ * fit the viewport — the modal stays inside `inset-y-4 lg:inset-y-8`.
+ * ===========================================================================*/
+
+.audio-strip-grid {
+    display: grid;
+    grid-template-rows:
+        28px            /* header (name + on-bar)                 */
+        66px            /* input gain knob + numeric              */
+        56px            /* equalizer mini                         */
+        56px            /* dynamics mini                          */
+        20px            /* dB readout                             */
+        minmax(0, 1fr)  /* channel (fader + meter) — flex-shrink  */
+        20px            /* fader value                            */
+        66px            /* pan knob + numeric                     */
+        26px            /* mix buttons                            */
+        24px;           /* phones                                 */
+    align-items: stretch;
+}
+
+/* On-air indicator bar above the strip name */
+.audio-on-bar {
+    height: 3px;
+    background: oklch(var(--b3));
+    border-radius: 1px;
+    transition: background 0.15s;
+}
+.audio-on-bar.is-on  { background: var(--pgm-red); }  /* live-to-air = tally red, not UI error */
+.audio-on-bar.is-afv { background: oklch(var(--wa)); }
+
+/* Round knob — indicator rotates via CSS var --angle, driven by AudioKnob.
+   Drag vertically (mouse/touch/pen via pointer events), wheel to fine-tune,
+   dblclick to reset to defaultValue. */
+.audio-knob {
+    position: relative;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%,
+                                oklch(var(--b3)),
+                                oklch(var(--b1)) 70%);
+    border: 1.5px solid oklch(var(--b3));
+    box-shadow: inset 0 -2px 4px rgba(0, 0, 0, 0.35),
+                inset 0 1px 1px rgba(255, 255, 255, 0.04);
+    cursor: ns-resize;
+    touch-action: none;          /* don't scroll the page on touch drag */
+    flex-shrink: 0;
+    transition: border-color 0.1s, box-shadow 0.1s;
+}
+.audio-knob:hover {
+    border-color: oklch(var(--bc) / 0.4);
+}
+.audio-knob.is-dragging {
+    border-color: oklch(var(--p));
+    box-shadow: inset 0 -2px 4px rgba(0, 0, 0, 0.35),
+                inset 0 1px 1px rgba(255, 255, 255, 0.04),
+                0 0 0 2px oklch(var(--p) / 0.3);
+}
+.audio-knob-indicator {
+    position: absolute;
+    top: 4px;
+    left: 50%;
+    width: 2px;
+    height: 12px;
+    background: oklch(var(--p));
+    border-radius: 1px;
+    transform-origin: 50% 15px;  /* pivot at knob center (38/2 - 4 = 15) */
+    transform: translateX(-50%) rotate(var(--angle, 0deg));
+    box-shadow: 0 0 4px oklch(var(--p) / 0.5);
+}
+
+/* Compact numeric input under each knob */
+.audio-numinput {
+    width: 56px;
+    height: 18px;
+    padding: 0 4px;
+    background: oklch(var(--b1));
+    border: 1px solid oklch(var(--b3));
+    border-radius: 3px;
+    color: oklch(var(--bc));
+    font-size: 10px;
+    font-family: ui-monospace, monospace;
+    text-align: center;
+    -moz-appearance: textfield;
+}
+.audio-numinput::-webkit-outer-spin-button,
+.audio-numinput::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.audio-numinput:focus {
+    outline: none;
+    border-color: oklch(var(--p));
+    box-shadow: 0 0 0 1px oklch(var(--p) / 0.4);
+}
+
+/* Mix-type buttons (OFF / ON / AFV) */
+.audio-mix-btn {
+    height: 100%;
+    background: oklch(var(--b1));
+    border: 1px solid oklch(var(--b3));
+    color: oklch(var(--bc) / 0.55);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    border-radius: 3px;
+    transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+.audio-mix-btn:hover {
+    background: oklch(var(--b3));
+    color: oklch(var(--bc) / 0.85);
+}
+.audio-mix-btn.is-active.is-on {
+    background: oklch(var(--su));
+    color: oklch(var(--suc));
+    border-color: oklch(var(--su));
+}
+.audio-mix-btn.is-active.is-afv {
+    background: oklch(var(--wa));
+    color: oklch(var(--wac));
+    border-color: oklch(var(--wa));
+}
+.audio-mix-btn.is-active.is-off {
+    background: oklch(var(--er));
+    color: oklch(var(--erc));
+    border-color: oklch(var(--er));
+}
+
+/* Phones (headphones / solo) — read-only display until solo wire is added */
+.audio-phones-btn {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: oklch(var(--b1));
+    border: 1px solid oklch(var(--b3));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: oklch(var(--bc) / 0.4);
+    font-size: 10px;
+    cursor: not-allowed;
+}
+.audio-phones-btn.is-soloed {
+    background: oklch(var(--wa));
+    color: oklch(var(--wac));
+    border-color: oklch(var(--wa));
+}
+
+/* Custom vertical fader — replaces the native <input type="range">,
+   which has unreliable webkit-slider-vertical / writing-mode rendering
+   and fights with Alpine's `:value` binding when the server echoes a
+   stale volume mid-drag. The new fader mirrors the T-Bar pattern:
+   pointer events with setPointerCapture, DOM-direct handle paint, an
+   "is-dragging" gate that suppresses server state pushes for the
+   active strip. See window.AudioFader in atem_control.js. */
+.audio-fader-track {
+    position: relative;
+    width: 30px;
+    height: 100%;
+    cursor: ns-resize;
+    user-select: none;
+    touch-action: none;          /* don't scroll the page on touch drag */
+    flex-shrink: 0;
+}
+.audio-fader-track::before {
+    /* the visible rail */
+    content: '';
+    position: absolute;
+    top: 0; bottom: 0;
+    left: 50%;
+    margin-left: -2px;
+    width: 4px;
+    background: oklch(var(--b1));
+    border: 1px solid oklch(var(--b3));
+    border-radius: 2px;
+}
+.audio-fader-handle {
+    position: absolute;
+    left: 0; right: 0;
+    height: 22px;
+    transform: translateY(-50%);  /* center on the value-derived `top` */
+    background: linear-gradient(to bottom,
+                                oklch(var(--bc) / 0.95),
+                                oklch(var(--bc) / 0.55));
+    border: 1px solid oklch(var(--b3));
+    border-radius: 3px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+    cursor: ns-resize;
+    will-change: top;
+    pointer-events: none;         /* let the track receive all events */
+    top: 100%;                    /* default; AudioFader.attach overwrites */
+}
+.audio-fader-handle::after {
+    /* horizontal grip line so the handle visually reads as a fader cap */
+    content: '';
+    position: absolute;
+    left: 4px; right: 4px;
+    top: 50%;
+    height: 1px;
+    background: oklch(var(--b3));
+}
+.audio-fader-track:hover .audio-fader-handle {
+    filter: brightness(1.08);
+}
+.audio-fader-track.is-dragging .audio-fader-handle {
+    background: linear-gradient(to bottom,
+                                oklch(var(--p) / 0.95),
+                                oklch(var(--p) / 0.55));
+    border-color: oklch(var(--p));
+}
+
+/* Meter pair (L + R) — green/yellow/red on success/warning/error */
+.audio-meter-pair { height: 100%; }
+.audio-meter-bg {
+    position: relative;
+    background: oklch(var(--b1));
+    border-radius: 1px;
+    overflow: hidden;
+    border: 1px solid oklch(var(--b3));
+}
+.audio-meter-fill {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    background: oklch(var(--su));
+    height: 0%;
+}
+.audio-meter-fill.is-warn { background: oklch(var(--wa)); }
+.audio-meter-fill.is-clip { background: oklch(var(--er)); }
+.audio-meter-peak {
+    position: absolute;
+    left: 0; right: 0;
+    height: 1px;
+    background: oklch(var(--bc));
+    bottom: 0%;
+    box-shadow: 0 0 2px oklch(var(--bc) / 0.6);
+}
+/* Muted-strip meter — desaturated so signal is still visible but it's
+   obvious the strip isn't routed to program. Matches Software Control,
+   which keeps meters live on Off channels at lower contrast. */
+.audio-meter-bg.is-muted .audio-meter-fill,
+.audio-meter-bg.is-muted .audio-meter-peak {
+    filter: grayscale(0.85) brightness(0.55);
+    opacity: 0.7;
+}
+
+/* Gain-reduction meter bars in the dynamics modal. Single-bar (no L/R,
+   no peak hold), grows DOWNWARDS from the top of the cell since
+   gain reduction is signal being cut. Color is muted gray to match
+   Software Control's "subtractive" visual treatment. */
+.dyn-gr-bg {
+    position: relative;
+    width: 16px;
+    background: oklch(var(--b1));
+    border: 1px solid oklch(var(--b3));
+    border-radius: 1px;
+    overflow: hidden;
+}
+.dyn-gr-fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 0;
+    background: oklch(var(--bc) / 0.65);
+    transition: height 60ms linear;
+}
+/* Per-block tints — match the threshold guide colors on the transfer
+   curve so operators can map a moving GR bar to its threshold line at
+   a glance: expander/gate teal (--in), compressor primary, limiter
+   literal blue. */
+.dyn-gr-bg[data-gr-block="expander"]   .dyn-gr-fill { background: oklch(var(--in)); }
+.dyn-gr-bg[data-gr-block="compressor"] .dyn-gr-fill { background: oklch(var(--p));  }
+.dyn-gr-bg[data-gr-block="limiter"]    .dyn-gr-fill { background: #3b82f6;          }
+
+/* dB scale ticks on the channel column — subtle horizontal lines */
+.row-channel {
+    background:
+        linear-gradient(to bottom,
+            transparent calc(16.6% - 0.5px),
+            oklch(var(--bc) / 0.06) 16.6%,
+            transparent calc(16.6% + 0.5px),
+            transparent calc(33.3% - 0.5px),
+            oklch(var(--bc) / 0.06) 33.3%,
+            transparent calc(33.3% + 0.5px),
+            transparent calc(50% - 0.5px),
+            oklch(var(--bc) / 0.10) 50%,
+            transparent calc(50% + 0.5px),
+            transparent calc(66.6% - 0.5px),
+            oklch(var(--bc) / 0.06) 66.6%,
+            transparent calc(66.6% + 0.5px),
+            transparent calc(83.3% - 0.5px),
+            oklch(var(--bc) / 0.06) 83.3%,
+            transparent calc(83.3% + 0.5px));
+}
+
+/* EQ / dynamics mini SVG curves — primary tone when enabled, dimmed
+   when bypassed. Mirrors ATEM Software Control: the shape stays visible
+   even when the section is off so the operator can see at a glance
+   what would re-engage if they turn it back on. */
+.audio-mini-curve     { stroke: oklch(var(--p)); }
+.audio-mini-curve-off { stroke: oklch(var(--bc) / 0.35); }
+.audio-mini-axis      { stroke: oklch(var(--bc) / 0.2); }
+
+/* Strip card — visually subtle separation */
+.audio-strip-card {
+    background: oklch(var(--b2));
+    border-right: 1px solid oklch(var(--b3) / 0.5);
+}
+.audio-strip-card:hover { background: oklch(var(--b2) / 0.7); }
+.audio-strip-card.is-on  { background: color-mix(in srgb, var(--pgm-red) 4%, transparent); }
+.audio-strip-card.is-afv { background: oklch(var(--wa) / 0.04); }
+
+.audio-master-card {
+    background: oklch(var(--b3));
+    border-left: 2px solid oklch(var(--p) / 0.5);
+}
+
+
+/* ---- Live program monitor (atem_pgm_monitor.js) ---- */
+.pgm-monitor {
+    position: fixed;   /* left/top set by JS: home is bottom-right, draggable */
+    z-index: 900;
+    background: #111;
+    border: 1px solid rgb(255 255 255 / 0.15);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 10px 34px rgb(0 0 0 / 0.6);
+}
+/* Resize grip at the top-left corner (the free corner). */
+.pgm-monitor-resize {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 20px;
+    height: 20px;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #9a9a9a;
+    font-size: 11px;
+    cursor: nwse-resize;
+    touch-action: none;
+    opacity: 0.7;
+}
+.pgm-monitor-resize:hover { opacity: 1; color: #fff; }
+.pgm-monitor-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 30px;
+    padding: 0 6px 0 24px;   /* left pad clears the resize grip */
+    background: #1b1b1b;
+    color: #ddd;
+    cursor: move;
+    user-select: none;
+    touch-action: none;
+}
+.pgm-monitor-title {
+    flex: 1;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.pgm-monitor-title::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #f43f5e;
+    flex: 0 0 auto;
+    animation: pgm-live-pulse 1.6s ease-in-out infinite;
+}
+@keyframes pgm-live-pulse { 50% { opacity: 0.35; } }
+.pgm-monitor-ctl {
+    background: none;
+    border: 0;
+    padding: 2px 3px;
+    color: #9a9a9a;
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
+}
+.pgm-monitor-ctl:hover { color: #fff; }
+.pgm-monitor-video {
+    display: block;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border: 0;
+    background: #000;
+}

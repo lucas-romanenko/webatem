@@ -1,0 +1,63 @@
+{% comment %}
+Parametrized settings slider — range + numeric entry + caret nudges, wired
+to the RealtimeSlider store methods (start<base>Drag / drag<base> /
+release<base> / set<base>).
+
+Params (all explicit at every call site — no |default filters, because 0
+and '' are falsy to Django templates and several params legitimately carry
+them):
+  container the state object holding the field, as a JS expression
+            ("$store.atem.state.dsks?.[d]"); the widget reads
+            {{ container }}?.{{ field }}. USK call sites go through the
+            control/_usk_slider.html wrapper, which fixes this and idx
+  idx       the store methods' index argument ('k' for USK, 'd' for DSK,
+            '' for the index-free transition sliders)
+  label     operator-facing label ("Foreground")
+  field     field name on the container ("chroma_foreground")
+  base      store method base ("USKChromaForeground")
+  min max   wire-unit range bounds (also the caret clamps — replacing the
+            hand-copied Math.max(k, ...) clamp bug this partial retired)
+  step      wire-unit range step AND caret nudge delta
+  scale     display multiplier (chroma 0..1 shows as % via 100; else 1)
+  fallback  wire-unit value when state is absent (?? — 0 must survive)
+  disp_min disp_max   numeric-entry bounds in display units
+  disp_step numeric-entry step in display units
+  decimals  numeric-entry display precision (toFixed argument)
+  suffix    unit glyph after the numeric entry ('%', '°'); empty = none
+  range_style  optional inline style for the range track (border-luma
+            black->white gradient); omit for the plain themed track
+{% endcomment %}
+<div class="flex justify-between items-start gap-4">
+    <div class="flex-1">
+        <label class="text-sm opacity-70 block mb-2">{{ label }}:</label>
+        <input
+            type="range"
+            min="{{ min }}"
+            max="{{ max }}"
+            step="{{ step }}"
+            :value="{{ container }}?.{{ field }} ?? {{ fallback }}"
+            @pointerdown="$store.atem.start{{ base }}Drag({{ idx }})"
+            @input="$store.atem.drag{{ base }}({% if idx %}{{ idx }}, {% endif %}$event.target.value)"
+            @pointerup="$store.atem.release{{ base }}({% if idx %}{{ idx }}, {% endif %}$event.target.value)"
+            @pointercancel="$store.atem.release{{ base }}({% if idx %}{{ idx }}, {% endif %}$event.target.value)"
+            class="range range-sm w-full"{% if range_style %}
+            style="{{ range_style }}"{% endif %}>
+    </div>
+    <div class="flex items-center gap-1 mt-6">
+        <input
+            type="number"
+            class="input input-bordered input-sm w-16 text-center font-mono text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            :value="(({{ container }}?.{{ field }} ?? {{ fallback }}) * {{ scale }}).toFixed({{ decimals }})"
+            @change="$store.atem.set{{ base }}({% if idx %}{{ idx }}, {% endif %}$event.target.value / {{ scale }})"
+            step="{{ disp_step }}" min="{{ disp_min }}" max="{{ disp_max }}">
+        {% if suffix %}<span class="text-sm">{{ suffix }}</span>{% endif %}
+        <div class="flex flex-col">
+            <button class="btn btn-ghost btn-xs p-0 h-4 min-h-0" @click="$store.atem.set{{ base }}({% if idx %}{{ idx }}, {% endif %}Math.min({{ max }}, ({{ container }}?.{{ field }} ?? {{ fallback }}) + {{ step }}))">
+                <i class="bi bi-caret-up-fill text-sm"></i>
+            </button>
+            <button class="btn btn-ghost btn-xs p-0 h-4 min-h-0" @click="$store.atem.set{{ base }}({% if idx %}{{ idx }}, {% endif %}Math.max({{ min }}, ({{ container }}?.{{ field }} ?? {{ fallback }}) - {{ step }}))">
+                <i class="bi bi-caret-down-fill text-sm"></i>
+            </button>
+        </div>
+    </div>
+</div>
