@@ -1,0 +1,621 @@
+/* WebATEM theme — one dark theme, keyed "dark" for base.html. Hand-owned
+ * since 2026-09-13 (it used to be generated from a downstream app's sheet;
+ * that app installs this package now). brand.css, loaded after it, sets the
+ * palette that actually shows — a WebATEM-wide style change belongs there.
+ *
+ * DaisyUI 4 syntax (pinned to 4.12.24 in base.html): each colour role is a raw
+ * OKLCh triplet "L% C H" consumed as oklch(var(--p)). If the DaisyUI pin ever
+ * moves to v5, every block here must be rewritten to the v5 variable scheme
+ * (--color-primary: <colour>) — the two syntaxes are not compatible.
+ *
+ * The values below are the pre-brand neutrals; the palette that shows is
+ * brand.css's (docs/brand/handoff/README.md is the spec).
+ *
+ * The --chrome/--line/--ink-* custom properties are not DaisyUI roles; they are
+ * plain hex values used directly where the designs call for them. The navbar
+ * (chrome) is styled independently of the content area via the --chrome-*
+ * set: black on dark, light on the light theme (operator preference — the
+ * upstream handoff originally ran it black in both themes).
+ */
+
+/* Poppins 400/500/600/700 + 400-italic — self-hosted (fonts/poppins/ beside
+ * this file, OFL.txt alongside). No Google Fonts hotlink: each studio's
+ * deployment is LAN-only and must not depend on internet access for its UI
+ * font. TTFs are from the the upstream brand kit (via the design handoff);
+ * ~150 KB each, one file per weight, no subsetting. */
+@font-face {
+    font-family: "Poppins";
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url("../fonts/poppins/Poppins-Regular.ttf") format("truetype");
+}
+@font-face {
+    font-family: "Poppins";
+    font-style: italic;
+    font-weight: 400;
+    font-display: swap;
+    src: url("../fonts/poppins/Poppins-Italic.ttf") format("truetype");
+}
+@font-face {
+    font-family: "Poppins";
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url("../fonts/poppins/Poppins-Medium.ttf") format("truetype");
+}
+@font-face {
+    font-family: "Poppins";
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url("../fonts/poppins/Poppins-SemiBold.ttf") format("truetype");
+}
+@font-face {
+    font-family: "Poppins";
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url("../fonts/poppins/Poppins-Bold.ttf") format("truetype");
+}
+
+/* The brand font stack. Set on body, not html: the Tailwind Play CDN injects
+ * its preflight <style> (which sets font-family on html) at runtime AFTER
+ * this stylesheet's link element, so an html rule here would lose the
+ * cascade — a body rule beats html's inherited value regardless of order. */
+body {
+    font-family: "Poppins", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* ==========================================================================
+ * Design-parity chrome — the places the design file uses the supporting
+ * custom properties. This file loads AFTER the compiled tailwind.css, so
+ * rules here win specificity ties against DaisyUI/utility classes. Where a
+ * rule is only a DEFAULT that template utilities must be able to override
+ * (the .card hairline), it is wrapped in :where() to zero its specificity.
+ * ======================================================================== */
+
+/* Navbar: --chrome with a --chrome-line hairline, no shadow (design header).
+ * Chrome-side text/accent colours come from the --chrome-* custom
+ * properties (per theme, below), NOT from base-content — the chrome
+ * surface is styled independently of the content area. (The original
+ * upstream handoff ran the chrome black in both themes; the light theme now uses a
+ * light chrome by operator preference — flipping back is just the
+ * --chrome-* values in the the light theme block.) */
+.pp-chrome {
+    background: var(--chrome);
+    border-bottom: 1px solid var(--chrome-line);
+    color: var(--chrome-fg);
+}
+
+/* Top-level nav items on the chrome: muted when inactive, hover/active
+ * the accent orange on an orange-tint pill (design nav state; the accent
+ * is darkened on light chrome for contrast). Scoped with child
+ * combinators so dropdown-panel links (which sit on a base-200 panel
+ * that DOES follow the content theme) keep theme colours instead. */
+.pp-chrome .menu > li > a,
+.pp-chrome .menu > li > details > summary {
+    color: var(--chrome-muted);
+    border-radius: 999px;
+}
+.pp-chrome .menu > li > a:hover,
+.pp-chrome .menu > li > details > summary:hover,
+.pp-chrome .menu > li > details[open] > summary,
+.pp-chrome .menu > li > a.pp-nav-active,
+.pp-chrome .menu > li > details > summary.pp-nav-active {
+    background-color: rgba(246, 139, 42, 0.14);
+    color: var(--chrome-accent);
+}
+.pp-chrome .menu details > ul {
+    color: oklch(var(--bc));
+}
+/* Items inside an open dropdown panel get the same orange hover — via the
+ * primary role, since the panel sits on base-200 and follows the content
+ * theme (orange in both themes anyway). */
+.pp-chrome .menu details > ul li > a:hover {
+    background-color: rgba(246, 139, 42, 0.14);
+    color: oklch(var(--p));
+}
+.drawer-side .menu li > a:hover,
+.drawer-side .menu li > details > summary:hover,
+.drawer-side .menu li > details[open] > summary {
+    background-color: rgba(246, 139, 42, 0.14);
+    color: oklch(var(--p));
+}
+.pp-chrome .btn-ghost:hover {
+    background-color: rgba(246, 139, 42, 0.14);
+    color: var(--chrome-accent);
+    border-color: transparent;
+}
+
+/* Equipment Details modal: facts beside notes needs the wider box. The same box
+   hosts the Edit form (max-w-3xl per the modal standard), so widen it only while
+   the Details partial (.details-wide) is loaded. (:has — Chrome-only studio.) */
+#equipment-modal-content:has(.details-wide) { max-width: 64rem; }
+
+/* ---------------------------------------------------------------------------
+   Equipment modals on a phone.
+
+   These boxes carry `overflow-visible` so the location-tree dropdown can escape
+   the modal instead of being clipped (commit 0f1b0e4). That also cancels
+   DaisyUI's `.modal-box { overflow-y: auto }`, and on a phone the result was a
+   form you could not reach: 1061px of content inside a 584px box, no scrollbar,
+   no inner scroller — the bottom third simply unreachable (iPhone 13, 2026-09-04).
+
+   Below lg the box scrolls instead; the dropdown scrolls with it, which is the
+   right trade on a touch screen (an iPad Mini is 768px, just above md, and was
+   cut off by 8px). Height is capped in dvh because 100vh on iOS is the
+   toolbar-HIDDEN viewport, so a vh-sized modal runs off the visible screen.
+   --------------------------------------------------------------------------- */
+/* DaisyUI renders a tooltip as an absolutely-positioned ::before carrying
+   attr(data-tip), and its width counts toward scrollable overflow even while
+   the bubble is hidden. On the Activity stats bar chart the end bars' bubbles
+   pushed the page 26px wider than a 320px phone — clipped, since <main> is
+   overflow-x:hidden, so content silently went missing. Hover tooltips are dead
+   weight on a touch screen anyway, so the chart drops them there.
+
+   The condition is `hover: none`, not a width — an iPad Mini is 768px, just
+   above md, and a width rule missed it by 2px (which is exactly how the modal
+   rule below missed it by 8px first time round). Touch is the real predicate. */
+@media (hover: none), (max-width: 1023.98px) {
+    .stats-bar-chart .tooltip:before,
+    .stats-bar-chart .tooltip:after { content: none; display: none; }
+}
+
+/* The switcher-name row (input + Set + Match) does not fit a phone: the input is
+   flex-1 so it shrinks toward zero while the two buttons keep their width, and
+   the row ran off the edge of the edit modal. Below md the input takes its own
+   line and the buttons sit beneath it. */
+@media (max-width: 767.98px) {
+    .pp-name-row { flex-wrap: wrap; }
+    .pp-name-row > input { flex: 1 1 100%; }
+}
+
+@media (max-width: 1023.98px) {
+    .modal-box.overflow-visible {
+        overflow-y: auto;
+        max-height: calc(100vh - 4rem);
+        max-height: calc(100dvh - 4rem);
+        overscroll-behavior: contain;
+    }
+}
+
+/* ---------------------------------------------------------------------------
+   Desktop-only actions, site-wide.
+
+   Some controls hand a device off to software that only exists on a desktop:
+   ATEM Software Control, ATEM Setup, Videohub Control, Ultimatte Software
+   Control, X32-Edit — all launched through the avserver-*:// protocol
+   handlers the AV Server Launcher installs. None of that exists on a phone,
+   so on a coarse pointer the control is not merely useless, it is a lie: the
+   equipment list shipped a button that opened an empty menu because the
+   entries inside it were marked and the button that opened them was not
+   (2026-09-04).
+
+   .launcher-action  — it disappears. A button, a menu entry, a whole menu
+                       whose contents are all launchers, a navbar link to a
+                       launcher page, or that page's entire body: the Ultimatte
+                       Slot Launcher exists to open Ultimatte Software Control,
+                       so on a phone there is nothing left of it worth drawing.
+   .launcher-inert   — it STAYS because its text is the content (the x32 mute
+                       page hangs "open X32-Edit" off the channel name), but
+                       stops pretending to be tappable.
+   .touch-only       — the reverse: shown ONLY on a coarse pointer, for the
+                       one-line "open this on a computer" that replaces a
+                       hidden page for anyone arriving on a bookmark.
+
+   The predicate is the pointer, never a width: an iPad Mini is 768px, which a
+   width rule reads as a desktop. (This replaced base.html's .hide-on-touch,
+   which was the same rule under a second name — one mechanism, one place.)
+   --------------------------------------------------------------------------- */
+.touch-only { display: none; }
+
+@media (pointer: coarse) {
+    .launcher-action { display: none !important; }
+    .launcher-inert {
+        pointer-events: none;
+        cursor: default;
+        text-decoration: none;
+    }
+    .touch-only { display: block; }
+}
+
+/* ---------------------------------------------------------------------------
+   Tooltips inside a modal.
+
+   A DaisyUI tooltip's bubble is an absolutely-positioned ::before that EXISTS
+   while it is invisible, and it is up to 20rem wide — which counts toward its
+   scroll container's scrollWidth. The equipment modals scroll below lg (see
+   above), so the help icons beside the field labels gave the edit form 165px
+   of phantom horizontal scroll and that much dead space beside it on a phone
+   (measured: a 358px box reporting 523px of content, iPhone 13, 2026-09-04).
+
+   So the bubble is only rendered while it is actually being shown. The help
+   text survives everywhere hovering works, unlike the Activity chart above,
+   where dropping it outright was the right call.
+   --------------------------------------------------------------------------- */
+.modal-box .tooltip:before,
+.modal-box .tooltip:after { content: none; }
+.modal-box .tooltip:hover:before,
+.modal-box .tooltip.tooltip-open:before,
+.modal-box .tooltip:has(:focus-visible):before { content: attr(data-tip); }
+.modal-box .tooltip:hover:after,
+.modal-box .tooltip.tooltip-open:after,
+.modal-box .tooltip:has(:focus-visible):after { content: ""; }
+
+/* Dropdown menus in the content area (row "Open in…" menus, the control
+ * page's Profile menu) — the navbar's orange hover/focus state, so every
+ * click-to-open menu in the app reads the same. */
+.dropdown-content.menu li > a:hover,
+.dropdown-content.menu li > a:focus,
+.dropdown-content.menu li > a:focus-visible {
+    background-color: rgba(246, 139, 42, 0.14);
+    color: oklch(var(--p));
+}
+.dropdown-content.menu li.disabled > a { color: oklch(var(--bc) / 0.35); }
+
+/* Cards carry a --line hairline border (the design separates surfaces with
+ * hairlines, not shadows). :where() keeps this at zero specificity so cards
+ * that declare their own border utilities keep them. */
+:where(.card) {
+    border: 1px solid var(--line);
+}
+
+/* Input wells: --input surface with an --input-line border. */
+.input-bordered,
+.select-bordered,
+.textarea-bordered,
+.file-input-bordered {
+    background-color: var(--input);
+    border-color: var(--input-line);
+}
+
+/* Browser autofill: Chrome paints its own blue-tinted background (and text
+ * colour) inside any field it fills, ignoring the page. Cover that paint
+ * with an inset shadow in the theme's solid input colour and pin the text
+ * colour, so an autofilled field looks exactly like a typed one (sign-in
+ * fields, but every input site-wide). The 9999 s background transition is
+ * the standard belt-and-braces: Chrome animates its highlight in, and a
+ * near-infinite transition means it never arrives. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+    -webkit-text-fill-color: oklch(var(--bc));
+    caret-color: oklch(var(--bc));
+    box-shadow: 0 0 0 1000px var(--input-solid) inset;
+    -webkit-box-shadow: 0 0 0 1000px var(--input-solid) inset;
+    transition: background-color 9999s ease-in-out 0s;
+}
+
+/* Tables: zebra rows use --zebra; row rules use --line-soft. Selectors
+ * mirror DaisyUI 4.12.24's own so specificity ties break on source order. */
+.table-zebra tbody tr:nth-child(2n) {
+    background-color: var(--zebra);
+}
+.table :where(thead tr, tbody tr:not(:last-child), tbody tr:first-child:last-child) {
+    border-bottom-color: var(--line-soft);
+}
+
+/* Semantic badges are tinted chips, not solid pills (design: status badges,
+ * room-health counts, HyperDeck A/B chips are all 16% tint + coloured text).
+ * The templates' badge-soft class is DaisyUI 5 vocabulary — inert on the
+ * pinned v4 — so the tint treatment lives here on the colour variants. */
+.badge-success { background: oklch(var(--su) / 0.16); color: oklch(var(--su)); border-color: oklch(var(--su) / 0.3); }
+.badge-warning { background: oklch(var(--wa) / 0.16); color: oklch(var(--wa)); border-color: oklch(var(--wa) / 0.3); }
+.badge-error   { background: oklch(var(--er) / 0.16); color: oklch(var(--er)); border-color: oklch(var(--er) / 0.3); }
+.badge-info    { background: oklch(var(--in) / 0.16); color: oklch(var(--in)); border-color: oklch(var(--in) / 0.3); }
+.badge-primary { background: rgba(246, 139, 42, 0.16); color: oklch(var(--p)); border-color: transparent; }
+.badge-neutral { background: oklch(var(--bc) / 0.08); color: var(--ink-2); border-color: oklch(var(--bc) / 0.2); }
+
+/* Alerts follow the same tinted language — solid alert slabs (especially
+ * alert-info, which is brand orange here) read as giant colour blocks on the
+ * dark theme. Covers page alerts and the site-wide toasts. */
+.alert-info    { background: oklch(var(--in) / 0.14); color: oklch(var(--in)); border-color: oklch(var(--in) / 0.3); }
+.alert-success { background: oklch(var(--su) / 0.14); color: oklch(var(--su)); border-color: oklch(var(--su) / 0.3); }
+.alert-warning { background: oklch(var(--wa) / 0.14); color: oklch(var(--wa)); border-color: oklch(var(--wa) / 0.3); }
+.alert-error   { background: oklch(var(--er) / 0.14); color: oklch(var(--er)); border-color: oklch(var(--er) / 0.3); }
+
+/* Table header row sits darker than the rows (design theads). Templates that
+ * set their own tr background utilities override this. */
+.table thead tr {
+    background-color: var(--zebra);
+}
+
+/* Inert buttons are neutral-filled with a faint border, not white-outlined
+ * (design: source buttons, macro slots, inactive keys all sit on --n).
+ * Colour-variant outline buttons (e.g. btn-outline btn-primary) keep their
+ * outline identity. */
+.btn-outline:not(.btn-primary):not(.btn-secondary):not(.btn-accent):not(.btn-info):not(.btn-success):not(.btn-warning):not(.btn-error) {
+    background-color: oklch(var(--n));
+    border-color: var(--input-line);
+    color: oklch(var(--nc));
+}
+
+/* Machine values (IPs, ports, rates, counts) read in mono with tabular
+ * digits — give the utility the digit behaviour the README asks for. */
+.font-mono {
+    font-variant-numeric: tabular-nums;
+}
+
+/* Selected state for toggle/chip buttons (btn-active — the CC list's
+ * List/Calendar switch and status chips). DaisyUI 4's default is a
+ * barely-darker neutral; selection is ORANGE in this design language
+ * (active nav, transition style, connect). */
+.btn.btn-active {
+    background-color: oklch(var(--p));
+    border-color: oklch(var(--p));
+    color: oklch(var(--pc));
+}
+
+/* Icon-only ghost row actions (Content Change scheduled-jobs list).
+ * 34px circular tinted buttons, no border, no visible text (title +
+ * aria-label carry the name). Orange = neutral actions (reschedule,
+ * retry); red = destructive only (cancel/stop). Hover deepens the tint
+ * ~1.8x. On the light theme the dark-theme icon colours fail contrast on the
+ * white-backed tints, so the glyphs flip to the light-safe pair. */
+.row-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    flex: 0 0 34px;
+    border-radius: 999px;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+    font-size: 15px;
+    line-height: 1;
+    transition: background-color 0.15s ease;
+}
+.row-action-neutral        { background: rgba(246, 139, 42, 0.12); color: #F68B2A; }
+.row-action-neutral:hover  { background: rgba(246, 139, 42, 0.22); }
+.row-action-danger         { background: rgba(255, 92, 110, 0.10); color: #FF5C6E; }
+.row-action-danger:hover   { background: rgba(255, 92, 110, 0.18); }
+.row-action:disabled       { opacity: 0.35; cursor: not-allowed; }
+
+/* Native <select> option lists — the OS-rendered menus on selects that
+ * can't take the pp-select facade (ATEM control page, JS-cloned rows,
+ * dynamically-built lists). Chromium honours page CSS on <option> rows,
+ * so theme them to match: base-200 rows, orange checked row (Chromium
+ * ignores plain background-color on option:checked — the gradient is
+ * the reliable form). Best-effort: macOS renders its own menu and
+ * ignores most of this; color-scheme already keeps the menu chrome
+ * theme-correct there. */
+select option,
+select optgroup {
+    background-color: oklch(var(--b2));
+    color: oklch(var(--bc));
+}
+select option:checked {
+    background-image: linear-gradient(oklch(var(--p) / 0.3), oklch(var(--p) / 0.3));
+    color: oklch(var(--p));
+}
+select option:disabled {
+    color: oklch(var(--bc) / 0.4);
+}
+
+/* pp-select — a styled popover facade over a native <select> (equipment
+ * add/edit modals: type / game type / HyperDeck fields). The native
+ * element stays in the DOM as an invisible overlay so the form value,
+ * required-validation bubbles, and htmx hx-trigger="change" bindings all
+ * keep working; equipment-list.js builds the trigger + panel and syncs
+ * value/change both ways. Same visual language as the location tree
+ * picker (anchored panel, flip-up, orange hover/selected). */
+.pp-select { position: relative; }
+.pp-select > select {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    pointer-events: none;
+    /* kept focusable by the browser for validation bubbles; not tabbable */
+}
+.pp-select-trigger.select { background-image: none; }
+.pp-select-trigger:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+.pp-select-panel {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    margin-top: 0.5rem;
+    z-index: 70;
+    max-height: min(280px, 40vh);
+    overflow-y: auto;
+    padding: 0.375rem;
+}
+.pp-select-panel.drop-up {
+    top: auto;
+    bottom: 100%;
+    margin-top: 0;
+    margin-bottom: 0.5rem;
+}
+.pp-select-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.4rem 0.625rem;
+    border-radius: 0.375rem;
+    cursor: pointer;
+    font-size: 0.8125rem;
+}
+.pp-select-option:hover { background: oklch(var(--p) / 0.1); }
+.pp-select-option.selected {
+    background: oklch(var(--p) / 0.16);
+    color: oklch(var(--p));
+    font-weight: 500;
+}
+
+/* Ping status chips — ping results rendered in the app's tinted status
+ * language (16% role tint + role colour, pill shape), replacing stock
+ * green/red glyphs and an off-palette inline red. Themed via the
+ * semantic roles, so light mode gets the darker legible variants. */
+.ping-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+.ping-chip.ping-icon-only {
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    justify-content: center;
+    font-size: 13px;
+}
+.ping-ok   { background: oklch(var(--su) / 0.16); color: oklch(var(--su)); }
+.ping-down { background: oklch(var(--er) / 0.16); color: oklch(var(--er)); }
+.ping-warn { background: oklch(var(--wa) / 0.16); color: oklch(var(--wa)); }
+
+/* Ping button in-flight state (equipment list row actions): htmx puts
+ * .htmx-request on the requesting button; while it's there the status
+ * icon yields to a spinner, so a pending ping (offline devices take the
+ * full ~10 s timeout) visibly works instead of looking dead. */
+.ping-btn .ping-inflight                 { display: none; }
+.ping-btn.htmx-request .ping-status-icon { display: none; }
+.ping-btn.htmx-request .ping-inflight    { display: inline-flex; }
+.row-action-neutral:disabled:hover { background: rgba(246, 139, 42, 0.12); }
+.row-action-danger:disabled:hover  { background: rgba(255, 92, 110, 0.10); }
+
+/* Broadcast program/tally red — decoupled from the error role. In the
+ * theme this app grew out of, the dark error role WAS the broadcast red
+ * (#FF4557), so CUT / program tally / ON AIR chips rode btn-error and
+ * looked right. That theme later moved the error role to #FF5C6E (UI
+ * errors), so the broadcast surfaces carry these classes instead,
+ * rendering EXACTLY as they always have:
+ * #FF4557 on dark, #B3261E on light (per-theme values below). Do not remap
+ * these in future palette swaps — broadcast convention beats branding. */
+.btn-pgm {
+    background-color: var(--pgm-red);
+    border-color: var(--pgm-red);
+    color: var(--pgm-red-content);
+}
+.btn-pgm:hover {
+    background-color: var(--pgm-red);
+    border-color: var(--pgm-red);
+    filter: brightness(1.08);
+}
+.text-pgm { color: var(--pgm-red); }
+.bg-pgm   { background-color: var(--pgm-red); }
+.badge-pgm {
+    background: color-mix(in srgb, var(--pgm-red) 16%, transparent);
+    color: var(--pgm-red);
+    border-color: color-mix(in srgb, var(--pgm-red) 30%, transparent);
+}
+
+/* Current page's nav item — orange on an orange-tint pill, per the design. */
+.pp-nav-active {
+    background: rgba(246, 139, 42, 0.16);
+    color: var(--chrome-accent);
+    font-weight: 600;
+}
+
+/* Column headers — 11px/700, uppercase, 0.07em tracking, in primary orange.
+ * Global on purpose (equipment, schedule, admin tables all inherit it);
+ * DaisyUI's own thead styles are zero-specificity :where() rules, so this
+ * wins. */
+.table thead th {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: oklch(var(--p));
+}
+
+/* Navbar location chip — the deployment's location rendered as an orange
+ * pill chip beside the "AV Server" brand line (design: navbar brand row). */
+.pp-location-chip {
+    padding: 3px 9px;
+    background: rgba(246, 139, 42, 0.16);
+    color: var(--chrome-accent);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.4;
+    white-space: nowrap;
+    border-radius: 999px;
+}
+
+[data-theme="dark"] {
+    color-scheme: dark;
+
+    /* primary: the accent orange #F68B2A / content BLACK (white on the brand
+     * orange fails contrast; black-on-orange is the logo's own pairing) */
+    --p:   73.85% 0.1646 56.80;
+    --pc:  0% 0 0;
+    /* secondary: lightened grape #9C6BBF / content black. The brand grape
+     * #421C52 is ~1.5:1 against the dark bases — the README's own rule says
+     * grape must not be used on dark, yet role-driven templates (stats
+     * accents, chips) do use the role; this keeps them purple AND legible
+     * (4.7:1). the light theme keeps the true brand grape. */
+    --s:   61.20% 0.1329 309.86;
+    --sc:  0% 0 0;
+    /* accent: not in the upstream palette — aliased to primary orange */
+    --a:   73.85% 0.1646 56.80;
+    --ac:  0% 0 0;
+    /* neutral: #26282B / content white */
+    --n:   27.60% 0.0062 258.36;
+    --nc:  100% 0 0;
+    /* base: page #121315 · cards #1B1D20 · raised #232528 · text #FFFFFF */
+    --b1:  18.65% 0.0044 264.46;
+    --b2:  22.99% 0.0065 258.36;
+    --b3:  26.36% 0.0063 258.36;
+    --bc:  100% 0 0;
+    /* info: the accent orange #F68B2A / content black */
+    --in:  73.85% 0.1646 56.80;
+    --inc: 0% 0 0;
+    /* success: #4ADE80 / content #052E12 (functional green, not brand) */
+    --su:  80.03% 0.1821 151.71;
+    --suc: 26.55% 0.0675 149.61;
+    /* warning: yellow #FFD34D / content #1A1204 (never amber — amber would
+     * collide with the brand orange) */
+    --wa:  88.18% 0.1541 90.33;
+    --wac: 18.83% 0.0296 81.93;
+    /* error: #FF5C6E / content black */
+    --er:  69.42% 0.1975 17.51;
+    --erc: 0% 0 0;
+
+    /* Brand geometry: 16px boxes/cards/modals, 10px buttons/inputs, pill badges. */
+    --rounded-btn: 10px;
+    --rounded-box: 16px;
+    --rounded-badge: 999px;
+
+    /* Supporting values (plain hex, not DaisyUI roles). */
+    --chrome:        #000000;   /* navbar — black on dark */
+    --chrome-line:   #1A1C1E;
+    --chrome-fg:     #F6F6F6;   /* brand text / icons on the chrome */
+    --chrome-muted:  #8F9399;   /* inactive nav items */
+    --chrome-accent: #F68B2A;   /* hover/active nav, location chip */
+    --line:        rgba(255, 255, 255, 0.06);   /* card borders */
+    --line-soft:   rgba(255, 255, 255, 0.04);   /* table row rules */
+    --zebra:       rgba(255, 255, 255, 0.02);   /* alternate rows */
+    --input:       rgba(255, 255, 255, 0.05);   /* input wells */
+    --input-solid: #1E1F21;                     /* --input composited over --b1 (autofill cover) */
+    --input-line:  rgba(255, 255, 255, 0.12);
+    --ink-2:       #8F9399;   /* secondary text */
+    --ink-3:       #5E6367;   /* meta text */
+    --ink-4:       #43474B;   /* hint text */
+
+    /* Broadcast program/tally red (see .btn-pgm block above). */
+    --pgm-red:         #FF4557;
+    --pgm-red-content: #000000;
+}
+
+
+/* `hidden` means hidden. The attribute is only a UA display:none, so ANY
+   author rule that sets display beats it — DaisyUI's .btn (inline-flex),
+   .card (flex), .input, and Tailwind's own flex/grid utilities all do — and
+   Tailwind's preflight [hidden] rule sits BEFORE the components in the sheet,
+   so it loses on order. Bitten twice on one day (2026-09-08: panels rendering
+   open, a "no stream" button showing beside its own indicator). This sheet
+   loads last; make the attribute win everywhere. Toggle visibility with
+   el.hidden and it now does what it says. */
+[hidden] { display: none !important; }

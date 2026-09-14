@@ -1,0 +1,854 @@
+                <!-- Transitions - COMPLETE with Individual Rate Controls and USK1-style Formatting -->
+                <div class="border-b border-base-300">
+                    <button 
+                        class="w-full p-4 text-left font-medium text-base-content hover:bg-base-300 flex items-center justify-between transition-colors"
+                        @click="openSections.transitions = !openSections.transitions">
+                        <span>Transitions</span>
+                        <i class="bi bi-chevron-down transition-transform duration-200" 
+                        :class="openSections.transitions ? 'rotate-180' : ''"></i>
+                    </button>
+                    <div x-show="openSections.transitions"
+                        x-collapse.duration.200ms
+                        class="px-4 acc-body">
+                        <div class="space-y-4 text-sm">
+                            
+                            <!-- Transition Type Tabs -->
+                            <div class="flex border-b border-base-300 -mx-4">
+                                <button 
+                                    class="flex-1 px-3 py-2 text-xs font-medium -mb-px transition-colors text-center"
+                                    :class="selectedTransitionTab === 'Mix' ? 'border-b-2 border-b-primary text-primary bg-base-100' : 'text-base-content/70 hover:text-base-content hover:bg-base-300'"
+                                    @click="selectedTransitionTab = 'Mix'">
+                                    Mix
+                                </button>
+                                <button 
+                                    class="flex-1 px-3 py-2 text-xs font-medium -mb-px transition-colors text-center"
+                                    :class="selectedTransitionTab === 'Dip' ? 'border-b-2 border-b-primary text-primary bg-base-100' : 'text-base-content/70 hover:text-base-content hover:bg-base-300'"
+                                    @click="selectedTransitionTab = 'Dip'">
+                                    Dip
+                                </button>
+                                <button 
+                                    class="flex-1 px-3 py-2 text-xs font-medium -mb-px transition-colors text-center"
+                                    :class="selectedTransitionTab === 'Wipe' ? 'border-b-2 border-b-primary text-primary bg-base-100' : 'text-base-content/70 hover:text-base-content hover:bg-base-300'"
+                                    @click="selectedTransitionTab = 'Wipe'">
+                                    Wipe
+                                </button>
+                                <button 
+                                    class="flex-1 px-3 py-2 text-xs font-medium -mb-px transition-colors text-center"
+                                    :class="selectedTransitionTab === 'DVE' ? 'border-b-2 border-b-primary text-primary bg-base-100' : 'text-base-content/70 hover:text-base-content hover:bg-base-300'"
+                                    @click="selectedTransitionTab = 'DVE'">
+                                    DVE
+                                </button>
+                                <button 
+                                    class="flex-1 px-3 py-2 text-xs font-medium -mb-px transition-colors text-center"
+                                    :class="selectedTransitionTab === 'Stinger' ? 'border-b-2 border-b-primary text-primary bg-base-100' : 'text-base-content/70 hover:text-base-content hover:bg-base-300'"
+                                    @click="selectedTransitionTab = 'Stinger'">
+                                    Stinger
+                                </button>
+                            </div>
+                            
+                            <!-- Mix Settings -->
+                            <div x-show="selectedTransitionTab === 'Mix'" class="space-y-4 pt-3">
+                                
+                                <!-- Settings Header -->
+                                <div class="text-sm font-semibold opacity-70 pb-2 border-b border-base-300">Settings</div>
+                                
+                                <!-- Rate Control -->
+                                <div class="flex items-center justify-between">
+                                    <label class="text-sm opacity-70 mr-3">Rate:</label>
+                                    <div class="flex items-center gap-2">
+                                        <input 
+                                            type="text" 
+                                            :class="$store.atem.getRateInputClass('mix')"
+                                            class="input input-bordered input-sm w-20 text-center font-mono"
+                                            id="mixRate"
+                                            x-model="$store.atem.inputs.mixRate"
+                                            @keydown.enter="$store.atem.send('set_mix_rate', {rate: $store.atem.inputs.mixRate}); $event.target.blur()"
+                                            placeholder="1:00"
+                                        >
+                                        <button 
+                                            class="btn btn-primary btn-sm"
+                                            @click="$store.atem.send('set_mix_rate', {rate: $store.atem.inputs.mixRate})">
+                                            Set
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                            </div>
+                            
+                            <!-- Dip Settings -->
+                            <div x-show="selectedTransitionTab === 'Dip'" class="space-y-4 pt-3">
+                                
+                                <!-- Settings Header -->
+                                <div class="text-sm font-semibold opacity-70 pb-2 border-b border-base-300">Settings</div>
+                                
+                                <!-- Rate Control -->
+                                <div class="flex items-center justify-between">
+                                    <label class="text-sm opacity-70 mr-3">Rate:</label>
+                                    <div class="flex items-center gap-2">
+                                        <input 
+                                            type="text" 
+                                            :class="$store.atem.getRateInputClass('dip')"
+                                            class="input input-bordered input-sm w-20 text-center font-mono"
+                                            id="dipRate"
+                                            x-model="$store.atem.inputs.dipRate"
+                                            @keydown.enter="$store.atem.send('set_dip_rate', {rate: $store.atem.inputs.dipRate}); $event.target.blur()"
+                                            placeholder="1:00"
+                                        >
+                                        <button 
+                                            class="btn btn-primary btn-sm"
+                                            @click="$store.atem.send('set_dip_rate', {rate: $store.atem.inputs.dipRate})">
+                                            Set
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                
+                                <!-- Dip Source Selection -->
+                                <div>
+                                    <label class="text-sm font-medium block mb-2 opacity-70">Dip Source:</label>
+                                    <select 
+                                        data-pp-select class="select select-bordered select-sm w-full text-sm"
+                                        :value="$store.atem.state.mes[$store.atem.activeMe].transition?.dip_source || 0"
+                                        @change="$store.atem.send('set_dip_source', {input_source: parseInt($event.target.value)})"
+                                    >
+                                        <template x-for="s in $store.atem.sourcesFor('fill')" :key="s.source">
+                                            <option :value="s.source" x-text="s.long"></option>
+                                        </template>
+                                        <option value="3021">Media Player 2 Key</option>
+                                    </select>
+                                </div>
+                                
+                            </div>
+                            
+                            <!-- Wipe Settings -->
+                            <div x-show="selectedTransitionTab === 'Wipe'" class="space-y-4 pt-3">
+                                
+                                <!-- Settings Header -->
+                                <div class="text-sm font-semibold opacity-70 pb-2 border-b border-base-300">Settings</div>
+                                
+                                <!-- Rate Control -->
+                                <div class="flex items-center justify-between">
+                                    <label class="text-sm opacity-70 mr-3">Rate:</label>
+                                    <div class="flex items-center gap-2">
+                                        <input 
+                                            type="text" 
+                                            :class="$store.atem.getRateInputClass('wipe')"
+                                            class="input input-bordered input-sm w-20 text-center font-mono"
+                                            id="wipeRate"
+                                            x-model="$store.atem.inputs.wipeRate"
+                                            @keydown.enter="$store.atem.send('set_wipe_rate', {rate: $store.atem.inputs.wipeRate}); $event.target.blur()"
+                                            placeholder="1:00"
+                                        >
+                                        <button 
+                                            class="btn btn-primary btn-sm"
+                                            @click="$store.atem.send('set_wipe_rate', {rate: $store.atem.inputs.wipeRate})">
+                                            Set
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                
+                                <!-- Divider -->
+                                <div class="divider my-3"></div>
+                                
+                                <!-- Pattern Selection Section -->
+                                <div class="space-y-3">
+                                    <div class="text-sm font-medium">Pattern Selection</div>
+                                    <div class="wipe-pattern-grid">
+                                        <!-- Pattern 0: Left to Right -->
+                                        <button @click="$store.atem.setWipePattern(0)"
+                                                :class="$store.atem.getWipePatternButtonClass(0)"
+                                                title="Left to Right">
+                                            <svg class="wipe-icon" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                                                <rect class="pattern-bg" width="100" height="100"/>
+                                                <rect class="pattern-fill" x="50" y="0" width="50" height="100"/>
+                                            </svg>
+                                        </button>
+
+                                        <!-- Pattern 1: Top to Bottom -->
+                                        <button @click="$store.atem.setWipePattern(1)"
+                                                :class="$store.atem.getWipePatternButtonClass(1)"
+                                                title="Top to Bottom">
+                                            <svg class="wipe-icon" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                                                <rect class="pattern-bg" width="100" height="100"/>
+                                                <rect class="pattern-fill" x="0" y="50" width="100" height="50"/>
+                                            </svg>
+                                        </button>
+
+                                        <!-- Pattern 2: Two Vertical Bars -->
+                                        <button @click="$store.atem.setWipePattern(2)"
+                                                :class="$store.atem.getWipePatternButtonClass(2)"
+                                                title="Two Vertical Bars">
+                                            <svg class="wipe-icon" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                                                <rect class="pattern-bg" width="100" height="100"/>
+                                                <rect class="pattern-fill" x="0" y="0" width="25" height="100"/>
+                                                <rect class="pattern-fill" x="75" y="0" width="25" height="100"/>
+                                            </svg>
+                                        </button>
+
+                                        <!-- Pattern 3: Two Horizontal Bars -->
+                                        <button @click="$store.atem.setWipePattern(3)"
+                                                :class="$store.atem.getWipePatternButtonClass(3)"
+                                                title="Two Horizontal Bars">
+                                            <svg class="wipe-icon" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                                                <rect class="pattern-bg" width="100" height="100"/>
+                                                <rect class="pattern-fill" x="0" y="0" width="100" height="30"/>
+                                                <rect class="pattern-fill" x="0" y="70" width="100" height="30"/>
+                                            </svg>
+                                        </button>
+
+                                        <!-- Pattern 4: Four Corner Squares -->
+                                        <button @click="$store.atem.setWipePattern(4)"
+                                                :class="$store.atem.getWipePatternButtonClass(4)"
+                                                title="Four Corner Squares">
+                                            <svg class="wipe-icon" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                                                <rect class="pattern-bg" width="100" height="100"/>
+                                                <rect class="pattern-fill" x="0" y="0" width="40" height="40"/>
+                                                <rect class="pattern-fill" x="60" y="0" width="40" height="40"/>
+                                                <rect class="pattern-fill" x="0" y="60" width="40" height="40"/>
+                                                <rect class="pattern-fill" x="60" y="60" width="40" height="40"/>
+                                            </svg>
+                                        </button>
+
+                                        <!-- Pattern 5: Large Center Square -->
+                                        <button @click="$store.atem.setWipePattern(5)"
+                                                :class="$store.atem.getWipePatternButtonClass(5)"
+                                                title="Large Center Square">
+                                            <svg class="wipe-icon" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                                                <rect class="pattern-bg" width="100" height="100"/>
+                                                <rect class="pattern-fill" x="30" y="30" width="40" height="40"/>
+                                            </svg>
+                                        </button>
+
+                                        <!-- Pattern 6: Diamond -->
+                                        <button @click="$store.atem.setWipePattern(6)"
+                                                :class="$store.atem.getWipePatternButtonClass(6)"
+                                                title="Diamond">
+                                            <svg class="wipe-icon" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                                                <rect class="pattern-bg" width="100" height="100"/>
+                                                <polygon class="pattern-fill" points="50,10 90,50 50,90 10,50"/>
+                                            </svg>
+                                        </button>
+
+                                        <!-- Pattern 7: Circle -->
+                                        <button @click="$store.atem.setWipePattern(7)"
+                                                :class="$store.atem.getWipePatternButtonClass(7)"
+                                                title="Circle">
+                                            <svg class="wipe-icon" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                                                <rect class="pattern-bg" width="100" height="100"/>
+                                                <circle class="pattern-fill" cx="50" cy="50" r="35"/>
+                                            </svg>
+                                        </button>
+
+                                        <!-- Pattern 8: Top-Left Square -->
+                                        <button @click="$store.atem.setWipePattern(8)"
+                                                :class="$store.atem.getWipePatternButtonClass(8)"
+                                                title="Top-Left Square">
+                                            <svg class="wipe-icon" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                                                <rect class="pattern-bg" width="100" height="100"/>
+                                                <rect class="pattern-fill" x="0" y="0" width="40" height="40"/>
+                                            </svg>
+                                        </button>
+
+                                        <!-- Pattern 9: Top-Right Square -->
+                                        <button @click="$store.atem.setWipePattern(9)"
+                                                :class="$store.atem.getWipePatternButtonClass(9)"
+                                                title="Top-Right Square">
+                                            <svg class="wipe-icon" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                                                <rect class="pattern-bg" width="100" height="100"/>
+                                                <rect class="pattern-fill" x="60" y="0" width="40" height="40"/>
+                                            </svg>
+                                        </button>
+
+                                        <!-- Pattern 10: Bottom-Right Square -->
+                                        <button @click="$store.atem.setWipePattern(10)"
+                                                :class="$store.atem.getWipePatternButtonClass(10)"
+                                                title="Bottom-Right Square">
+                                            <svg class="wipe-icon" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                                                <rect class="pattern-bg" width="100" height="100"/>
+                                                <rect class="pattern-fill" x="60" y="60" width="40" height="40"/>
+                                            </svg>
+                                        </button>
+
+                                        <!-- Pattern 11: Bottom-Left Square -->
+                                        <button @click="$store.atem.setWipePattern(11)"
+                                                :class="$store.atem.getWipePatternButtonClass(11)"
+                                                title="Bottom-Left Square">
+                                            <svg class="wipe-icon" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                                                <rect class="pattern-bg" width="100" height="100"/>
+                                                <rect class="pattern-fill" x="0" y="60" width="40" height="40"/>
+                                            </svg>
+                                        </button>
+
+                                        <!-- Pattern 12: Top Center Square -->
+                                        <button @click="$store.atem.setWipePattern(12)"
+                                                :class="$store.atem.getWipePatternButtonClass(12)"
+                                                title="Top Center Square">
+                                            <svg class="wipe-icon" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                                                <rect class="pattern-bg" width="100" height="100"/>
+                                                <rect class="pattern-fill" x="30" y="0" width="40" height="40"/>
+                                            </svg>
+                                        </button>
+
+                                        <!-- Pattern 13: Right Center Square -->
+                                        <button @click="$store.atem.setWipePattern(13)"
+                                                :class="$store.atem.getWipePatternButtonClass(13)"
+                                                title="Right Center Square">
+                                            <svg class="wipe-icon" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                                                <rect class="pattern-bg" width="100" height="100"/>
+                                                <rect class="pattern-fill" x="60" y="30" width="40" height="40"/>
+                                            </svg>
+                                        </button>
+
+                                        <!-- Pattern 14: Bottom Center Square -->
+                                        <button @click="$store.atem.setWipePattern(14)"
+                                                :class="$store.atem.getWipePatternButtonClass(14)"
+                                                title="Bottom Center Square">
+                                            <svg class="wipe-icon" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                                                <rect class="pattern-bg" width="100" height="100"/>
+                                                <rect class="pattern-fill" x="30" y="60" width="40" height="40"/>
+                                            </svg>
+                                        </button>
+
+                                        <!-- Pattern 15: Left Center Square -->
+                                        <button @click="$store.atem.setWipePattern(15)"
+                                                :class="$store.atem.getWipePatternButtonClass(15)"
+                                                title="Left Center Square">
+                                            <svg class="wipe-icon" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                                                <rect class="pattern-bg" width="100" height="100"/>
+                                                <rect class="pattern-fill" x="0" y="30" width="40" height="40"/>
+                                            </svg>
+                                        </button>
+
+                                        <!-- Pattern 16: Diagonal Top-Left -->
+                                        <button @click="$store.atem.setWipePattern(16)"
+                                                :class="$store.atem.getWipePatternButtonClass(16)"
+                                                title="Diagonal Top-Left">
+                                            <svg class="wipe-icon" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                                                <rect class="pattern-bg" width="100" height="100"/>
+                                                <polygon class="pattern-fill" points="0,0 100,0 0,100"/>
+                                            </svg>
+                                        </button>
+
+                                        <!-- Pattern 17: Diagonal Top-Right -->
+                                        <button @click="$store.atem.setWipePattern(17)"
+                                                :class="$store.atem.getWipePatternButtonClass(17)"
+                                                title="Diagonal Top-Right">
+                                            <svg class="wipe-icon" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                                                <rect class="pattern-bg" width="100" height="100"/>
+                                                <polygon class="pattern-fill" points="100,0 100,100 0,0"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <!-- Divider -->
+                                <div class="divider my-3"></div>
+                                
+                                <!-- Pattern Controls Section -->
+                                <div class="space-y-3">
+                                    <!-- Symmetry Control -->
+                                    {% include 'control/_slider.html' with container='$store.atem.state.mes[$store.atem.activeMe].transition' idx='' label='Symmetry' field='wipe_symmetry' base='WipeSymmetry' fallback=50 decimals=1 min=0 max=100 step=0.1 scale=1 disp_min=0 disp_max=100 disp_step=0.1 suffix='%' %}
+                                </div>
+                                
+                                <!-- Divider -->
+                                <div class="divider my-3"></div>
+                                
+                                <!-- Position Section -->
+                                <div class="space-y-3">
+                                    <div class="text-sm font-medium">Position</div>
+                                    <div class="grid grid-cols-2 gap-x-6 gap-y-3">
+                                        <div class="flex items-center justify-between">
+                                            <label class="text-sm opacity-70 mr-3">X:</label>
+                                            <div class="flex items-center gap-1">
+                                                <input 
+                                                    type="number" 
+                                                    class="input input-bordered input-sm w-20 text-center font-mono text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" 
+                                                    :value="($store.atem.state.mes[$store.atem.activeMe].transition?.wipe_position_x || 0.5).toFixed(4)"
+                                                    @change="$store.atem.send('set_wipe_position_x', {positionX: parseFloat($event.target.value)})"
+                                                    min="0" 
+                                                    max="1" 
+                                                    step="0.0001">
+                                                <div class="flex flex-col">
+                                                    <button class="btn btn-ghost btn-xs p-0 h-4 min-h-0" @click="$store.atem.send('set_wipe_position_x', {positionX: Math.min(1, ($store.atem.state.mes[$store.atem.activeMe].transition?.wipe_position_x || 0.5) + 0.0001)})">
+                                                        <i class="bi bi-caret-up-fill text-sm"></i>
+                                                    </button>
+                                                    <button class="btn btn-ghost btn-xs p-0 h-4 min-h-0" @click="$store.atem.send('set_wipe_position_x', {positionX: Math.max(0, ($store.atem.state.mes[$store.atem.activeMe].transition?.wipe_position_x || 0.5) - 0.0001)})">
+                                                        <i class="bi bi-caret-down-fill text-sm"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="flex items-center justify-between">
+                                            <label class="text-sm opacity-70 mr-3">Y:</label>
+                                            <div class="flex items-center gap-1">
+                                                <input 
+                                                    type="number" 
+                                                    class="input input-bordered input-sm w-20 text-center font-mono text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" 
+                                                    :value="($store.atem.state.mes[$store.atem.activeMe].transition?.wipe_position_y || 0.5).toFixed(4)"
+                                                    @change="$store.atem.send('set_wipe_position_y', {positionY: parseFloat($event.target.value)})"
+                                                    min="0" 
+                                                    max="1" 
+                                                    step="0.0001">
+                                                <div class="flex flex-col">
+                                                    <button class="btn btn-ghost btn-xs p-0 h-4 min-h-0" @click="$store.atem.send('set_wipe_position_y', {positionY: Math.min(1, ($store.atem.state.mes[$store.atem.activeMe].transition?.wipe_position_y || 0.5) + 0.0001)})">
+                                                        <i class="bi bi-caret-up-fill text-sm"></i>
+                                                    </button>
+                                                    <button class="btn btn-ghost btn-xs p-0 h-4 min-h-0" @click="$store.atem.send('set_wipe_position_y', {positionY: Math.max(0, ($store.atem.state.mes[$store.atem.activeMe].transition?.wipe_position_y || 0.5) - 0.0001)})">
+                                                        <i class="bi bi-caret-down-fill text-sm"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Divider -->
+                                <div class="divider my-3"></div>
+                                
+                                <!-- Direction Controls Section -->
+                                <div class="space-y-3">
+                                    <div class="text-sm font-medium">Direction</div>
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <div class="form-control">
+                                            <label class="label cursor-pointer justify-start gap-2 py-1">
+                                                <input 
+                                                    type="checkbox" 
+                                                    class="checkbox checkbox-sm"
+                                                    :checked="$store.atem.state.mes[$store.atem.activeMe].transition?.wipe_reverse || false"
+                                                    @change="$store.atem.send('set_wipe_reverse', {reverse: $event.target.checked})"
+                                                >
+                                                <span class="label-text text-sm">Reverse</span>
+                                            </label>
+                                        </div>
+                                        <div class="form-control">
+                                            <label class="label cursor-pointer justify-start gap-2 py-1">
+                                                <input 
+                                                    type="checkbox" 
+                                                    class="checkbox checkbox-sm"
+                                                    :checked="$store.atem.state.mes[$store.atem.activeMe].transition?.wipe_flip_flop || false"
+                                                    @change="$store.atem.send('set_wipe_flip_flop', {flipFlop: $event.target.checked})"
+                                                >
+                                                <span class="label-text text-sm">Flip Flop</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Divider -->
+                                <div class="divider my-3"></div>
+                                
+                                <!-- Border Section -->
+                                <div class="space-y-3">
+                                    <div class="text-sm font-medium">Border</div>
+                                    
+                                    <!-- Border Softness -->
+                                    {% include 'control/_slider.html' with container='$store.atem.state.mes[$store.atem.activeMe].transition' idx='' label='Softness' field='wipe_softness' base='WipeSoftness' fallback=0 decimals=1 min=0 max=100 step=0.1 scale=1 disp_min=0 disp_max=100 disp_step=0.1 suffix='%' %}
+                                    
+                                    <!-- Border Width -->
+                                    {% include 'control/_slider.html' with container='$store.atem.state.mes[$store.atem.activeMe].transition' idx='' label='Width' field='wipe_width' base='WipeWidth' fallback=0 decimals=1 min=0 max=100 step=0.1 scale=1 disp_min=0 disp_max=100 disp_step=0.1 suffix='%' %}
+                                    
+                                    <!-- Fill Source -->
+                                    <div>
+                                        <label class="text-sm font-medium block mb-2 opacity-70">Fill Source:</label>
+                                        <select 
+                                            data-pp-select class="select select-bordered select-sm w-full text-sm"
+                                            :value="$store.atem.state.mes[$store.atem.activeMe].transition?.wipe_fill_source || 0"
+                                            @change="$store.atem.send('set_wipe_fill_source', {fillSource: parseInt($event.target.value)})"
+                                        >
+                                            <template x-for="s in $store.atem.sourcesFor('fill')" :key="s.source">
+                                                <option :value="s.source" x-text="s.long"></option>
+                                            </template>
+                                            <option value="3021">Media Player 2 Key</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            </div>
+                            
+                            <!-- DVE Settings - COMPLETE FIXED VERSION -->
+                            <div x-show="selectedTransitionTab === 'DVE'" class="space-y-4 pt-3">
+                                
+                                <!-- Settings Header -->
+                                <div class="text-sm font-semibold opacity-70 pb-2 border-b border-base-300">Settings</div>
+                                
+                                <!-- DVE Direction Grid -->
+                                <div class="bg-base-300 rounded-lg p-4">
+                                    <div class="grid grid-cols-3 gap-2 max-w-48 mx-auto">
+                                        
+                                        <!-- Row 1 -->
+                                        <!-- Top Left (0) -->
+                                        <button 
+                                            :class="$store.atem.getDVEGridButtonClassFromATEM(0)"
+                                            @click="$store.atem.selectDVEGridPositionFromATEM(0)"
+                                            title="Top Left">
+                                            <i :class="$store.atem.getDVEGridIcon(0)" class="text-sm"></i>
+                                        </button>
+                                        
+                                        <!-- Top Center (1) -->
+                                        <button 
+                                            :class="$store.atem.getDVEGridButtonClassFromATEM(1)"
+                                            @click="$store.atem.selectDVEGridPositionFromATEM(1)"
+                                            title="Top">
+                                            <i :class="$store.atem.getDVEGridIcon(1)" class="text-sm"></i>
+                                        </button>
+                                        
+                                        <!-- Top Right (2) -->
+                                        <button 
+                                            :class="$store.atem.getDVEGridButtonClassFromATEM(2)"
+                                            @click="$store.atem.selectDVEGridPositionFromATEM(2)"
+                                            title="Top Right">
+                                            <i :class="$store.atem.getDVEGridIcon(2)" class="text-sm"></i>
+                                        </button>
+                                        
+                                        <!-- Row 2 -->
+                                        <!-- Middle Left (3) -->
+                                        <button 
+                                            :class="$store.atem.getDVEGridButtonClassFromATEM(3)"
+                                            @click="$store.atem.selectDVEGridPositionFromATEM(3)"
+                                            title="Left">
+                                            <i :class="$store.atem.getDVEGridIcon(3)" class="text-sm"></i>
+                                        </button>
+                                        
+                                        <!-- Empty space instead of center square -->
+                                        <div></div>
+                                        
+                                        <!-- Middle Right (5) -->
+                                        <button 
+                                            :class="$store.atem.getDVEGridButtonClassFromATEM(5)"
+                                            @click="$store.atem.selectDVEGridPositionFromATEM(5)"
+                                            title="Right">
+                                            <i :class="$store.atem.getDVEGridIcon(5)" class="text-sm"></i>
+                                        </button>
+                                        
+                                        <!-- Row 3 -->
+                                        <!-- Bottom Left (6) -->
+                                        <button 
+                                            :class="$store.atem.getDVEGridButtonClassFromATEM(6)"
+                                            @click="$store.atem.selectDVEGridPositionFromATEM(6)"
+                                            title="Bottom Left">
+                                            <i :class="$store.atem.getDVEGridIcon(6)" class="text-sm"></i>
+                                        </button>
+                                        
+                                        <!-- Bottom Center (7) -->
+                                        <button 
+                                            :class="$store.atem.getDVEGridButtonClassFromATEM(7)"
+                                            @click="$store.atem.selectDVEGridPositionFromATEM(7)"
+                                            title="Bottom">
+                                            <i :class="$store.atem.getDVEGridIcon(7)" class="text-sm"></i>
+                                        </button>
+                                        
+                                        <!-- Bottom Right (8) -->
+                                        <button 
+                                            :class="$store.atem.getDVEGridButtonClassFromATEM(8)"
+                                            @click="$store.atem.selectDVEGridPositionFromATEM(8)"
+                                            title="Bottom Right">
+                                            <i :class="$store.atem.getDVEGridIcon(8)" class="text-sm"></i>
+                                        </button>
+                                        
+                                    </div>
+                                    
+                                    <!-- Category Toggle for Push/Squeeze -->
+                                    <div class="flex justify-center mt-4">
+                                        <div class="join">
+                                            <button 
+                                                :class="$store.atem.isCurrentDVECategoryFromATEM('push') ? 'btn btn-sm join-item btn-primary' : 'btn btn-sm join-item'"
+                                                @click="$store.atem.switchToDVECategory('push')"
+                                                title="Switch to Push effects">
+                                                Push
+                                            </button>
+                                            <button 
+                                                :class="$store.atem.isCurrentDVECategoryFromATEM('squeeze') ? 'btn btn-sm join-item btn-primary' : 'btn btn-sm join-item'"
+                                                @click="$store.atem.switchToDVECategory('squeeze')"
+                                                title="Switch to Squeeze effects">
+                                                Squeeze
+                                            </button>
+                                        </div>
+                                    </div>
+                                    
+                                </div>
+                                
+                                <!-- Rate Control -->
+                                <div class="flex items-center justify-between">
+                                    <label class="text-sm opacity-70 mr-3">Rate:</label>
+                                    <div class="flex items-center gap-2">
+                                        <input 
+                                            type="text" 
+                                            :class="$store.atem.getRateInputClass('dve')"
+                                            class="input input-bordered input-sm w-20 text-center font-mono"
+                                            id="dveRate"
+                                            x-model="$store.atem.inputs.dveRate"
+                                            @keydown.enter="$store.atem.send('set_dve_rate', {rate: $store.atem.inputs.dveRate}); $event.target.blur()"
+                                            placeholder="1:00"
+                                        >
+                                        <button 
+                                            class="btn btn-primary btn-sm"
+                                            @click="$store.atem.send('set_dve_rate', {rate: $store.atem.inputs.dveRate})">
+                                            Set
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <!-- Divider -->
+                                <div class="divider my-3"></div>
+                                
+                                <!-- Direction Controls Section -->
+                                <div class="space-y-3">
+                                    <div class="text-sm font-medium">Direction</div>
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <div class="form-control">
+                                            <label class="label cursor-pointer justify-start gap-2 py-1">
+                                                <input 
+                                                    type="checkbox" 
+                                                    class="checkbox checkbox-sm"
+                                                    :checked="$store.atem.state.mes[$store.atem.activeMe].transition?.dve?.reverse || false"
+                                                    @change="$store.atem.send('set_dve_reverse', {reverse: $event.target.checked})"
+                                                >
+                                                <span class="label-text text-sm">Reverse</span>
+                                            </label>
+                                        </div>
+                                        <div class="form-control">
+                                            <label class="label cursor-pointer justify-start gap-2 py-1">
+                                                <input 
+                                                    type="checkbox" 
+                                                    class="checkbox checkbox-sm"
+                                                    :checked="$store.atem.state.mes[$store.atem.activeMe].transition?.dve?.flip_flop || false"
+                                                    @change="$store.atem.send('set_dve_flip_flop', {flipFlop: $event.target.checked})"
+                                                >
+                                                <span class="label-text text-sm">Flip Flop</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Divider -->
+                                <div class="divider my-3"></div>
+
+                                <!-- Effects Section with Graphic Logo Wipe Button -->
+                                <div class="flex items-center justify-between">
+                                    <span class="text-sm font-medium opacity-70">Effects:</span>
+                                    <button 
+                                        class="btn btn-sm min-h-8 px-3 transition-all duration-200 hover:scale-105 active:scale-95 rounded border-2"
+                                        :class="$store.atem.state.mes[$store.atem.activeMe].transition?.dve?.style === 34 ?
+                                            'btn-primary shadow-lg' :
+                                            'bg-base-300 border-base-content/20 text-base-content/70 hover:border-[oklch(var(--p))]'"
+                                        @click="$store.atem.send('set_dve_style', {style: 34})"
+                                        title="Graphic Logo Wipe">
+                                        <i class="bi bi-arrow-right text-lg font-bold"></i>
+                                        <span class="ml-1 font-medium">|</span>
+                                    </button>
+                                </div>
+
+                                <!-- Wrapper for Fill Source, Enable Key, and Key Source - greyed out when Push/Squeeze grid button selected -->
+                                <div :class="$store.atem.state.mes[$store.atem.activeMe].transition?.dve?.style !== 34 ? 'opacity-50 pointer-events-none' : ''">
+                                    
+                                    <!-- Fill Source -->
+                                    <div>
+                                        <label class="text-sm font-medium block mb-2 opacity-70">Fill Source:</label>
+                                        <select 
+                                            data-pp-select class="select select-bordered select-sm w-full text-sm"
+                                            :value="$store.atem.state.mes[$store.atem.activeMe].transition?.dve?.fill_source ?? 1"
+                                            @change="$store.atem.send('set_dve_fill_source', {fillSource: parseInt($event.target.value)})"
+                                        >
+                                            <template x-for="s in $store.atem.sourcesFor('fill')" :key="s.source">
+                                                <option :value="s.source" x-text="s.long"></option>
+                                            </template>
+                                            <option value="3021">Media Player 2 Key</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <!-- Enable Key Checkbox - Added margin -->
+                                    <div class="flex items-center gap-2 my-4">
+                                        <input 
+                                            type="checkbox" 
+                                            class="checkbox checkbox-sm"
+                                            :checked="$store.atem.state.mes[$store.atem.activeMe].transition?.dve?.enable_key || false"
+                                            @change="$store.atem.send('set_dve_enable_key', {enableKey: $event.target.checked})"
+                                        >
+                                        <span class="text-sm font-medium">Enable Key</span>
+                                    </div>
+                                    
+                                    <!-- Key Source -->
+                                    <div>
+                                        <label class="text-sm font-medium block mb-2 opacity-70">Key Source:</label>
+                                        <select 
+                                            data-pp-select class="select select-bordered select-sm w-full text-sm"
+                                            :value="$store.atem.state.mes[$store.atem.activeMe].transition?.dve?.key_source ?? 1"
+                                            @change="$store.atem.send('set_dve_key_source', {keySource: parseInt($event.target.value)})"
+                                        >
+                                            <template x-for="s in $store.atem.sourcesFor('key_source')" :key="s.source">
+                                                <option :value="s.source" x-text="s.long"></option>
+                                            </template>
+                                            <option value="3021">Media Player 2 Key</option>
+                                        </select>
+                                    </div>
+
+                                </div>
+
+                                <!-- Divider -->
+                                <div class="divider my-3"></div>
+
+                                <!-- Key Controls Section - Also greyed out when Push/Squeeze grid button selected -->
+                                <div class="space-y-3"
+                                    :class="$store.atem.state.mes[$store.atem.activeMe].transition?.dve?.style !== 34 ? 'opacity-50 pointer-events-none' : ''">
+                                    <div class="text-sm font-medium">Key Controls</div>
+                                    
+                                    <!-- Pre Multiplied Key -->
+                                    <div class="flex items-center gap-2">
+                                        <input 
+                                            type="checkbox" 
+                                            class="checkbox checkbox-sm"
+                                            :checked="$store.atem.state.mes[$store.atem.activeMe].transition?.dve?.pre_multiplied || false"
+                                            @change="$store.atem.send('set_dve_pre_multiplied', {preMultiplied: $event.target.checked})"
+                                        >
+                                        <span class="text-sm opacity-70">Pre Multiplied Key</span>
+                                    </div>
+                                    
+                                    <!-- Controls wrapper - greyed out when pre_multiplied is TRUE -->
+                                    <div class="space-y-3"
+                                        :class="$store.atem.state.mes[$store.atem.activeMe].transition?.dve?.pre_multiplied ? 'opacity-50 pointer-events-none' : ''">
+                                        
+                                        <!-- Clip Control -->
+                                        {% include 'control/_slider.html' with container='$store.atem.state.mes[$store.atem.activeMe].transition?.dve' idx='' label='Clip' field='clip' base='DVEClip' fallback=0 decimals=1 min=0 max=100 step=0.1 scale=1 disp_min=0 disp_max=100 disp_step=0.1 suffix='%' %}
+                                        
+                                        <!-- Gain Control -->
+                                        {% include 'control/_slider.html' with container='$store.atem.state.mes[$store.atem.activeMe].transition?.dve' idx='' label='Gain' field='gain' base='DVEGain' fallback=100 decimals=1 min=0 max=100 step=0.1 scale=1 disp_min=0 disp_max=100 disp_step=0.1 suffix='%' %}
+                                        
+                                        <!-- Invert Key -->
+                                        <div class="flex items-center gap-2">
+                                            <input 
+                                                type="checkbox" 
+                                                class="checkbox checkbox-sm"
+                                                :checked="$store.atem.state.mes[$store.atem.activeMe].transition?.dve?.invert_key || false"
+                                                @change="$store.atem.send('set_dve_invert_key', {invertKey: $event.target.checked})"
+                                            >
+                                            <span class="text-sm opacity-70">Invert key</span>
+                                        </div>
+
+                                    </div>    
+                                </div>
+                            </div>
+                                
+                            <!-- Stinger Settings -->
+                            <div x-show="selectedTransitionTab === 'Stinger'" class="space-y-4 pt-3">
+                                
+                                <!-- Settings Header -->
+                                <div class="text-sm font-semibold opacity-70 pb-2 border-b border-base-300">Settings</div>
+                                
+                                <!-- Divider -->
+                                <div class="divider my-3"></div>
+                                
+                                <!-- Stinger Source -->
+                                <div>
+                                    <label class="text-sm font-medium block mb-2 opacity-70">Stinger Source:</label>
+                                    <select
+                                        data-pp-select class="select select-bordered select-sm w-full text-sm"
+                                        :value="$store.atem.state.mes[$store.atem.activeMe].transition?.stinger?.source ?? 1"
+                                        @change="$store.atem.send('set_stinger_source', {source: parseInt($event.target.value)})"
+                                    >
+                                        <!-- Stinger source is the 1-based media player
+                                             number on the wire; count from topology -->
+                                        <template x-for="mp in ($store.atem.state.topology?.mediaPlayers ?? 0)" :key="mp">
+                                            <option :value="mp" x-text="'Media Player ' + mp"></option>
+                                        </template>
+                                    </select>
+                                </div>
+                                
+                                <!-- Divider -->
+                                <div class="divider my-3"></div>
+                                
+                                <!-- Timing Controls Section -->
+                                <div class="space-y-3">
+                                    <div class="text-sm font-medium">Timing Controls</div>
+                                    
+                                    <!-- Clip Duration -->
+                                    <div class="flex items-center justify-between">
+                                        <label class="text-sm opacity-70 mr-3">Clip Duration:</label>
+                                        <input 
+                                            type="text" 
+                                            class="input input-bordered input-sm w-20 text-center font-mono"
+                                            :value="$store.atem.state.mes[$store.atem.activeMe].transition?.stinger?.clip_duration_str || '6:00'"
+                                            @change="$store.atem.send('set_stinger_clip_duration', {clip_duration: $event.target.value})" @keydown.enter="$event.target.blur()"
+                                            placeholder="6:00"
+                                        >
+                                    </div>
+                                    
+                                    <!-- Trigger Point -->
+                                    <div class="flex items-center justify-between">
+                                        <label class="text-sm opacity-70 mr-3">Trigger Point:</label>
+                                        <input 
+                                            type="text" 
+                                            class="input input-bordered input-sm w-20 text-center font-mono"
+                                            :value="$store.atem.state.mes[$store.atem.activeMe].transition?.stinger?.trigger_point_str || '1:09'"
+                                            @change="$store.atem.send('set_stinger_trigger_point', {trigger_point: $event.target.value})" @keydown.enter="$event.target.blur()"
+                                            placeholder="1:09"
+                                        >
+                                    </div>
+                                    
+                                    <!-- Mix Rate -->
+                                    <div class="flex items-center justify-between">
+                                        <label class="text-sm opacity-70 mr-3">Mix Rate:</label>
+                                        <input 
+                                            type="text" 
+                                            class="input input-bordered input-sm w-20 text-center font-mono"
+                                            :value="$store.atem.state.mes[$store.atem.activeMe].transition?.stinger?.mix_rate_str || '1:00'"
+                                            @change="$store.atem.send('set_stinger_mix_rate', {mix_rate: $event.target.value})" @keydown.enter="$event.target.blur()"
+                                            placeholder="1:00"
+                                        >
+                                    </div>
+                                    
+                                    <!-- Pre Roll -->
+                                    <div class="flex items-center justify-between">
+                                        <label class="text-sm opacity-70 mr-3">Pre Roll:</label>
+                                        <input 
+                                            type="text" 
+                                            class="input input-bordered input-sm w-20 text-center font-mono"
+                                            :value="$store.atem.state.mes[$store.atem.activeMe].transition?.stinger?.pre_roll_str || '1:23'"
+                                            @change="$store.atem.send('set_stinger_pre_roll', {pre_roll: $event.target.value})" @keydown.enter="$event.target.blur()"
+                                            placeholder="1:23"
+                                        >
+                                    </div>
+                                </div>
+                                
+                                <!-- Divider -->
+                                <div class="divider my-3"></div>
+                                
+                                <!-- Stinger Key Controls Section - Exact DVE Layout -->
+                                <div class="space-y-3">
+                                    <div class="text-sm font-medium">Key Controls</div>
+                                    
+                                    <!-- Pre Multiplied Key - FIRST -->
+                                    <div class="flex items-center gap-2">
+                                        <input 
+                                            type="checkbox" 
+                                            class="checkbox checkbox-sm"
+                                            :checked="$store.atem.state.mes[$store.atem.activeMe].transition?.stinger?.pre_multiplied || false"
+                                            @change="$store.atem.send('set_stinger_pre_multiplied', {pre_multiplied: $event.target.checked})">
+                                        <span class="text-sm opacity-70">Pre Multiplied Key</span>
+                                    </div>
+                                    
+                                    <!-- Controls wrapper - greyed out when pre_multiplied is TRUE -->
+                                    <div class="space-y-3"
+                                        :class="$store.atem.state.mes[$store.atem.activeMe].transition?.stinger?.pre_multiplied ? 'opacity-50 pointer-events-none' : ''">
+                                        
+                                        <!-- Clip Control - SECOND -->
+                                        {% include 'control/_slider.html' with container='$store.atem.state.mes[$store.atem.activeMe].transition?.stinger' idx='' label='Clip' field='clip' base='StingerClip' fallback=50 decimals=1 min=0 max=100 step=0.1 scale=1 disp_min=0 disp_max=100 disp_step=0.1 suffix='%' %}
+                                        
+                                        <!-- Gain Control - THIRD -->
+                                        {% include 'control/_slider.html' with container='$store.atem.state.mes[$store.atem.activeMe].transition?.stinger' idx='' label='Gain' field='gain' base='StingerGain' fallback=70 decimals=1 min=0 max=100 step=0.1 scale=1 disp_min=0 disp_max=100 disp_step=0.1 suffix='%' %}
+                                        
+                                        <!-- Invert Key - FOURTH -->
+                                        <div class="flex items-center gap-2">
+                                            <input 
+                                                type="checkbox" 
+                                                class="checkbox checkbox-sm"
+                                                :checked="$store.atem.state.mes[$store.atem.activeMe].transition?.stinger?.invert_key || false"
+                                                @change="$store.atem.send('set_stinger_invert_key', {invert_key: $event.target.checked})">
+                                            <span class="text-sm opacity-70">Invert key</span>
+                                        </div>
+                                    </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>

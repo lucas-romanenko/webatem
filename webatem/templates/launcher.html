@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}WebATEM{% endblock %}
+{% block extra_css %}
+<style>
+  /* The launcher window: a fixed-size panel in the brand — header lockup,
+     status card, the form, the three buttons. No scroller of its own. */
+  main { padding: 0 !important; max-width: none !important; }
+  .lw { min-height: 100vh; display: flex; flex-direction: column; background: var(--ink); }
+  .lw-head { padding: 22px 24px 18px; display: flex; align-items: center; gap: 14px; border-bottom: 1px solid var(--border); }
+  .lw-head .brand-mark { width: 44px; height: 44px; }
+  .lw-head .brand-wordmark { font-size: 27px; }
+  .lw-head .ver { margin-left: auto; font-family: var(--font-mono); font-size: 12px; color: var(--text-faint); }
+  .lw-status { padding: 22px 24px; border-bottom: 1px solid var(--border); background: var(--surface); }
+  .lw-status .state { display: flex; align-items: center; gap: 10px; font-size: 22px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; color: var(--text); }
+  .lw-status .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--text-faint); flex: none; }
+  .lw-status .dot.on { background: var(--pvw); }
+  .lw-status .addr { font-family: var(--font-mono); font-size: 15px; color: var(--link); margin-top: 8px; word-break: break-all; min-height: 1.4em; }
+  .lw-body { padding: 22px 24px 20px; display: flex; flex-direction: column; gap: 18px; flex: 1; }
+  .lw label.brand-overline { display: block; margin-bottom: 6px; }
+  .lw-check { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text); cursor: pointer; }
+  .lw-actions { margin-top: auto; display: flex; gap: 8px; padding-top: 16px; border-top: 1px solid var(--border); }
+  .lw-legal { font-size: 12px; color: var(--text-faint); line-height: 1.5; margin: 0; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="lw" id="launcherWindow"
+     data-settings="{% url 'server_settings' %}">
+  <div class="lw-head">
+    <span class="brand-mark">{% include "brand/_mark.svg" %}</span>
+    <span class="brand-wordmark"><span>web</span>ATEM</span>
+    <span class="ver">v{{ version }}</span>
+  </div>
+  <div class="lw-status">
+    <div class="state"><span class="dot" id="lwDot"></span><span id="lwState">Starting…</span></div>
+    <div class="addr" id="lwAddr">&nbsp;</div>
+  </div>
+  <div class="lw-body">
+    <div class="grid grid-cols-[1fr_auto] gap-3 items-end">
+      <div>
+        <label class="brand-overline" for="lwHost">Interface</label>
+        <select id="lwHost" class="select select-bordered select-sm w-full"></select>
+      </div>
+      <div>
+        <label class="brand-overline" for="lwPort">Port</label>
+        <div class="join">
+          <input id="lwPort" type="number" min="1" max="65535" class="input input-bordered input-sm join-item w-24 font-mono">
+          <button id="lwPortApply" class="btn btn-sm join-item">Change</button>
+        </div>
+      </div>
+    </div>
+    <div class="flex flex-wrap gap-x-6 gap-y-2">
+      <label class="lw-check"><input id="lwMinimized" type="checkbox" class="checkbox checkbox-sm">Start minimized</label>
+      <label class="lw-check" id="lwAutoRow"><input id="lwAutostart" type="checkbox" class="checkbox checkbox-sm">Run at login</label>
+    </div>
+    <p class="text-xs hidden" id="lwNote" style="color: var(--text-faint)"></p>
+    <p class="text-sm hidden" id="lwStatus"></p>
+    <div class="lw-actions">
+      <button id="lwLaunch" class="btn flex-1">Launch GUI</button>
+      <button id="lwHide" class="btn btn-ghost" hidden>Hide</button>
+      <button id="lwQuit" class="btn btn-ghost" hidden>Quit</button>
+    </div>
+    <p class="lw-legal">Made by Lucas Romanenko</p>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+(function () {
+  'use strict';
+  var root = document.getElementById('launcherWindow');
+  var ENDPOINT = root.dataset.settings;
+  var QUIT = ENDPOINT.replace('settings/', 'quit/');
+  var el = function (id) { return document.getElementById(id); };
+  var hostSel = el('lwHost'), portInp = el('lwPort'), state = el('lwState'), addr = el('lwAddr'), dot = el('lwDot');
+  var minim = el('lwMinimized'), auto = el('lwAutostart'), autoRow = el('lwAutoRow');
+  var note = el('lwNote'), status = el('lwStatus');
+  var current = null, native = false, pollTimer = null;
+  function schedule(ms) { clearTimeout(pollTimer); pollTimer = setTimeout(load, ms); }
+
+  function csrf() { var m = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/); return m ? m[1] : ''; }
+  function say(text, cls) { status.textContent = text; status.className = 'text-sm ' + (cls || 'text-base-content/70'); status.classList.remove('hidden'); }
+  function opt(v, label) { var o = document.createElement('option'); o.value = v; o.textContent = label; return o; }
+
+  function render(d) {
+    current = d;
+    if (d.restarting) { state.textContent = 'Restarting…'; addr.textContent = '\u00a0'; schedule(500); }
+    else if (d.running === false) { state.textContent = 'Not running'; addr.textContent = '\u00a0'; }
+    else { state.textContent = 'Running'; addr.textContent = d.url; }
+    dot.classList.toggle('on', !d.restarting && d.running !== false);
+    el('lwLaunch').disabled = !!d.restarting || d.running === false;
+    hostSel.innerHTML = '';
+    var ph = opt('', 'Change network interface…'); ph.disabled = true; hostSel.appendChild(ph);
+    hostSel.appendChild(opt('0.0.0.0', 'All interfaces'));
+    (d.interfaces || []).forEach(function (e) {
+      hostSel.appendChild(opt(e.ip, e.ip === '127.0.0.1' ? 'localhost: 127.0.0.1' : e.name + ': ' + e.ip));
+    });
+    // Nothing chosen yet, or the saved interface is not one of this
+    // machine's today: the placeholder, like Companion — and no server until
+    // the user picks one (the note below says so).
+    var known = d.host === '0.0.0.0' || (d.interfaces || []).some(function (e) { return e.ip === d.host; });
+    hostSel.value = (d.source === 'default' || !d.host || !known) ? '' : d.host;
+    portInp.value = d.port;
+    minim.checked = !!d.start_minimized;
+    autoRow.hidden = !(d.autostart && d.autostart.available);
+    auto.checked = !!(d.autostart && d.autostart.enabled);
+    var locked = !d.restart_available || !!d.restarting;
+    hostSel.disabled = locked; portInp.disabled = locked; el('lwPortApply').disabled = locked;
+    note.textContent = locked ? 'The address is fixed by this server\'s environment (HOST / PORT).' : '';
+    note.classList.toggle('hidden', !locked);
+    if (d.last_error) say('Last change failed: ' + d.last_error, 'text-error');
+    else if (d.startup_note) say(d.startup_note, d.running === false ? 'text-base-content/70' : 'text-warning');
+    else status.classList.add('hidden');
+    el('lwQuit').hidden = !(native || d.quit_available);
+  }
+
+  function load() {
+    fetch(ENDPOINT, { cache: 'no-store' }).then(function (r) { return r.json(); }).then(render)
+      .catch(function () { state.textContent = 'Starting…'; dot.classList.remove('on'); schedule(1000); });
+  }
+
+  function post(body, after) {
+    fetch(ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() }, body: JSON.stringify(body) })
+      .then(function (r) { return r.text().then(function (t) { var d = {}; try { d = JSON.parse(t); } catch (e) {} return { ok: r.ok, status: r.status, d: d }; }); })
+      .then(function (res) {
+        if (!res.ok) { say(res.d.error || ('Not saved (HTTP ' + res.status + ').'), 'text-error'); load(); return; }
+        if (after) after(res.d); else if (res.d.restarting) { state.textContent = 'Restarting…'; addr.textContent = '\u00a0'; dot.classList.remove('on'); el('lwLaunch').disabled = true; schedule(700); }
+        else if (res.d.note) say(res.d.note, 'text-warning');
+        else status.classList.add('hidden');
+      })
+      .catch(function () { say('Not saved (no answer from the server).', 'text-error'); });
+  }
+
+  function apply() {
+    if (!current) return;
+    post({ host: hostSel.value || current.host, port: parseInt(portInp.value, 10) });
+  }
+  hostSel.addEventListener('change', apply);
+  el('lwPortApply').addEventListener('click', apply);
+  portInp.addEventListener('keydown', function (e) { if (e.key === 'Enter') apply(); });
+  minim.addEventListener('change', function () { if (current) post({ host: current.host, port: current.port, start_minimized: minim.checked }, function () {}); });
+  auto.addEventListener('change', function () { if (current) post({ host: current.host, port: current.port, autostart: auto.checked }, function (d) { if (d.autostart_error) say('Run at login could not be changed: ' + d.autostart_error, 'text-warning'); }); });
+
+  // The three window buttons work through the desktop launcher's bridge;
+  // in a plain browser Launch GUI just opens the app. Inside the launcher
+  // Launch GUI opens the address shown — the real interface and port, what
+  // other devices use. No fallback: like Companion, it opens what the user
+  // chose.
+  el('lwLaunch').addEventListener('click', function () {
+    if (!current || current.running === false) return;
+    if (!native) { window.open(location.origin + '/atem/', '_blank'); return; }
+    window.pywebview.api.launch(current.url);
+    say('Opened ' + current.url, 'text-base-content/70');
+  });
+  el('lwHide').addEventListener('click', function () { if (native) window.pywebview.api.hide(); });
+  el('lwQuit').addEventListener('click', function () {
+    fetch(QUIT, { method: 'POST', headers: { 'X-CSRFToken': csrf() } })
+      .then(function (r) { if (!r.ok) { say('Could not stop the server (HTTP ' + r.status + ').', 'text-error'); return; } state.textContent = 'Stopped'; addr.textContent = ''; dot.classList.remove('on'); if (native) setTimeout(function () { window.pywebview.api.hide(); }, 300); })
+      .catch(function () { say('Could not stop the server from here.', 'text-error'); });
+  });
+  window.addEventListener('pywebviewready', function () {
+    native = true; el('lwHide').hidden = false; el('lwQuit').hidden = false;
+  });
+  if (window.pywebview && window.pywebview.api) { native = true; el('lwHide').hidden = false; el('lwQuit').hidden = false; }
+  load();
+})();
+</script>
+{% endblock %}

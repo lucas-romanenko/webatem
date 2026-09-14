@@ -1,0 +1,17 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:   # dependabot-automerge.yml re-runs CI on main after a merge
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t webatem .
+      - name: Run test suite
+        run: docker run --rm --entrypoint pytest webatem tests/ -q

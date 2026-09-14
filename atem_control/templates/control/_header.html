@@ -1,0 +1,152 @@
+        <!-- Header -->
+        <div class="card bg-base-200 mb-6">
+            <div class="card-body py-6">
+                <!-- auto / 1fr / auto: title + connect controls take what they need,
+                     the button row gets the rest (minmax(0,…) so it can shrink and
+                     wrap instead of overflowing into its neighbours). -->
+                <div class="grid grid-cols-1 lg:grid-cols-[auto_minmax(0,1fr)_auto] gap-6 items-center">
+                    
+                    <!-- Left: the mark, a rule, the connection. No wordmark
+                         here (Lucas, 2026-09-14) — on the control page the
+                         switcher is the subject, so the mark stands alone at
+                         40 px and the switcher's name is the h1: mono 15,
+                         dot pvw when connected / faint when not, IP smaller
+                         and faint after it. The version is the launcher
+                         window's business, not an operator's. -->
+                    <div class="flex items-center gap-[18px] justify-center lg:justify-start flex-wrap">
+                        <span class="brand-mark" style="width:40px;height:40px" role="img" aria-label="WebATEM">{% include "brand/_mark.svg" %}</span>
+                        <span class="hidden sm:block" style="width:1px;height:26px;background:var(--border)"></span>
+                        <h1 class="brand-data flex items-center gap-[10px] font-normal" style="font-size:15px;color:var(--text)">
+                            <span class="rounded-full" style="width:8px;height:8px;flex:none"
+                                  :style="{ background: $store.atem.connected ? 'var(--pvw)' : 'var(--text-faint)' }"></span>
+                            <span x-text="$store.atem.state.atem_name || ($store.atem.connected ? 'Connected' : 'Not connected')"></span>
+                            <span x-show="$store.atem.currentIP" x-text="$store.atem.currentIP" style="font-size:12px;color:var(--text-faint)"></span>
+                        </h1>
+                    </div>
+                    
+                    <!-- Center: Action Buttons. Labels collapse to icon-only chips
+                         (tooltips remain) below 2xl so the row never overlaps the
+                         title or the connect controls at laptop widths. -->
+                    <div class="flex justify-center flex-wrap items-center gap-3">
+                        <button class="btn bg-base-300 hover:bg-base-content hover:text-base-100 border-0 gap-2 shadow-md"
+                            @click="mediaPoolOpen = true; ATEMControl.cmd && ATEMControl.cmd('media_pool_refresh')"
+                            :class="!$store.atem.connected ? 'btn-disabled opacity-50' : ''"
+                            :disabled="!$store.atem.connected"
+                            title="View media pool">
+                            <i class="bi bi-collection-play text-lg"></i>
+                            <span class="font-semibold hidden 2xl:inline">Media Pool</span>
+                        </button>
+                        <button class="btn bg-base-300 hover:bg-base-content hover:text-base-100 border-0 gap-2 shadow-md"
+                            @click="audioPanelOpen = true"
+                            :class="!$store.atem.connected ? 'btn-disabled opacity-50' : ''"
+                            :disabled="!$store.atem.connected"
+                            title="Fairlight audio mixer">
+                            <i class="bi bi-music-note-beamed text-lg"></i>
+                            <span class="font-semibold hidden 2xl:inline">Audio</span>
+                        </button>
+                        <button class="btn bg-base-300 hover:bg-base-content hover:text-base-100 border-0 gap-2 shadow-md"
+                            @click="window.AtemHyperdeck.open()"
+                            :class="(!$store.atem.connected || !(($store.atem.state?.hyperdecks)||[]).some(h => h.configured)) ? 'btn-disabled opacity-50' : ''"
+                            :disabled="!$store.atem.connected || !(($store.atem.state?.hyperdecks)||[]).some(h => h.configured)"
+                            :title="!(($store.atem.state?.hyperdecks)||[]).some(h => h.configured) ? 'No HyperDecks configured — add one in Settings → HyperDecks' : 'HyperDeck transport'">
+                            <i class="bi bi-camera-reels text-lg"></i>
+                            <span class="font-semibold hidden 2xl:inline">HyperDeck</span>
+                        </button>
+                        <!-- Save/Load switcher state, merged into one menu. Load
+                             restores the whole switcher — keeping it one deliberate
+                             click away from the live surface is intentional. -->
+                        <div class="dropdown">
+                            <button type="button" tabindex="0"
+                                    class="btn bg-base-300 hover:bg-base-content hover:text-base-100 border-0 gap-2 shadow-md"
+                                    @mousedown="dropdownToggle($event)"
+                                    :class="!$store.atem.currentIP ? 'btn-disabled opacity-50' : ''"
+                                    :disabled="!$store.atem.currentIP"
+                                    :title="!$store.atem.currentIP ? 'Connect to ATEM first' : 'Save or load switcher state (XML profile)'">
+                                <i class="bi bi-archive text-lg"></i>
+                                <span class="font-semibold hidden 2xl:inline">Profile</span>
+                                <i class="bi bi-chevron-down text-xs opacity-60"></i>
+                            </button>
+                            <ul tabindex="0" class="dropdown-content menu p-2 shadow-lg bg-base-100 rounded-box w-56 max-w-[calc(100vw-2rem)] z-30 mt-2">
+                                <li>
+                                    <a href="javascript:void(0)"
+                                       @click="window.AtemProfile.openSaveDialog($store.atem.currentIP, $data); document.activeElement.blur()">
+                                        <i class="bi bi-download"></i>Save state…
+                                    </a>
+                                </li>
+                                <li>
+                                    <a href="javascript:void(0)"
+                                       @click="window.AtemProfile.openLoadDialog($store.atem.currentIP, $data); document.activeElement.blur()">
+                                        <i class="bi bi-upload"></i>Load state…
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                        <button class="btn bg-base-300 hover:bg-base-content hover:text-base-100 border-0 gap-2 shadow-md"
+                            @click="settingsOpen = true" title="Settings">
+                            <i class="bi bi-gear text-lg"></i>
+                            <span class="font-semibold hidden 2xl:inline">Settings</span>
+                        </button>
+                    </div>
+                    
+                    <!-- Right: Connection Controls -->
+                    {% comment %} flex-wrap + min-w-0: on a 320px phone the history
+                    button, the IP input, Connect and ✕ do not fit on one line, and the
+                    input would not shrink (a text input's automatic minimum is its size
+                    attribute), so ✕ hung 21px off the screen. {% endcomment %}
+                    <div class="flex flex-wrap justify-center lg:justify-end gap-3 items-center">
+                        <!-- IP Input with Recent Dropdown + Connect Button Group -->
+                        <div class="flex relative min-w-0 flex-1 lg:flex-none">
+                            {% if recent_atems %}
+                            <div class="dropdown dropdown-start">
+                                <button type="button" tabindex="0" class="h-12 px-3 border border-r-0 border-[var(--input-line)] rounded-l-lg bg-base-300 hover:bg-base-100 flex items-center justify-center cursor-pointer">
+                                    <i class="bi bi-clock-history text-base-content/60 text-lg"></i>
+                                </button>
+                                <ul tabindex="0" class="dropdown-content menu p-2 shadow-lg bg-base-100 rounded-box w-[calc(100vw-6rem)] sm:w-64 z-[1] mt-2" onclick="event.stopPropagation()">
+                                    {% for atem in recent_atems %}
+                                    <li>
+                                        <a 
+                                            href="javascript:void(0)"
+                                            onclick="ATEMControl.connect('{{ atem.ip_address }}', true);"
+                                            class="hover:bg-base-200"
+                                         >
+                                            <div class="flex flex-col">
+                                                <span class="font-medium">
+                                                    {% if atem.equipment_name %}
+                                                        {{ atem.equipment_name }}
+                                                    {% else %}
+                                                        {{ atem.ip_address }}
+                                                    {% endif %}
+                                                </span>
+                                                <span class="text-xs text-base-content/60">{{ atem.ip_address }}</span>
+                                            </div>
+                                        </a>
+                                    </li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                            {% endif %}
+                            <input
+                                type="text"
+                                class="brand-data h-12 px-3 min-w-0 flex-1 border border-[var(--input-line)] {% if recent_atems %}border-l-0{% else %}rounded-l-lg{% endif %} border-r-0 w-52 outline-none focus:outline-none focus:ring-0 bg-[var(--input)]"
+                                placeholder="Enter IP address"
+                                autocomplete="off"
+                                x-model="$store.atem.inputs.quickConnectIP"
+                                @input="$store.atem.quickConnectQueryChanged()"
+                                @keydown.enter.prevent="$store.atem.quickConnectEnter()"
+                                @keydown.arrow-down.prevent="$store.atem.quickConnectMove(1)"
+                                @keydown.arrow-up.prevent="$store.atem.quickConnectMove(-1)"
+                                @keydown.escape="$store.atem.quickConnectOpen = false"
+                                @blur="$store.atem.quickConnectOpen = false"
+                            >
+                            <button class="btn btn-primary h-12 border-l-0 rounded-l-none" @click="$store.atem.quickConnect()">
+                                <i class="bi bi-plug-fill text-lg"></i>
+                            </button>
+                        </div>
+                        <!-- Compact Disconnect Button -->
+                        <button class="btn btn-square btn-outline btn-error" @click="$store.atem.disconnect()" title="Disconnect">
+                            <i class="bi bi-x-lg text-lg"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>

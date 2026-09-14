@@ -1,0 +1,88 @@
+# Publish WebATEM to PyPI on a v* tag, via trusted publishing (OIDC): no
+# API token in this repository. PyPI must know this workflow first: on
+# pypi.org add a (pending) publisher for project "webatem" with owner
+# lucas-romanenko, repository webatem, workflow publish.yml, environment
+# pypi. The tag must be "v" + the version in pyproject.toml, and the job
+# refuses to build otherwise. Re-publish an existing tag with "Run
+# workflow" and the tag name (a no-op if the files are already there).
+#
+# Why the tag and not the GitHub release: the release is created by the
+# desktop build with the workflow token, and events raised with that token
+# never start other workflows — v0.2.3 reached GitHub and GHCR but not PyPI
+# until this was run by hand. The tag push is the one thing that always
+# happens, and it is what the desktop and image workflows key on too.
+name: Publish to PyPI
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to publish (e.g. v0.2.0)"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Tag matches pyproject version
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          version="$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')"
+          echo "tag=$TAG version=$version"
+          test "$TAG" = "v$version"
+      # The stylesheet is built, not committed; the wheel must carry it.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Build CSS
+        run: |
+          npm ci || npm install
+          npx tailwindcss -c tailwind.config.js -i styles/app.css \
+            -o atem_control/static/vendor/webatem.css --minify
+      - name: Build sdist and wheel
+        run: |
+          pip install build
+          python -m build
+      - name: Check the distributions
+        run: |
+          pip install twine
+          twine check dist/*
+          python - <<'PY'
+          import glob, sys, zipfile
+          names = zipfile.ZipFile(glob.glob('dist/*.whl')[0]).namelist()
+          need = ['atem_control/static/vendor/webatem.css', 'webatem/templates/base.html', 'webatem/launcher.py', 'atem_control/migrations/0001_initial.py']
+          missing = [n for n in need if n not in names]
+          print(len(names), 'files in the wheel;', 'missing:', missing or 'none')
+          sys.exit(1 if missing else 0)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: ${{ github.event_name == 'workflow_dispatch' }}
