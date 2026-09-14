@@ -874,17 +874,33 @@ def _run_tray(supervisor, controller, window) -> None:
     icon.run()
 
 
-def _listen_host(cfg: dict, has_window: bool):
+def _listen_host(cfg: dict, has_window: bool, resume: bool = False):
     """Where the public server starts, or None for "wait for a choice".
 
-    Under the window NOTHING listens until the user has chosen an interface
-    in it — at every launch. The saved interface is not applied on its own:
-    0.5.1 did that and a reinstall came up serving on a months-old VPN
-    choice (Lucas: "by default the server should not be running"; a choice
-    is made in the window, and starts the server). Without a window nobody
-    could choose, so the tray-only and foreground modes start on the saved
-    or default address as before."""
-    return None if has_window else cfg['host']
+    Two rules that look opposed and are not:
+
+    * A plain launch waits. Nothing listens until the user has chosen an
+      interface in the window — at EVERY launch. The saved interface is
+      never applied on its own: 0.5.1 did that and a reinstall came up
+      serving on a months-old VPN choice ("by default the server should not
+      be running").
+    * Unless the user has already asked for it to come up on its own —
+      ``resume``: Run at login is on, this IS the login start, or Start
+      minimized is set. Then it starts on the interface they chose, which
+      is the entire point of those switches: a machine that boots into a
+      working server without anyone opening a window (Lucas, 2026-09-14).
+
+    Still no silent substitution: a saved interface that is gone today
+    starts nothing and says so (see the supervisor), rather than quietly
+    serving on all of them.
+
+    Without a window nobody could choose, so the tray-only and foreground
+    modes start on the saved or default address as before."""
+    if not has_window:
+        return cfg['host']
+    if resume and cfg['source'] != 'default':
+        return cfg['host']
+    return None
 
 
 def main() -> None:
@@ -937,7 +953,10 @@ def main() -> None:
         except OSError as e:
             print(f'No loopback port for the launcher window ({e}); the window is off.', flush=True)
             has_window = False
-    listen_host = _listen_host(cfg, has_window)
+    # "Run at login" and "Start minimized" are standing instructions to come
+    # up working; so is this being the login start itself.
+    resume = autostarted or bool(cfg.get('start_minimized')) or autostart_enabled()
+    listen_host = _listen_host(cfg, has_window, resume)
     supervisor = _Supervisor(None, listen_host, port, launcher_socket=launcher_socket)
     if launcher_socket is not None:
         supervisor.launcher_port = launcher_socket.getsockname()[1]
