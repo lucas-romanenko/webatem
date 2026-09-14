@@ -41,9 +41,12 @@ builds apply as constraints (`pip install -c requirements.txt ".[desktop]"`). Th
 tray and window libraries are the `desktop` extra — a server never installs
 them; `pipx install "webatem[desktop]"` is the launcher, plain `webatem` the
 headless server. The device libraries `atemwire` and `hyperdeckwire` come from
-the `lucas-romanenko/bmdwire` monorepo via PyPI; Dependabot opens the bump
-PRs (`.github/dependabot.yml`, cooldown excluded for those two) and
-`dependabot-automerge.yml` merges them once CI is green.
+the `lucas-romanenko/bmdwire` monorepo via PyPI. Pins are bumped BY HAND
+(`pyproject.toml`), on purpose: this repo has no bots in it — no
+Dependabot config, no auto-merge — because a bot commit or pull request
+puts a machine in the contributor list of what is a portfolio piece
+(Lucas, 2026-09-14). The libraries are his own, so he knows when they
+move.
 
 ## Layout
 
