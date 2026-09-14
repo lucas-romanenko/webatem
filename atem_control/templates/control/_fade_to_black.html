@@ -1,0 +1,38 @@
+                <!-- Fade to Black -->
+                <div class="card bg-base-200">
+                    <div class="card-body">
+                        <h2 class="card-title mb-2">
+                            <i class="bi bi-circle-fill text-base-content"></i>
+                            Fade to Black
+                        </h2>
+                        
+                        <div class="space-y-3">
+                            <div class="flex justify-start">
+                                <button 
+                                    :class="$store.atem.getControlButtonClass('ftb')"
+                                    @click="$store.atem.send('fade_to_black')"
+                                    class="aspect-square flex items-center justify-center font-semibold text-center leading-tight p-1 transition-all duration-200 hover:scale-105 active:scale-95 min-h-9 min-w-9 text-xs sm:min-h-10 sm:min-w-10 lg:min-h-12 lg:min-w-12 xl:min-h-14 xl:min-w-14 2xl:min-h-16 2xl:min-w-16">
+                                    FTB
+                                </button>
+                            </div>
+                            
+                            <!-- FTB Rate with correct ID -->
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-medium whitespace-nowrap">Rate:</span>
+                                <input 
+                                    type="text" 
+                                    :class="$store.atem.getRateInputClass('ftb')"
+                                    class="w-16 h-8"
+                                    id="ftbRate"
+                                    x-model="$store.atem.inputs.ftbRate"
+                                    @keydown.enter="$store.atem.send('set_ftb_rate', {rate: $store.atem.inputs.ftbRate}); $event.target.blur()"
+                                >
+                                <button 
+                                    class="btn btn-primary btn-sm"
+                                    @click="$store.atem.send('set_ftb_rate', {rate: $store.atem.inputs.ftbRate})">
+                                    Set
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>

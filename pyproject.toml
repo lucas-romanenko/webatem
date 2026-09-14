@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "webatem"
+version = "1.0.0"
+description = "Browser-based control for Blackmagic ATEM switchers: run it, open the browser, your switchers are there"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [{ name = "Lucas Romanenko" }]
+# Exact pins on purpose: this is an application, installed into its own
+# environment (pipx, Docker, the desktop bundle), and one list here is what
+# Dependabot bumps. The two device libraries come from
+# github.com/lucas-romanenko/bmdwire.
+# Framework requirements are RANGES: WebATEM is also installed as a library
+# by a larger Django project that pins its own framework versions, and an
+# exact pin here would make the two unresolvable. The two device libraries
+# are exact — WebATEM decides which protocol code its host runs. WebATEM's
+# own builds (the image, the desktop bundles, CI) are reproducible through
+# requirements.txt, the exact-pin lock applied on top of these ranges.
+dependencies = [
+    "Django>=6.0,<7",
+    "channels>=4.3,<5",
+    "uvicorn[standard]>=0.30,<1",
+    "pillow>=10,<14",
+    "whitenoise>=6,<7",
+    "zeroconf>=0.140,<1",
+    "ifaddr>=0.2,<1",
+    "atemwire==0.15.0.dev1",
+    "hyperdeckwire==0.1.0.dev1",
+]
+
+[project.optional-dependencies]
+# The menu-bar / tray launcher and its window: the downloads and pipx users
+# want them; a server (Docker, or a project hosting the app) never does.
+desktop = [
+    "pystray>=0.19,<1",
+    "pywebview>=6,<7",
+]
+test = [
+    "pytest>=9,<10",
+    "pytest-django>=4.11,<5",
+    "pytest-timeout>=2.3,<3",
+]
+
+[project.scripts]
+webatem = "webatem.launcher:main"
+
+[project.urls]
+Repository = "https://github.com/lucas-romanenko/webatem"
+Issues = "https://github.com/lucas-romanenko/webatem/issues"
+
+[tool.setuptools.packages.find]
+include = ["webatem", "webatem.*", "atem_control", "atem_control.*"]
+exclude = ["atem_control.js*"]
+
+[tool.setuptools.package-data]
+webatem = ["templates/**/*"]
+atem_control = ["templates/**/*.html", "static/**/*"]

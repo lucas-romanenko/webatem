@@ -1,0 +1,222 @@
+name: Desktop builds
+
+# Builds the self-contained WebATEM desktop launcher for each OS. Run it
+# by hand (Actions -> Desktop builds -> Run workflow) to get downloadable
+# binaries, or push a v* tag to attach them to a GitHub Release.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch: {}
+
+# The tag build creates/updates a GitHub Release, which needs write access to
+# repo contents (the default GITHUB_TOKEN is read-only).
+permissions:
+  contents: write
+
+# Python version used for every desktop build. The Intel-Mac job installs the
+# universal2 python.org build at this exact version and runs it x86_64 under
+# Rosetta; the others get it from actions/setup-python.
+env:
+  PY_VERSION: '3.14.0'
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Build on the OLDEST supported Ubuntu so the binary's glibc floor
+          # is low enough to run on 22.04 LTS servers (and everything newer).
+          - { os: ubuntu-22.04,   name: linux-x64,     asset: webatem-linux-x64 }
+          # Both Mac binaries build on the Apple-Silicon runner: arm64 natively,
+          # and Intel (x86_64) under Rosetta 2. GitHub retired the standalone
+          # macos-13 Intel runners (they never scheduled — jobs queued 24h then
+          # cancelled), so this is the only reliable way to ship an Intel build.
+          - { os: macos-latest,   name: macos-arm64,   asset: webatem-macos-arm64.dmg, mac_arch: arm64 }
+          - { os: macos-latest,   name: macos-intel,   asset: webatem-macos-intel.dmg, mac_arch: x86_64 }
+          - { os: windows-latest, name: windows-x64,   asset: webatem-windows-x64-setup.exe }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      # 1. Compile the Tailwind/daisyUI stylesheet (same output as the Docker
+      #    css stage) so collectstatic bundles it. Node is architecture-neutral
+      #    here (it only emits CSS text), so the arm64 runner is fine for both
+      #    Mac builds.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Build CSS
+        run: |
+          npm ci || npm install
+          npx tailwindcss -c tailwind.config.js -i styles/app.css \
+            -o atem_control/static/vendor/webatem.css --minify
+
+      # 2a. Python for every build EXCEPT the Intel-Mac one: straight from
+      #     actions/setup-python. Records `PY=python` for the shared steps.
+      - uses: actions/setup-python@v5
+        if: matrix.mac_arch != 'x86_64'
+        with:
+          python-version: ${{ env.PY_VERSION }}
+      - name: Select interpreter (native)
+        if: matrix.mac_arch != 'x86_64'
+        run: echo "PY=python" >> "$GITHUB_ENV"
+
+      # 2b. Intel Mac: install the universal2 python.org build and drive it
+      #     x86_64 through Rosetta. Every downstream step then runs `$PY` in
+      #     x86_64 mode, so pip pulls x86_64 wheels, the C extension compiles
+      #     x86_64, and PyInstaller freezes an x86_64 binary — no fat/universal2
+      #     wheels required (Pillow ships none).
+      - name: Install x86_64 Python (Rosetta)
+        if: matrix.mac_arch == 'x86_64'
+        run: |
+          set -euxo pipefail
+          curl -fsSL -o /tmp/python.pkg \
+            "https://www.python.org/ftp/python/${PY_VERSION}/python-${PY_VERSION}-macos11.pkg"
+          sudo installer -pkg /tmp/python.pkg -target /
+          PYBIN="/Library/Frameworks/Python.framework/Versions/${PY_VERSION%.*}/bin/python3"
+          echo "PY=arch -x86_64 $PYBIN" >> "$GITHUB_ENV"
+          echo "ARCHFLAGS=-arch x86_64" >> "$GITHUB_ENV"
+          arch -x86_64 "$PYBIN" -c "import platform, sys; print('interp arch:', platform.machine(), sys.version)"
+
+      # 3. Deps + PyInstaller into that interpreter.
+      - name: Install dependencies
+        run: |
+          $PY -m pip install --upgrade pip setuptools wheel
+          $PY -m pip install -c requirements.txt ".[desktop]" pyinstaller
+
+      # 4. atemwire (PyPI sdist) built its mediaconvert C extension inside the
+      #    pip install above with THIS build's compiler + architecture
+      #    (ARCHFLAGS forces x86_64 for the Rosetta build). Prove it imports.
+      - name: Check the C extension
+        run: $PY -c "import atemwire.mediaconvert, hyperdeckwire; print('atemwire.mediaconvert OK')"
+
+      # 6. Freeze into one self-contained executable. `$PY -m PyInstaller` keeps
+      #    the freeze in the same interpreter/arch as everything above.
+      - name: PyInstaller
+        run: $PY -m PyInstaller build/desktop/webatem.spec --distpath dist --workpath build/pyi -y
+
+      # 6b. Run what we just froze. A desktop build that cannot start is the
+      #     one failure a green build hid: 0.6.4/0.6.5 shipped a Windows folder
+      #     that raised on launch ("Unhandled exception in script"), because
+      #     nothing here had ever executed the frozen binary. Tray and browser
+      #     off, a throwaway data dir, a spare port: it must answer the connect
+      #     page. The log is the app's own (a windowed build has no console).
+      - name: Smoke test the frozen build
+        run: |
+          set -uxo pipefail
+          mkdir -p smoke
+          case "$RUNNER_OS" in
+            Windows) APP="dist/WebATEM/webatem.exe" ;;
+            macOS)   APP="dist/WebATEM.app/Contents/MacOS/webatem" ;;
+            *)       APP="dist/webatem" ;;
+          esac
+          DATA_DIR="$PWD/smoke" WEBATEM_NO_TRAY=1 WEBATEM_NO_BROWSER=1 HOST=127.0.0.1 PORT=8899 \
+            "$APP" > smoke/stdout.txt 2>&1 &
+          APP_PID=$!
+          ok=
+          for i in $(seq 1 60); do
+            curl -fsS -o /dev/null http://127.0.0.1:8899/atem/ && { ok=1; break; }
+            kill -0 "$APP_PID" 2>/dev/null || break
+            sleep 2
+          done
+          echo "--- the app's own log ---"; cat smoke/webatem.log 2>/dev/null || echo "(none)"
+          echo "--- stdout/stderr ---";     cat smoke/stdout.txt 2>/dev/null || echo "(none)"
+          kill "$APP_PID" 2>/dev/null || true
+          [ -n "$ok" ] || { echo "::error::the frozen build never served /atem/"; exit 1; }
+          echo "the frozen build serves /atem/"
+
+      # 7. Package per-OS: macOS -> ad-hoc-signed .app in a drag-to-Applications
+      #    .dmg; Windows -> an Inno Setup installer around the app folder;
+      #    Linux -> the bare binary. The Windows download was a single
+      #    self-extracting exe until 0.6.3 (which Chrome blocked as a virus —
+      #    that shape is what heuristic scanners score worst) and then a zip,
+      #    which is not how a finished application arrives.
+      - name: Package
+        run: |
+          set -euxo pipefail
+          mkdir -p out
+          case "$RUNNER_OS" in
+            macOS)
+              # Confirm the frozen binary is actually the arch we intended
+              # before we ship it under an arch-specific name.
+              got=$(lipo -archs dist/WebATEM.app/Contents/MacOS/webatem | tr -d '[:space:]')
+              want="${{ matrix.mac_arch }}"
+              echo "built arch: $got (want $want)"
+              [ "$got" = "$want" ] || { echo "::error::built $got but wanted $want"; exit 1; }
+              # Ad-hoc sign so the app runs without the codesign dance (Apple
+              # Silicon refuses unsigned binaries). Not notarized — the first
+              # open still needs right-click Open / Open Anyway.
+              codesign --force --deep --sign - dist/WebATEM.app
+              codesign --verify --deep --strict dist/WebATEM.app && echo "ad-hoc signed OK"
+              mkdir -p dmgroot
+              cp -R dist/WebATEM.app dmgroot/
+              ln -s /Applications dmgroot/Applications
+              hdiutil create -volname WebATEM -srcfolder dmgroot -ov -format UDZO "out/${{ matrix.asset }}"
+              ;;
+            Windows)
+              # dist/WebATEM/ (webatem.exe beside its _internal folder) goes
+              # into a per-user installer: Programs folder, Start menu entry,
+              # an uninstaller in Settings > Installed apps, no admin prompt.
+              ISCC="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
+              [ -x "$ISCC" ] || choco install innosetup -y --no-progress
+              [ -x "$ISCC" ] || ISCC=$(command -v iscc)
+              version=$(grep -m1 '^version' pyproject.toml | cut -d'"' -f2)
+              # No flags: Git Bash mangles /Oout into a path and passes
+              # //Oout through literally, and ISCC rejects both. The version
+              # goes in a generated include instead; the output directory is
+              # set inside the script.
+              printf '#define MyVersion "%s"\n' "$version" > build/desktop/version.iss
+              "$ISCC" build/desktop/webatem.iss
+              ls -la out
+              [ -f "out/${{ matrix.asset }}" ] || { echo "::error::the installer was not produced"; ls -la out; exit 1; }
+              ;;
+            *)
+              cp dist/webatem "out/${{ matrix.asset }}"
+              ;;
+          esac
+
+      # 7b. Windows: install what we just built and run THAT. The earlier
+      #     smoke test proves the frozen folder works; this proves the thing
+      #     the user actually receives does — silent per-user install, launch
+      #     the installed exe, serve a page, then uninstall silently.
+      - name: Install the installer and run what it installed
+        if: runner.os == 'Windows'
+        run: |
+          set -uxo pipefail
+          ./out/${{ matrix.asset }} /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG=install.log
+          APP="$LOCALAPPDATA/Programs/WebATEM/webatem.exe"
+          ls -la "$LOCALAPPDATA/Programs/WebATEM" | head -5
+          [ -f "$APP" ] || { echo "::error::the installer did not put webatem.exe where it said"; tail -40 install.log; exit 1; }
+          mkdir -p smoke2
+          DATA_DIR="$PWD/smoke2" WEBATEM_NO_TRAY=1 WEBATEM_NO_BROWSER=1 HOST=127.0.0.1 PORT=8898 \
+            "$APP" > smoke2/stdout.txt 2>&1 &
+          APP_PID=$!
+          ok=
+          for i in $(seq 1 60); do
+            curl -fsS -o /dev/null http://127.0.0.1:8898/atem/ && { ok=1; break; }
+            kill -0 "$APP_PID" 2>/dev/null || break
+            sleep 2
+          done
+          echo "--- installed app output ---"; cat smoke2/stdout.txt 2>/dev/null; cat smoke2/webatem.log 2>/dev/null
+          kill "$APP_PID" 2>/dev/null || true
+          "$LOCALAPPDATA/Programs/WebATEM/unins000.exe" /VERYSILENT /SUPPRESSMSGBOXES || true
+          [ -n "$ok" ] || { echo "::error::the INSTALLED app never served /atem/"; exit 1; }
+          echo "installed, ran, served, uninstalled"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: out/${{ matrix.asset }}
+          if-no-files-found: error
+
+      # On a v* tag, attach the binaries to the Release.
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/${{ matrix.asset }}

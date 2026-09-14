@@ -1,0 +1,8 @@
+{% comment %}
+USK-flavored wrapper for control/_slider.html: fixes the state container
+to the active-M/E keyer object and the method index argument to k (the
+USK accordion x-for variable), so the 26 USK call sites only spell out
+what varies — label / field / base / range / fallback / display shape.
+All other _slider.html params pass through by context.
+{% endcomment %}
+{% include 'control/_slider.html' with container="$store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]" idx="k" %}

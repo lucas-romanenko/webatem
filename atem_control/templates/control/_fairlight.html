@@ -1,0 +1,1378 @@
+    <!-- ===================================================================
+         Fairlight Audio Mixer Panel
+         ===================================================================
+         A full-screen overlay that drops in from the top, mirroring the
+         channel-strip layout of ATEM Software Control's audio tab.
+         Per-strip controls (volume / mix-type / pan / input gain) and the
+         master strip are wired to the websocket commands defined in
+         atem_control/commands.py. Real-time meters arrive via
+         dedicated 'audio_meter_strip' / 'audio_meter_master' messages
+         (~25 Hz) and are painted via direct DOM writes — see
+         AudioMeters in atem_control.js.
+
+         EQ band detail / dynamics tuning aren't surfaced in this MVP
+         (per pyatem coverage: comp/lim/exp can't be written today). -->
+    <div class="fixed inset-0 z-[200] pointer-events-none" x-show="audioPanelOpen" x-cloak
+         @keydown.escape.window="if (!audioModal) audioPanelOpen = false">
+        <!-- Backdrop. x-show on the backdrop is load-bearing — without it,
+             Alpine's transition system on this element keeps inline styles
+             around after close that combined with rgba background showed
+             as a "transparent black layer" still capturing clicks. With
+             x-show wired to the same flag the wrapper uses, the leave
+             transition runs against display:none cleanly. -->
+        <div class="atem-overlay-backdrop absolute inset-0 pointer-events-auto"
+             @click="audioPanelOpen = false"
+             x-show="audioPanelOpen"
+             x-transition:enter="transition-opacity ease-out duration-200"
+             x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+             x-transition:leave="transition-opacity ease-in duration-150"
+             x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"></div>
+
+        <!-- Panel — sized like Media Pool so it always fits the viewport;
+             internal flex-col + min-h-0 lets the channel row absorb resize. -->
+        <div class="absolute inset-4 md:inset-8 lg:inset-12
+                    bg-base-200 shadow-2xl pointer-events-auto
+                    flex flex-col rounded-lg overflow-hidden"
+             @click.stop
+             x-show="audioPanelOpen"
+             x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="transform scale-95 opacity-0"
+             x-transition:enter-end="transform scale-100 opacity-100"
+             x-transition:leave="transition ease-in duration-150"
+             x-transition:leave-start="transform scale-100 opacity-100"
+             x-transition:leave-end="transform scale-95 opacity-0">
+            <!-- Header -->
+            <div class="flex items-center justify-between p-4 border-b border-base-300 flex-shrink-0">
+                <h2 class="text-lg font-semibold flex items-center gap-2">
+                    <i class="bi bi-sliders"></i>
+                    Fairlight Audio Mixer
+                    <span class="text-sm text-base-content/50 font-normal ml-2"
+                          x-show="$store.atem.state && $store.atem.state.audio && $store.atem.state.audio.present"
+                          x-text="($store.atem.state?.audio?.strips?.length || 0) + ' strips'"></span>
+                    <span class="text-sm text-base-content/50 font-normal ml-2"
+                          x-show="!$store.atem.state || !$store.atem.state.audio || !$store.atem.state.audio.present">
+                        Loading…
+                    </span>
+                </h2>
+                <button class="btn btn-ghost btn-sm" @click="audioPanelOpen = false" title="Close (Esc)">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+
+            <!-- Loading state -->
+            <div x-show="!$store.atem.state || !$store.atem.state.audio || !$store.atem.state.audio.present"
+                 class="flex-1 flex items-center justify-center">
+                <div class="flex flex-col items-center gap-3">
+                    <span class="loading loading-spinner loading-lg"></span>
+                    <span class="text-sm text-base-content/60">
+                        Waiting for Fairlight audio state…
+                    </span>
+                </div>
+            </div>
+
+            <!--
+              Audio mixer layout — mimics ATEM Software Control's audio tab.
+
+              The grid-template-rows definition below is the load-bearing
+              structural piece: it pins each strip's row heights to the
+              same values, so the labels rail (Input / Equalizer /
+              Dynamics / dB / Pan / Phones) on the left lines up
+              horizontally across every strip and the master.
+
+              Rows: header(28px) input(74px) eq(64px) dyn(64px)
+                    db-readout(22px) channel(1fr) fader-value(22px)
+                    pan(74px) mix-buttons(28px) phones(28px)
+            -->
+            <div x-show="$store.atem.state && $store.atem.state.audio && $store.atem.state.audio.present"
+                 class="flex-1 min-h-0 overflow-x-auto overflow-y-auto flex pb-3 audio-mixer-root">
+
+                <!-- Labels rail (sticky left) -->
+                <div class="audio-strip-grid sticky left-0 z-10 bg-base-200
+                            text-[11px] text-base-content/60 border-r border-base-300
+                            w-[88px] min-w-[88px] flex-shrink-0 px-3 uppercase tracking-wider">
+                    <div class="row-header"></div>
+                    <div class="row-input flex items-center">Input</div>
+                    <div class="row-eq flex items-center">EQ</div>
+                    <div class="row-dyn flex items-center">Dyn</div>
+                    <div class="row-db flex items-center">dB</div>
+                    <div class="row-channel"></div>
+                    <div class="row-fader-value"></div>
+                    <div class="row-pan flex items-center">Pan</div>
+                    <div class="row-mix-buttons"></div>
+                    <div class="row-phones flex items-center">Mon</div>
+                </div>
+
+                <!-- Per-strip rail. Strips share the available row width
+                     equally (flex-1) with a 100px floor — so on a wide
+                     monitor they grow to fill out to the master rail, and
+                     on a narrow viewport (or a 4 M/E console with many
+                     strips) they clamp to the floor and the row scrolls
+                     horizontally inside the panel while master stays
+                     pinned to the right edge. -->
+                <div class="flex flex-1 min-w-fit">
+                    <template x-for="strip in ($store.atem.state?.audio?.strips || [])"
+                              :key="strip.strip_id">
+                        <div class="audio-strip-grid audio-strip-card flex-1 min-w-[100px]"
+                             :class="{
+                                'is-on':  strip.mix_type === 'On',
+                                'is-afv': strip.mix_type === 'AudioFollowVideo'
+                             }">
+                            <!-- Header: name + on indicator bar -->
+                            <div class="row-header flex flex-col items-center justify-end pb-0.5">
+                                <div class="text-[11px] font-semibold truncate w-full text-center"
+                                     :title="strip.name + ' (src ' + strip.source + ')'"
+                                     x-text="strip.short_name"></div>
+                                <div class="audio-on-bar w-3/4 mt-0.5"
+                                     :class="{
+                                        'is-on': strip.mix_type === 'On',
+                                        'is-afv': strip.mix_type === 'AudioFollowVideo'
+                                     }"></div>
+                            </div>
+
+                            <!-- Input gain: drag knob + numeric input.
+                                 Drag vertically; Shift = ¼ sensitivity;
+                                 dblclick = reset to 0 dB; wheel = ±2 dB
+                                 (±0.5 with Shift). Numeric input commits
+                                 on Enter or blur and isn't clobbered by
+                                 server pushes while focused. -->
+                            <div class="row-input flex flex-col items-center gap-0.5"
+                                 x-init="AudioKnob.attach($el, {
+                                    key: strip.strip_id + '|input_gain',
+                                    min: -100, max: 6, step: 0.5, defaultValue: 0,
+                                    /* Piecewise curve calibrated against
+                                       ATEM Software Control by walking the
+                                       knob to specific clock positions:
+                                         9 o'clock (16.7%) -> -46.0 dB
+                                         12 o'clock (50%)  -> -13.3 dB
+                                         3 o'clock (83.3%) -> -0.4 dB
+                                       Endpoints clamp to the wire range. */
+                                    curve: [[0,-100],[0.1667,-46],[0.5,-13.3],[0.8333,-0.4],[1,6]],
+                                    getValue: () => strip.input_gain_db ?? 0,
+                                    send: (v) => ATEMControl.cmdAudio(
+                                        'set_audio_strip_input_gain', strip, {gain_db: v}),
+                                 })"
+                                 x-effect="AudioKnob.update(strip.strip_id + '|input_gain', strip.input_gain_db ?? 0)">
+                                <div class="audio-knob">
+                                    <div class="audio-knob-indicator"></div>
+                                </div>
+                                <input type="number" class="audio-numinput"
+                                       step="0.5" min="-100" max="6">
+                            </div>
+
+                            <!-- Equalizer mini (placeholder; clickable -> modal) -->
+                            <div class="row-eq flex items-center justify-center cursor-pointer
+                                        hover:bg-base-content/5 mx-1 rounded
+                                        border border-base-300/60"
+                                 @click="audioModal = { mode: 'eq', stripId: strip.strip_id, source: strip.source, channel: strip.channel }"
+                                 title="Open EQ panel">
+                                <svg viewBox="0 0 60 32" class="w-full h-full"
+                                     xmlns="http://www.w3.org/2000/svg">
+                                    <line class="audio-mini-axis" x1="0" y1="16" x2="60" y2="16"
+                                          stroke-width="0.5"/>
+                                    <path :class="strip.eq_enable ? 'audio-mini-curve' : 'audio-mini-curve-off'"
+                                          :d="eqMiniPath(strip)"
+                                          stroke-width="1.2" fill="none"></path>
+                                </svg>
+                            </div>
+
+                            <!-- Dynamics mini: transfer curve projected from the
+                                 strip's compressor / limiter / expander blocks.
+                                 1:1 diagonal axis is the bypass reference. -->
+                            <div class="row-dyn flex items-center justify-center cursor-pointer
+                                        hover:bg-base-content/5 mx-1 rounded
+                                        border border-base-300/60"
+                                 @click="audioModal = { mode: 'dyn', stripId: strip.strip_id, source: strip.source, channel: strip.channel }"
+                                 title="Open dynamics panel">
+                                <svg viewBox="0 0 60 32" class="w-full h-full"
+                                     xmlns="http://www.w3.org/2000/svg">
+                                    <line class="audio-mini-axis" x1="0" y1="32" x2="60" y2="0"
+                                          stroke-width="0.5"/>
+                                    <path :class="dynamicsAnyEnabled(strip) ? 'audio-mini-curve' : 'audio-mini-curve-off'"
+                                          :d="dynamicsMiniPath(strip)"
+                                          stroke-width="1.2" fill="none"></path>
+                                </svg>
+                            </div>
+
+                            <!-- dB readout — live meter peak (text written
+                                 by AudioMeters._paintLevelText, blank when
+                                 silent). Distinct from the fader-value
+                                 cell below the channel, which always shows
+                                 the fader position. -->
+                            <div class="row-db flex items-center justify-center text-[11px] font-mono">
+                                <span :data-strip-id-meter-db="strip.strip_id"></span>
+                            </div>
+
+                            <!-- Channel: fader (left) + meter (right). The dB
+                                 scale labels are rendered as background ticks
+                                 on the meter container. -->
+                            <div class="row-channel relative flex justify-center gap-1.5 px-1.5">
+                                <!-- Fader (custom track + handle, controlled
+                                     by AudioFader). Drag, dblclick = 0 dB,
+                                     wheel = ±1 dB (±0.25 with Shift),
+                                     Shift-drag = ¼ sensitivity. -->
+                                <div class="audio-fader-track"
+                                     x-init="AudioFader.attach($el, {
+                                        stripId: strip.strip_id,
+                                        min: -100, max: 10, taper: 2,
+                                        getValue: () => strip.volume_db ?? -100,
+                                        send: (v) => ATEMControl.cmdAudio(
+                                            'set_audio_strip_volume', strip,
+                                            { volume_db: v <= -100 ? null : v }),
+                                     })"
+                                     x-effect="AudioFader.update(strip.strip_id, strip.volume_db ?? -100)">
+                                    <div class="audio-fader-handle"></div>
+                                </div>
+                                <!-- Meter pair (L + R) -->
+                                <div class="audio-meter-pair w-[22px] grid grid-cols-2 gap-0.5">
+                                    <div class="audio-meter-bg"
+                                         :class="{'is-muted': strip.mix_type === 'Off'}"
+                                         :data-strip-id="strip.strip_id" data-meter-channel="l">
+                                        <div class="audio-meter-fill"></div>
+                                        <div class="audio-meter-peak"></div>
+                                    </div>
+                                    <div class="audio-meter-bg"
+                                         :class="{'is-muted': strip.mix_type === 'Off'}"
+                                         :data-strip-id="strip.strip_id" data-meter-channel="r">
+                                        <div class="audio-meter-fill"></div>
+                                        <div class="audio-meter-peak"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Fader value (bottom) — written directly by
+                                 AudioFader so the number tracks the drag at
+                                 pointer rate, not the polling cadence. -->
+                            <div class="row-fader-value flex items-center justify-center text-[10px] font-mono text-base-content/70">
+                                <span :data-strip-id-fader-value="strip.strip_id"></span>
+                            </div>
+
+                            <!-- Pan knob: same drag/wheel/dblclick story as
+                                 input gain. Centre (0) = balanced stereo. -->
+                            <div class="row-pan flex flex-col items-center gap-0.5"
+                                 x-init="AudioKnob.attach($el, {
+                                    key: strip.strip_id + '|pan',
+                                    min: -100, max: 100, step: 1, defaultValue: 0,
+                                    getValue: () => strip.pan ?? 0,
+                                    send: (v) => ATEMControl.cmdAudio(
+                                        'set_audio_strip_pan', strip, {pan: v}),
+                                 })"
+                                 x-effect="AudioKnob.update(strip.strip_id + '|pan', strip.pan ?? 0)">
+                                <div class="audio-knob">
+                                    <div class="audio-knob-indicator"></div>
+                                </div>
+                                <input type="number" class="audio-numinput"
+                                       step="1" min="-100" max="100">
+                            </div>
+
+                            <!-- Mix-type toggles. ON click cycles On↔Off; AFV
+                                 click cycles AudioFollowVideo↔Off. Media-
+                                 player strips (input_type === 1, e.g. MP1
+                                 / MP2) only get AFV — playing a media
+                                 file already implies "on", so the only
+                                 sensible toggle is "follow video".
+                                 External audio (input_type === 2, Mic /
+                                 TRS) only gets ON — these inputs are not
+                                 video-tied, so AFV is not meaningful. -->
+                            <div class="row-mix-buttons flex items-stretch gap-px">
+                                <button class="audio-mix-btn flex-1"
+                                        x-show="strip.input_type !== 1"
+                                        :class="strip.mix_type === 'On' ? 'is-active is-on' : ''"
+                                        @click="ATEMControl.cmdAudio('set_audio_strip_mix_type', strip,
+                                                  {mix_type: strip.mix_type === 'On' ? 'Off' : 'On'})"
+                                        :title="strip.mix_type === 'On' ? 'Click to mute' : 'Click to enable'">ON</button>
+                                <button class="audio-mix-btn flex-1"
+                                        x-show="strip.input_type !== 2"
+                                        :class="strip.mix_type === 'AudioFollowVideo' ? 'is-active is-afv' : ''"
+                                        @click="ATEMControl.cmdAudio('set_audio_strip_mix_type', strip,
+                                                  {mix_type: strip.mix_type === 'AudioFollowVideo' ? 'Off' : 'AudioFollowVideo'})"
+                                        :title="strip.mix_type === 'AudioFollowVideo' ? 'Click to disable AFV' : 'Audio follows video'">AFV</button>
+                            </div>
+
+                            <!-- Phones (display-only — solo wire command not implemented) -->
+                            <div class="row-phones flex items-center justify-center">
+                                <div class="audio-phones-btn"
+                                     :class="strip.soloed ? 'is-soloed' : ''"
+                                     :title="strip.soloed ? 'Soloed (read-only — solo wire command not in pyatem yet)' : 'Headphones / solo (read-only)'">
+                                    <i class="bi bi-headphones"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- Master rail. sticky-right keeps it pinned to the
+                     visible edge even when the strip row scrolls — so on
+                     a 4 M/E console with many strips, scrolling reveals
+                     more strips while master stays in view. -->
+                <div class="audio-strip-grid audio-master-card sticky right-0 z-10
+                            w-[130px] min-w-[130px] flex-shrink-0"
+                     x-data="{master() { return $store.atem.state?.audio?.master ?? null; }}">
+                    <template x-if="master()">
+                        <div class="contents">
+                            <!-- Header -->
+                            <div class="row-header flex flex-col items-center justify-end pb-0.5">
+                                <div class="text-[12px] font-bold text-primary uppercase tracking-wide">Master</div>
+                                <div class="audio-on-bar w-3/4 mt-0.5 is-on"></div>
+                            </div>
+
+                            <!-- Input row: empty on master -->
+                            <div class="row-input"></div>
+
+                            <!-- EQ mini (master) -->
+                            <div class="row-eq flex items-center justify-center cursor-pointer
+                                        hover:bg-base-content/5 mx-1 rounded
+                                        border border-base-300/60"
+                                 @click="audioModal = { mode: 'eq', stripId: '_master', source: 0, channel: -1 }"
+                                 title="Open master EQ panel">
+                                <svg viewBox="0 0 60 32" class="w-full h-full"
+                                     xmlns="http://www.w3.org/2000/svg">
+                                    <line class="audio-mini-axis" x1="0" y1="16" x2="60" y2="16"
+                                          stroke-width="0.5"/>
+                                    <path :class="master().eq_enable ? 'audio-mini-curve' : 'audio-mini-curve-off'"
+                                          :d="eqMiniPath(master())"
+                                          stroke-width="1.2" fill="none"></path>
+                                </svg>
+                            </div>
+
+                            <!-- Dynamics mini (master has only make-up gain — no
+                                 comp/lim/exp blocks — so the curve always
+                                 renders as a dimmed 1:1 diagonal). -->
+                            <div class="row-dyn flex items-center justify-center cursor-pointer
+                                        hover:bg-base-content/5 mx-1 rounded
+                                        border border-base-300/60"
+                                 @click="audioModal = { mode: 'dyn', stripId: '_master', source: 0, channel: -1 }"
+                                 title="Open master dynamics panel">
+                                <svg viewBox="0 0 60 32" class="w-full h-full"
+                                     xmlns="http://www.w3.org/2000/svg">
+                                    <line class="audio-mini-axis" x1="0" y1="32" x2="60" y2="0"
+                                          stroke-width="0.5"/>
+                                    <path :class="dynamicsAnyEnabled(master()) ? 'audio-mini-curve' : 'audio-mini-curve-off'"
+                                          :d="dynamicsMiniPath(master())"
+                                          stroke-width="1.2" fill="none"></path>
+                                </svg>
+                            </div>
+
+                            <!-- dB readout — live master peak; blank when silent -->
+                            <div class="row-db flex items-center justify-center text-[11px] font-mono">
+                                <span data-strip-id-meter-db="_master"></span>
+                            </div>
+
+                            <!-- Channel: master fader + meter -->
+                            <div class="row-channel relative flex justify-center gap-1.5 px-1.5">
+                                <div class="audio-fader-track"
+                                     x-init="AudioFader.attach($el, {
+                                        stripId: '_master',
+                                        min: -100, max: 10, taper: 2,
+                                        getValue: () => master().volume_db ?? -100,
+                                        send: (v) => ATEMControl.cmd(
+                                            'set_audio_master_volume',
+                                            { volume_db: v <= -100 ? null : v }),
+                                     })"
+                                     x-effect="AudioFader.update('_master', master().volume_db ?? -100)">
+                                    <div class="audio-fader-handle"></div>
+                                </div>
+                                <div class="audio-meter-pair w-[22px] grid grid-cols-2 gap-0.5">
+                                    <div class="audio-meter-bg" data-strip-id="_master" data-meter-channel="l">
+                                        <div class="audio-meter-fill"></div>
+                                        <div class="audio-meter-peak"></div>
+                                    </div>
+                                    <div class="audio-meter-bg" data-strip-id="_master" data-meter-channel="r">
+                                        <div class="audio-meter-fill"></div>
+                                        <div class="audio-meter-peak"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row-fader-value flex items-center justify-center text-[10px] font-mono text-base-content/70">
+                                <span data-strip-id-fader-value="_master"></span>
+                            </div>
+
+                            <!-- Pan row: empty on master -->
+                            <div class="row-pan"></div>
+
+                            <!-- AFV button -->
+                            <div class="row-mix-buttons flex items-stretch gap-px">
+                                <button class="audio-mix-btn flex-1"
+                                        :class="master().afv ? 'is-active is-afv' : ''"
+                                        @click="ATEMControl.cmd('set_audio_master_afv', { afv: !master().afv })"
+                                        title="Master follows fade-to-black">AFV</button>
+                            </div>
+
+                            <!-- Phones row: read-only headphone gain display -->
+                            <div class="row-phones flex items-center justify-center text-[9px] font-mono text-base-content/50"
+                                 :title="'Headphone master gain: ' + (master().headphones?.volume_db ?? '?') + ' dB (read-only)'">
+                                <i class="bi bi-headphones"></i>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!--
+         ===================================================================
+         Audio Detail Modal — EQ + Dynamics
+         ===================================================================
+         Stacks ABOVE the audio mixer panel (z-[210] > audio's z-[200]).
+         Triggered from each strip's EQ/Dyn mini SVG; the strip currently
+         being edited is identified by audioModal.stripId, with source +
+         channel ride-along for the wire commands. Master rail uses
+         stripId === '_master' and sends source=0 channel=-1, matching the
+         CFEB / CFMP / CFSP wiring in commands.py.
+
+         EQ panel is fully writable. Dynamics is mostly read-only — only
+         dynamics_makeup_db has a setter; threshold/ratio/attack/hold/release
+         per comp/lim/exp section aren't decoded by pyatem yet, so we
+         expose them as a clear read-only notice rather than a dead UI.
+    -->
+    <div class="fixed inset-0 z-[210] pointer-events-none" x-show="audioModal" x-cloak
+         @keydown.escape.window="if (audioModal) { audioModal = null; eqGainPreview = null; }">
+        <!-- Backdrop -->
+        <div class="atem-overlay-backdrop absolute inset-0 pointer-events-auto"
+             @click="audioModal = null; eqGainPreview = null"
+             x-show="audioModal"
+             x-transition:enter="transition-opacity ease-out duration-200"
+             x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+             x-transition:leave="transition-opacity ease-in duration-150"
+             x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"></div>
+
+        <!-- Panel -->
+        <div class="absolute inset-4 md:inset-8 lg:inset-12
+                    bg-base-200 shadow-2xl pointer-events-auto
+                    flex flex-col rounded-lg overflow-hidden"
+             @click.stop
+             x-show="audioModal"
+             x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="transform scale-95 opacity-0"
+             x-transition:enter-end="transform scale-100 opacity-100"
+             x-transition:leave="transition ease-in duration-150"
+             x-transition:leave-start="transform scale-100 opacity-100"
+             x-transition:leave-end="transform scale-95 opacity-0">
+            <!-- Header -->
+            <div class="flex items-center justify-between p-4 border-b border-base-300 flex-shrink-0">
+                <h2 class="text-lg font-semibold flex items-center gap-2">
+                    <i class="bi" :class="audioModal?.mode === 'eq' ? 'bi-sliders' : 'bi-soundwave'"></i>
+                    <span x-text="audioModalTitle()"></span>
+                </h2>
+                <button class="btn btn-ghost btn-sm" @click="audioModal = null; eqGainPreview = null" title="Close (Esc)">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+
+            <!-- Body — branches on mode -->
+            <div class="flex-1 min-h-0 overflow-y-auto p-4">
+                <!-- ============================ EQ ============================ -->
+                <template x-if="audioModal?.mode === 'eq'">
+                    <div class="space-y-4">
+                        <!-- Master EQ enable -->
+                        <label class="flex items-center gap-3 cursor-pointer w-fit">
+                            <input type="checkbox" class="toggle toggle-primary"
+                                   :checked="audioModalSubject()?.eq_enable"
+                                   @change="setEqEnable($event.target.checked)">
+                            <span class="text-sm font-medium">Equalizer</span>
+                            <span class="text-xs text-base-content/50"
+                                  x-text="audioModalSubject()?.eq_enable ? 'enabled' : 'bypassed'"></span>
+                        </label>
+
+                        <!--
+                          Frequency-response visualization. SVG viewBox is
+                          1000x280, scaled to fit modal width. The curve is
+                          the cumulative dB response of all enabled bands
+                          plus the post-EQ make-up gain (right-side fader),
+                          sampled at 200 log-spaced frequencies. Numbered
+                          markers (1-6) sit at each band's (freq, gain).
+                          Display-only for now — drag-to-edit is future
+                          work (see eqMarkerPos / setBandProp).
+                        -->
+                        <div class="flex gap-3 items-stretch">
+                            <!--
+                              Aspect-ratio container so the SVG renders at
+                              its native 1000:280 ratio without stretching.
+                              The previous preserveAspectRatio=none worked
+                              for the curve path itself (which is computed
+                              in viewBox coordinates) but distorted the
+                              marker circles into ovals and squished the
+                              text labels at typical modal widths.
+                            -->
+                            <div class="flex-1 bg-base-300 rounded p-2 overflow-hidden"
+                                 style="aspect-ratio: 1000 / 280">
+                                <svg viewBox="0 0 1000 280"
+                                     class="w-full h-full block"
+                                     :class="audioModalSubject()?.eq_enable ? 'cursor-grab' : 'opacity-50'"
+                                     :style="eqBandDrag ? 'cursor: grabbing; touch-action: none;' : 'touch-action: none;'"
+                                     @pointerdown="eqStartBandDrag($event)"
+                                     @pointermove="eqDragBand($event)"
+                                     @pointerup="eqReleaseBandDrag($event)"
+                                     @pointercancel="eqReleaseBandDrag($event)">
+                                    <!-- Grid lines + axis labels (built as
+                                         an SVG string in eqSvgGrid() and
+                                         injected here so the contents
+                                         parse in SVG namespace; Alpine's
+                                         template-x-for inside <svg> would
+                                         create HTML nodes that the
+                                         browser refuses to render). -->
+                                    <g x-html="eqSvgGrid()"></g>
+
+                                    <!-- Static 'Hz' label below the y-axis tick zone -->
+                                    <text :x="EQ_VIZ.PAD_L - 6" :y="EQ_VIZ.H - 8"
+                                          text-anchor="end"
+                                          fill="oklch(var(--bc) / 0.78)"
+                                          font-size="12">Hz</text>
+
+                                    <!-- Filled area under the curve (subtle tint).
+                                         Reads via *ForViz so the curve follows
+                                         the live drag preview of the make-up
+                                         gain fader, not just server state. -->
+                                    <path :d="eqResponsePath(audioModalSubjectForViz())
+                                              + ' L ' + (EQ_VIZ.W - EQ_VIZ.PAD_R) + ',' + eqGainToY(0)
+                                              + ' L ' + EQ_VIZ.PAD_L + ',' + eqGainToY(0) + ' Z'"
+                                          fill="oklch(var(--p) / 0.12)" stroke="none"></path>
+                                    <!-- Curve line -->
+                                    <path :d="eqResponsePath(audioModalSubjectForViz())"
+                                          fill="none"
+                                          stroke="oklch(var(--p))"
+                                          stroke-width="2.2"
+                                          stroke-linejoin="round"></path>
+
+                                    <!-- Numbered band markers — also via
+                                         x-html for the same SVG-namespace
+                                         reason. eqSvgMarkers reads each
+                                         band's frequency/gain so markers
+                                         move live as you tweak below. -->
+                                    <g x-html="eqSvgMarkers(audioModalSubjectForViz())"></g>
+                                </svg>
+                            </div>
+
+                            <!--
+                              Post-EQ make-up gain fader on the right.
+                              Re-uses the AudioFader controller; range is
+                              -20..+20 dB to match the visualization's Y
+                              axis. The fader's stripId namespaces it under
+                              `_modal_eq_gain` so it doesn't collide with
+                              the channel fader controllers.
+                            -->
+                            <!--
+                              Post-EQ make-up gain fader on the right.
+                              Re-uses the AudioFader controller; range is
+                              -20..+20 dB to match the visualization's Y
+                              axis. The fader's stripId namespaces it under
+                              `_modal_eq_gain` so it doesn't collide with
+                              the channel fader controllers.
+                            -->
+                            <div class="w-[60px] bg-base-300 rounded p-2 flex flex-col items-center gap-2">
+                                <span class="text-[10px] text-base-content/60 uppercase tracking-wider">Gain</span>
+                                <!-- Commit-on-release mode: every drag tick
+                                     just updates eqGainPreview locally so the
+                                     visualizer follows the gesture in real
+                                     time. The actual CFSP fires once on
+                                     pointerup (and on dblclick / wheel ticks
+                                     which use opts.send directly). -->
+                                <div class="audio-fader-track flex-1 self-stretch"
+                                     x-init="AudioFader.attach($el, {
+                                        stripId: '_modal_eq_gain',
+                                        min: -20, max: 20,
+                                        getValue: () => eqGainPreview ?? (audioModalSubject()?.eq_gain_db ?? 0),
+                                        onPreview: (v) => { eqGainPreview = v; },
+                                        send: (v) => { setEqGain(v); eqGainPreview = null; },
+                                     })"
+                                     x-effect="audioModal?.mode === 'eq' && AudioFader.update('_modal_eq_gain', audioModalSubject()?.eq_gain_db ?? 0)">
+                                    <div class="audio-fader-handle"></div>
+                                </div>
+                                <span data-strip-id-fader-value="_modal_eq_gain"
+                                      class="text-xs font-mono"></span>
+                            </div>
+                        </div>
+
+                        <!-- 6 band panels — flow from 1col on phone up to 6 across on xl -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+                            <template x-for="band in (audioModalSubject()?.eq_bands || [])" :key="band.index">
+                                <div class="card bg-base-300 p-3 space-y-2.5">
+                                    <!-- Band label + enable -->
+                                    <div class="flex justify-between items-center">
+                                        <span class="font-bold text-primary text-sm"
+                                              x-text="'Band ' + (band.index + 1)"></span>
+                                        <input type="checkbox" class="toggle toggle-xs toggle-primary"
+                                               :checked="band.enabled"
+                                               @change="setBandProp(band.index, {enabled: $event.target.checked})">
+                                    </div>
+
+                                    <!-- Filter shape — icon-driven dropdown
+                                         that mirrors ATEM Software Control.
+                                         Currently selected filter shows as
+                                         a primary-coloured SVG glyph; click
+                                         to open a list of the band's
+                                         possible filters as the same kind
+                                         of glyph. EQ_FILTER_ICONS is in
+                                         atem_control.js to keep its SVG
+                                         strings out of the x-data attribute. -->
+                                    <div class="relative" x-data="{ shapeOpen: false }"
+                                         @click.outside="shapeOpen = false">
+                                        <button class="w-full h-7 px-2 rounded
+                                                       bg-base-100 border border-base-300/60
+                                                       flex items-center justify-between gap-1
+                                                       hover:border-primary/60
+                                                       disabled:opacity-50 disabled:cursor-not-allowed"
+                                                :disabled="!band.enabled"
+                                                @click="shapeOpen = !shapeOpen">
+                                            <span class="text-primary inline-flex items-center w-10 h-4"
+                                                  x-html="(window.EQ_FILTER_ICONS || {})[band.filter] || ''"></span>
+                                            <i class="bi bi-chevron-down text-[10px] opacity-60"></i>
+                                        </button>
+                                        <div x-show="shapeOpen" x-cloak
+                                             x-transition:enter="transition ease-out duration-100"
+                                             x-transition:enter-start="opacity-0 scale-95"
+                                             x-transition:enter-end="opacity-100 scale-100"
+                                             class="absolute top-full left-0 right-0 z-30 mt-1
+                                                    bg-base-100 border border-base-300 rounded
+                                                    shadow-xl py-1">
+                                            <template x-for="opt in eqShapesForBand(band)" :key="opt.name">
+                                                <button class="w-full px-2 py-1.5 flex items-center justify-center
+                                                              hover:bg-base-300"
+                                                        :title="opt.label"
+                                                        @click="setBandProp(band.index, {shape: opt.name}); shapeOpen = false">
+                                                    <span class="inline-flex items-center w-12 h-4"
+                                                          :class="opt.name === band.filter ? 'text-primary' : 'text-base-content/70'"
+                                                          x-html="(window.EQ_FILTER_ICONS || {})[opt.name] || ''"></span>
+                                                </button>
+                                            </template>
+                                        </div>
+                                    </div>
+
+                                    <!-- Frequency -->
+                                    <div class="flex flex-col items-center gap-1">
+                                        <span class="text-[10px] text-base-content/60 uppercase tracking-wider">Frequency (Hz)</span>
+                                        <input type="number" class="input input-xs input-bordered w-full text-center bg-base-100"
+                                               step="1" min="20" max="22000"
+                                               :disabled="!band.enabled"
+                                               :value="band.frequency"
+                                               @change="setBandProp(band.index, {frequency: parseInt($event.target.value)})">
+                                    </div>
+
+                                    <!-- Range pills (Low / MidLow / MidHigh / High). The ATEM
+                                         narrows each band's frequency knob to one of these
+                                         decade ranges; we expose the full enum since not all
+                                         bands are restricted in mixerstate. -->
+                                    <div class="flex gap-0.5">
+                                        <template x-for="r in [['Low','L'],['MidLow','ML'],['MidHigh','MH'],['High','H']]" :key="r[0]">
+                                            <button class="btn btn-xs flex-1 px-0 min-h-0 h-6"
+                                                    :class="band.range === r[0] ? 'btn-primary' : 'btn-ghost'"
+                                                    :disabled="!band.enabled"
+                                                    @click="setBandProp(band.index, {range: r[0]})"
+                                                    x-text="r[1]"></button>
+                                        </template>
+                                    </div>
+
+                                    <!-- Gain — visible for shelves + bell -->
+                                    <div x-show="['LowShelf', 'BandPass', 'HighShelf'].includes(band.filter)"
+                                         class="flex flex-col items-center gap-1">
+                                        <span class="text-[10px] text-base-content/60 uppercase tracking-wider">Gain (dB)</span>
+                                        <input type="number" class="input input-xs input-bordered w-full text-center bg-base-100"
+                                               step="0.1" min="-20" max="20"
+                                               :disabled="!band.enabled"
+                                               :value="band.gain_db"
+                                               @change="setBandProp(band.index, {gain_db: parseFloat($event.target.value)})">
+                                    </div>
+
+                                    <!-- Q — only meaningful for bell -->
+                                    <div x-show="band.filter === 'BandPass'"
+                                         class="flex flex-col items-center gap-1">
+                                        <span class="text-[10px] text-base-content/60 uppercase tracking-wider">Q Factor</span>
+                                        <input type="number" class="input input-xs input-bordered w-full text-center bg-base-100"
+                                               step="0.1" min="0.3" max="10.3"
+                                               :disabled="!band.enabled"
+                                               :value="band.q"
+                                               @change="setBandProp(band.index, {q: parseFloat($event.target.value)})">
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+
+                        <p class="text-xs text-base-content/50 italic">
+                            Bell uses Frequency, Q and Gain. Shelves use Frequency and Gain.
+                            Pass / Notch only use Frequency.
+                        </p>
+                    </div>
+                </template>
+
+                <!-- ========================== Dynamics ========================= -->
+                <!-- Three-section layout mirrors ATEM Software Control's
+                     dynamics dialog: Expander/Gate | Compressor | Limiter.
+                     Each section's params live on a per-block dict
+                     (audioModalSubject().compressor / .limiter / .expander)
+                     populated by AICP/AILP/AIXP receive-side parsers in
+                     pyatem. Writes go via set_audio_<block> dispatch.
+
+                     Master rail still gets the makeup-only view since
+                     master dynamics on Fairlight is a single make-up gain
+                     stage (no per-block comp/lim/exp). -->
+                <template x-if="audioModal?.mode === 'dyn'">
+                    <div class="space-y-4">
+                        <!-- Master rail: makeup gain only, with note. -->
+                        <template x-if="audioModal?.stripId === '_master'">
+                            <div class="space-y-3">
+                                <div class="card bg-base-300 p-4">
+                                    <h3 class="font-bold text-primary text-sm mb-3">Make-up Gain</h3>
+                                    <div class="flex items-center gap-4">
+                                        <input type="number"
+                                               class="input input-sm input-bordered w-24 text-center bg-base-100"
+                                               step="0.5" min="0" max="20"
+                                               :value="audioModalSubject()?.dynamics_makeup_db ?? 0"
+                                               @change="setMakeupGain(parseFloat($event.target.value))">
+                                        <span class="text-sm text-base-content/60">dB (0 to +20)</span>
+                                    </div>
+                                </div>
+                                <div class="text-xs text-base-content/50 italic">
+                                    Master rail dynamics is a single make-up gain stage on this ATEM.
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- Per-strip rail: full 3-section dynamics. Layout
+                             mirrors Software Control's modal:
+                                Expander/Gate (one section, mode tabs) |
+                                Compressor | Limiter
+                             Each parameter is an AudioKnob (the same
+                             dial widget the EQ modal uses for input
+                             gain) with min/max labels and a numeric
+                             input below. Top-row knobs are the
+                             "primary" params; bottom row is timing.
+
+                             Mode toggle is local-only for now: clicking
+                             Gate sets ratio=1.0 and grays the Ratio knob
+                             (gate has fixed implicit ratio). The
+                             ATEM-side mode toggle wire format isn't
+                             fully decoded — tracked as TODO in
+                             pyatem.FairlightExpanderPropertiesCommand. -->
+                        <template x-if="audioModal?.stripId !== '_master'">
+                            <div class="space-y-3"
+                                 x-data="{
+                                    /* Tri-state for the Expander block:
+                                       'expander' | 'gate' | 'none'. Reads
+                                       the real mode byte (decoded from
+                                       AIXP byte 17 in pyatem.messages.fairlight) so
+                                       it's bidirectional with anything
+                                       else changing the mode (Software
+                                       Control on the Mac, another
+                                       browser session). 'none' = block
+                                       bypassed (enabled=false). */
+                                    expMode() {
+                                        const blk = dynamicsBlock('expander');
+                                        if (!blk.enabled) return 'none';
+                                        return blk.mode || 'gate';
+                                    },
+                                 }">
+                                <!-- Top row: Software Control's dynamics
+                                     visualization. Five columns:
+                                       1. Input L/R meters (pre-dynamics)
+                                       2. Transfer-curve graph
+                                       3. Gain-reduction meters (E/C/L)
+                                       4. Make Up vertical fader (0..+20 dB)
+                                       5. Output L/R meters (post-fader)
+                                     The meter elements pick up FMLv data
+                                     automatically via AudioMeters.paintStrip
+                                     keyed on data-strip-id+data-meter-stage. -->
+                                <div class="card bg-base-300 p-3">
+                                    <div class="flex gap-8 items-stretch justify-center h-72">
+                                        <!-- Input meters L/R. dB scale on the
+                                             left matches Software Control's
+                                             label set (0/-5/-10/-15/-20/-30
+                                             /-40/-50). Positions track the
+                                             linear -60..0 dB mapping in
+                                             AudioMeters._dbToPct, so -50 dB
+                                             lands at 83.3% and there's a
+                                             small unlabeled tail below it
+                                             before the bar bottoms out at
+                                             -60 dB. -->
+                                        <div class="flex flex-col items-center">
+                                            <div class="text-[10px] font-semibold mb-1">Input</div>
+                                            <div class="flex gap-1 flex-1">
+                                                <div class="relative w-5 text-[8px] text-base-content/40 leading-none tabular-nums flex-shrink-0"
+                                                     x-data="{ ticks: [['0',0],['-5',12.5],['-10',25],['-15',37.5],['-20',50],['-30',65.33],['-40',80.67],['-50',96]] }">
+                                                    <template x-for="t in ticks" :key="t[0]">
+                                                        <span class="absolute right-0" :style="`top: ${t[1]}%; transform: translateY(-50%);`" x-text="t[0]"></span>
+                                                    </template>
+                                                </div>
+                                                <div class="flex gap-0.5">
+                                                    <div class="audio-meter-bg w-4"
+                                                         :data-strip-id="audioModal?.stripId"
+                                                         data-meter-stage="input"
+                                                         data-meter-channel="l">
+                                                        <div class="audio-meter-fill"></div>
+                                                        <div class="audio-meter-peak"></div>
+                                                    </div>
+                                                    <div class="audio-meter-bg w-4"
+                                                         :data-strip-id="audioModal?.stripId"
+                                                         data-meter-stage="input"
+                                                         data-meter-channel="r">
+                                                        <div class="audio-meter-fill"></div>
+                                                        <div class="audio-meter-peak"></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="flex gap-0.5 text-[8px] text-base-content/40 mt-0.5 ml-6">
+                                                <span class="w-4 text-center">L</span>
+                                                <span class="w-4 text-center">R</span>
+                                            </div>
+                                        </div>
+
+                                        <!-- Transfer-curve graph. The wrapper is
+                                             a fixed square (matches the row
+                                             height) so the SVG plots on a 1:1
+                                             grid like Software Control's,
+                                             regardless of modal width. -->
+                                        <div class="flex flex-col items-center w-64 flex-shrink-0">
+                                            <div class="text-[10px] font-semibold mb-1 text-center">Transfer Curve</div>
+                                            <svg viewBox="0 0 200 200" preserveAspectRatio="none"
+                                                 class="flex-1 w-full bg-base-100 rounded border border-base-content/10">
+                                                <!-- Grid lines (every 25 viewbox units = ~11.25 dB).
+                                                     Hardcoded rather than driven by ``<template
+                                                     x-for>`` because Alpine's template semantics
+                                                     don't apply inside the SVG namespace — the
+                                                     <template> tag isn't an HTMLTemplateElement,
+                                                     so .content is undefined and Alpine throws
+                                                     "Cannot read properties of undefined (reading
+                                                     'children')". Same reason the threshold guide
+                                                     blocks below use ``x-show`` (display toggle)
+                                                     rather than ``<template x-if>`` (DOM clone). -->
+                                                <g stroke="oklch(var(--bc) / 0.08)" stroke-width="0.5">
+                                                    <line x1="25"  y1="0" x2="25"  y2="200"></line>
+                                                    <line x1="50"  y1="0" x2="50"  y2="200"></line>
+                                                    <line x1="75"  y1="0" x2="75"  y2="200"></line>
+                                                    <line x1="100" y1="0" x2="100" y2="200"></line>
+                                                    <line x1="125" y1="0" x2="125" y2="200"></line>
+                                                    <line x1="150" y1="0" x2="150" y2="200"></line>
+                                                    <line x1="175" y1="0" x2="175" y2="200"></line>
+                                                    <line x1="0" y1="25"  x2="200" y2="25" ></line>
+                                                    <line x1="0" y1="50"  x2="200" y2="50" ></line>
+                                                    <line x1="0" y1="75"  x2="200" y2="75" ></line>
+                                                    <line x1="0" y1="100" x2="200" y2="100"></line>
+                                                    <line x1="0" y1="125" x2="200" y2="125"></line>
+                                                    <line x1="0" y1="150" x2="200" y2="150"></line>
+                                                    <line x1="0" y1="175" x2="200" y2="175"></line>
+                                                </g>
+
+                                                <!-- 1:1 reference diagonal + corner label -->
+                                                <line x1="0" y1="200" x2="200" y2="0"
+                                                      stroke="oklch(var(--bc) / 0.25)"
+                                                      stroke-width="0.8"
+                                                      stroke-dasharray="3 3"></line>
+                                                <text x="195" y="9"
+                                                      fill="oklch(var(--bc) / 0.45)"
+                                                      font-size="7"
+                                                      text-anchor="end">1:1</text>
+
+                                                <!-- Compressor threshold: blue vertical at input dB,
+                                                     with the threshold value rendered just below the
+                                                     X axis. -->
+                                                <g x-show="dynamicsBlock('compressor').enabled
+                                                            && dynamicsBlock('compressor').threshold_db !== undefined"
+                                                   stroke="oklch(var(--p))" fill="oklch(var(--p))">
+                                                    <line :x1="dynamicsDbToX(dynamicsBlock('compressor').threshold_db ?? 0)"
+                                                          y1="0"
+                                                          :x2="dynamicsDbToX(dynamicsBlock('compressor').threshold_db ?? 0)"
+                                                          y2="200"
+                                                          stroke-width="0.8"
+                                                          opacity="0.7"></line>
+                                                    <text :x="dynamicsDbToX(dynamicsBlock('compressor').threshold_db ?? 0)"
+                                                          y="196"
+                                                          font-size="7"
+                                                          text-anchor="middle"
+                                                          x-text="(dynamicsBlock('compressor').threshold_db ?? 0).toFixed(0)"></text>
+                                                </g>
+
+                                                <!-- Expander/Gate threshold: cyan vertical at input dB. -->
+                                                <g x-show="dynamicsBlock('expander').enabled
+                                                            && dynamicsBlock('expander').threshold_db !== undefined"
+                                                   stroke="oklch(var(--in))" fill="oklch(var(--in))">
+                                                    <line :x1="dynamicsDbToX(dynamicsBlock('expander').threshold_db ?? 0)"
+                                                          y1="0"
+                                                          :x2="dynamicsDbToX(dynamicsBlock('expander').threshold_db ?? 0)"
+                                                          y2="200"
+                                                          stroke-width="0.8"
+                                                          opacity="0.7"></line>
+                                                    <text :x="dynamicsDbToX(dynamicsBlock('expander').threshold_db ?? 0)"
+                                                          y="196"
+                                                          font-size="7"
+                                                          text-anchor="middle"
+                                                          x-text="(dynamicsBlock('expander').threshold_db ?? 0).toFixed(0)"></text>
+                                                </g>
+
+                                                <!-- Limiter threshold: blue HORIZONTAL line at the
+                                                     output dB (the limiter caps OUTPUT level), with
+                                                     the threshold value rendered to the right inside
+                                                     the curve area. -->
+                                                <g x-show="dynamicsBlock('limiter').enabled
+                                                            && dynamicsBlock('limiter').threshold_db !== undefined"
+                                                   stroke="#3b82f6" fill="#3b82f6">
+                                                    <line x1="0"
+                                                          :y1="dynamicsDbToY(dynamicsBlock('limiter').threshold_db ?? 0)"
+                                                          x2="200"
+                                                          :y2="dynamicsDbToY(dynamicsBlock('limiter').threshold_db ?? 0)"
+                                                          stroke-width="0.8"
+                                                          opacity="0.7"></line>
+                                                    <text x="4"
+                                                          :y="dynamicsDbToY(dynamicsBlock('limiter').threshold_db ?? 0) - 2"
+                                                          font-size="7"
+                                                          text-anchor="start"
+                                                          x-text="(dynamicsBlock('limiter').threshold_db ?? 0).toFixed(1)"></text>
+                                                </g>
+
+                                                <!-- Computed transfer curve. Drawn AFTER the
+                                                     threshold guide lines so the yellow path sits
+                                                     on top of the cyan/blue references. -->
+                                                <path :d="dynamicsTransferPath()"
+                                                      stroke="oklch(var(--wa))"
+                                                      stroke-width="1.5"
+                                                      fill="none"></path>
+
+                                                <!-- Axis tick labels — every 20 dB on both axes,
+                                                     placed inside the viewBox so the SVG is
+                                                     self-labelling like Software Control's.
+                                                     Y-axis runs 0 (top) → -80 (bottom) at viewbox
+                                                     y positions ``(|db|/90)*200``. X-axis runs
+                                                     -80 → 0 across viewbox x. Drawn last so the
+                                                     numbers stay on top of the grid. -->
+                                                <g fill="oklch(var(--bc) / 0.55)" font-size="7">
+                                                    <g text-anchor="start">
+                                                        <text x="2" y="7">0</text>
+                                                        <text x="2" y="48">-20</text>
+                                                        <text x="2" y="92">-40</text>
+                                                        <text x="2" y="137">-60</text>
+                                                        <text x="2" y="181">-80</text>
+                                                    </g>
+                                                    <g text-anchor="middle">
+                                                        <text x="22"  y="197">-80</text>
+                                                        <text x="67"  y="197">-60</text>
+                                                        <text x="111" y="197">-40</text>
+                                                        <text x="156" y="197">-20</text>
+                                                        <text x="196" y="197">0</text>
+                                                    </g>
+                                                </g>
+                                            </svg>
+                                        </div>
+
+                                        <!-- Gain Reduction meters E/C/L. Same
+                                             dB scale as Input/Output (linear
+                                             -60..0 dB) so the labels stack
+                                             at consistent vertical positions
+                                             across the modal. -50 lands at
+                                             83.3%; the bottom 16.7% of the
+                                             bar (below -50 dB) is the
+                                             unlabeled tail Software Control
+                                             also leaves there. -->
+                                        <div class="flex flex-col items-center">
+                                            <div class="text-[10px] font-semibold mb-1">Gain Reduction</div>
+                                            <div class="flex gap-1 flex-1">
+                                                <div class="relative w-5 text-[8px] text-base-content/40 leading-none tabular-nums flex-shrink-0"
+                                                     x-data="{ ticks: [['0',0],['-5',12.5],['-10',25],['-15',37.5],['-20',50],['-30',65.33],['-40',80.67],['-50',96]] }">
+                                                    <template x-for="t in ticks" :key="t[0]">
+                                                        <span class="absolute right-0" :style="`top: ${t[1]}%; transform: translateY(-50%);`" x-text="t[0]"></span>
+                                                    </template>
+                                                </div>
+                                                <div class="flex gap-3">
+                                                    <div class="dyn-gr-bg"
+                                                         :data-strip-id="audioModal?.stripId"
+                                                         data-gr-block="expander">
+                                                        <div class="dyn-gr-fill"></div>
+                                                    </div>
+                                                    <div class="dyn-gr-bg"
+                                                         :data-strip-id="audioModal?.stripId"
+                                                         data-gr-block="compressor">
+                                                        <div class="dyn-gr-fill"></div>
+                                                    </div>
+                                                    <div class="dyn-gr-bg"
+                                                         :data-strip-id="audioModal?.stripId"
+                                                         data-gr-block="limiter">
+                                                        <div class="dyn-gr-fill"></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="flex gap-3 text-[8px] text-base-content/40 mt-0.5 ml-6">
+                                                <span class="w-4 text-center">E</span>
+                                                <span class="w-4 text-center">C</span>
+                                                <span class="w-4 text-center">L</span>
+                                            </div>
+                                        </div>
+
+                                        <!-- Make Up vertical fader. Realtime
+                                             mode (no onPreview): every drag
+                                             tick fires a CFSP write so the
+                                             ATEM tracks the gesture live.
+                                             Layout matches the EQ-modal
+                                             Gain fader: fixed-width box,
+                                             flex-1 self-stretch on the
+                                             track, dB readout via
+                                             data-strip-id-fader-value
+                                             (DOM-direct paint, no Alpine
+                                             churn during drag). -->
+                                        <div class="w-[80px] flex flex-col items-center">
+                                            <div class="text-[10px] font-semibold mb-1">Make Up</div>
+                                            <div class="flex gap-1 flex-1 self-stretch">
+                                                <!-- Scale: 0..+20 dB linear. Top of
+                                                     fader = +20, bottom = 0. -->
+                                                <div class="relative w-6 text-[8px] text-base-content/40 leading-none tabular-nums flex-shrink-0"
+                                                     x-data="{ ticks: [['+20',0],['+15',25],['+10',50],['+5',75],['0',100]] }">
+                                                    <template x-for="t in ticks" :key="t[0]">
+                                                        <span class="absolute right-0" :style="`top: ${t[1]}%; transform: translateY(-50%);`" x-text="t[0]"></span>
+                                                    </template>
+                                                </div>
+                                                <div class="audio-fader-track flex-1"
+                                                     x-init="AudioFader.attach($el, {
+                                                        stripId: '_modal_dyn_makeup',
+                                                        min: 0, max: 20,
+                                                        getValue: () => audioModalSubject()?.dynamics_makeup_db ?? 0,
+                                                        send: (v) => setMakeupGain(v),
+                                                     })"
+                                                     x-effect="audioModal?.mode === 'dyn' && AudioFader.update('_modal_dyn_makeup', audioModalSubject()?.dynamics_makeup_db ?? 0)">
+                                                    <div class="audio-fader-handle"></div>
+                                                </div>
+                                            </div>
+                                            <span data-strip-id-fader-value="_modal_dyn_makeup"
+                                                  class="text-xs font-mono"></span>
+                                        </div>
+
+                                        <!-- Output meters L/R. Same scale as
+                                             Input meter — see comment there
+                                             for the mapping rationale. -->
+                                        <div class="flex flex-col items-center">
+                                            <div class="text-[10px] font-semibold mb-1">Output</div>
+                                            <div class="flex gap-1 flex-1">
+                                                <div class="relative w-5 text-[8px] text-base-content/40 leading-none tabular-nums flex-shrink-0"
+                                                     x-data="{ ticks: [['0',0],['-5',12.5],['-10',25],['-15',37.5],['-20',50],['-30',65.33],['-40',80.67],['-50',96]] }">
+                                                    <template x-for="t in ticks" :key="t[0]">
+                                                        <span class="absolute right-0" :style="`top: ${t[1]}%; transform: translateY(-50%);`" x-text="t[0]"></span>
+                                                    </template>
+                                                </div>
+                                                <div class="flex gap-0.5">
+                                                    <div class="audio-meter-bg w-4"
+                                                         :data-strip-id="audioModal?.stripId"
+                                                         data-meter-stage="output"
+                                                         data-meter-channel="l">
+                                                        <div class="audio-meter-fill"></div>
+                                                        <div class="audio-meter-peak"></div>
+                                                    </div>
+                                                    <div class="audio-meter-bg w-4"
+                                                         :data-strip-id="audioModal?.stripId"
+                                                         data-meter-stage="output"
+                                                         data-meter-channel="r">
+                                                        <div class="audio-meter-fill"></div>
+                                                        <div class="audio-meter-peak"></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="flex gap-0.5 text-[8px] text-base-content/40 mt-0.5 ml-6">
+                                                <span class="w-4 text-center">L</span>
+                                                <span class="w-4 text-center">R</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Three dynamics blocks side-by-side -->
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                    <!-- ============ Expander / Gate ============ -->
+                                    <div class="card bg-base-300 p-3 space-y-3">
+                                        <!-- Tri-state tab pair: Expander | Gate | (neither).
+                                             Click an active tab again to deselect → block
+                                             bypassed (enabled=false on the wire). Click
+                                             the inactive tab to switch modes. The
+                                             ATEM-side mode-bit wire format isn't fully
+                                             decoded yet, so we use the ratio as a proxy:
+                                             gate => ratio=1.0; expander => ratio≥1.5
+                                             (preserving the user's previous expander
+                                             ratio if there is one). -->
+                                        <div class="flex bg-base-100 rounded-md p-0.5">
+                                            <button class="flex-1 text-xs px-2 py-1 rounded transition-colors"
+                                                    :class="expMode() === 'expander' ? 'bg-primary text-primary-content font-semibold' : 'hover:bg-base-300'"
+                                                    @click="
+                                                        if (expMode() === 'expander') {
+                                                            setDynamics('expander', { enabled: false });
+                                                        } else {
+                                                            setDynamics('expander', { enabled: true, mode: 'expander' });
+                                                        }
+                                                    ">
+                                                Expander
+                                            </button>
+                                            <button class="flex-1 text-xs px-2 py-1 rounded transition-colors"
+                                                    :class="expMode() === 'gate' ? 'bg-primary text-primary-content font-semibold' : 'hover:bg-base-300'"
+                                                    @click="
+                                                        if (expMode() === 'gate') {
+                                                            setDynamics('expander', { enabled: false });
+                                                        } else {
+                                                            setDynamics('expander', { enabled: true, mode: 'gate' });
+                                                        }
+                                                    ">
+                                                Gate
+                                            </button>
+                                        </div>
+
+                                        <!-- 3-column knob grid -->
+                                        <div class="grid grid-cols-3 gap-2">
+                                            <!-- Threshold -->
+                                            <div class="flex flex-col items-center gap-1"
+                                                 x-init="AudioKnob.attach($el, {
+                                                    key: 'dyn-exp-threshold',
+                                                    min: -50, max: 0, step: 0.1, defaultValue: -20,
+                                                    getValue: () => dynamicsBlock('expander').threshold_db ?? -50,
+                                                    send: (v) => setDynamicsParam('expander', 'threshold_db', v),
+                                                    format: (v) => v.toFixed(1),
+                                                 })"
+                                                 x-effect="AudioKnob.update('dyn-exp-threshold', dynamicsBlock('expander').threshold_db ?? -50)">
+                                                <div class="text-[10px] font-medium">Threshold</div>
+                                                <div class="audio-knob"><div class="audio-knob-indicator"></div></div>
+                                                <div class="flex justify-between w-full text-[8px] text-base-content/40 px-1"><span>-50</span><span>0 dB</span></div>
+                                                <input type="number" class="audio-numinput" step="0.1" min="-50" max="0">
+                                            </div>
+                                            <!-- Range -->
+                                            <div class="flex flex-col items-center gap-1"
+                                                 x-init="AudioKnob.attach($el, {
+                                                    key: 'dyn-exp-range',
+                                                    min: 0, max: 60, step: 0.1, defaultValue: 0,
+                                                    getValue: () => dynamicsBlock('expander').range_db ?? 0,
+                                                    send: (v) => setDynamicsParam('expander', 'range_db', v),
+                                                    format: (v) => v.toFixed(0),
+                                                 })"
+                                                 x-effect="AudioKnob.update('dyn-exp-range', dynamicsBlock('expander').range_db ?? 0)">
+                                                <div class="text-[10px] font-medium">Range</div>
+                                                <div class="audio-knob"><div class="audio-knob-indicator"></div></div>
+                                                <div class="flex justify-between w-full text-[8px] text-base-content/40 px-1"><span>0</span><span>60</span></div>
+                                                <input type="number" class="audio-numinput" step="0.1" min="0" max="60">
+                                            </div>
+                                            <!-- Ratio (disabled in Gate mode) -->
+                                            <div class="flex flex-col items-center gap-1"
+                                                 :class="expMode() === 'gate' ? 'opacity-40 pointer-events-none' : ''"
+                                                 x-init="AudioKnob.attach($el, {
+                                                    key: 'dyn-exp-ratio',
+                                                    min: 1, max: 3, step: 0.1, defaultValue: 1.5,
+                                                    getValue: () => dynamicsBlock('expander').ratio ?? 1,
+                                                    send: (v) => setDynamicsParam('expander', 'ratio', v),
+                                                    format: (v) => '1:' + v.toFixed(1),
+                                                    parse: (s) => parseFloat(String(s).replace(/^\s*1\s*:\s*/, '')),
+                                                 })"
+                                                 x-effect="AudioKnob.update('dyn-exp-ratio', dynamicsBlock('expander').ratio ?? 1)">
+                                                <div class="text-[10px] font-medium">Ratio</div>
+                                                <div class="audio-knob"><div class="audio-knob-indicator"></div></div>
+                                                <div class="flex justify-between w-full text-[8px] text-base-content/40 px-1"><span>1:1</span><span>1:3</span></div>
+                                                <input type="text" class="audio-numinput">
+                                            </div>
+                                            <!-- Attack -->
+                                            <div class="flex flex-col items-center gap-1"
+                                                 x-init="AudioKnob.attach($el, {
+                                                    key: 'dyn-exp-attack',
+                                                    min: 0.5, max: 100, step: 0.1, defaultValue: 1,
+                                                    getValue: () => dynamicsBlock('expander').attack_ms ?? 0.5,
+                                                    send: (v) => setDynamicsParam('expander', 'attack_ms', v),
+                                                    format: (v) => v.toFixed(0),
+                                                 })"
+                                                 x-effect="AudioKnob.update('dyn-exp-attack', dynamicsBlock('expander').attack_ms ?? 0.5)">
+                                                <div class="text-[10px] font-medium">Attack</div>
+                                                <div class="audio-knob"><div class="audio-knob-indicator"></div></div>
+                                                <div class="flex justify-between w-full text-[8px] text-base-content/40 px-1"><span>0.5</span><span>100 ms</span></div>
+                                                <input type="number" class="audio-numinput" step="0.1" min="0.5" max="100">
+                                            </div>
+                                            <!-- Hold -->
+                                            <div class="flex flex-col items-center gap-1"
+                                                 x-init="AudioKnob.attach($el, {
+                                                    key: 'dyn-exp-hold',
+                                                    min: 0, max: 4000, step: 1, defaultValue: 0,
+                                                    getValue: () => dynamicsBlock('expander').hold_ms ?? 0,
+                                                    send: (v) => setDynamicsParam('expander', 'hold_ms', v),
+                                                    format: (v) => v.toFixed(0),
+                                                 })"
+                                                 x-effect="AudioKnob.update('dyn-exp-hold', dynamicsBlock('expander').hold_ms ?? 0)">
+                                                <div class="text-[10px] font-medium">Hold</div>
+                                                <div class="audio-knob"><div class="audio-knob-indicator"></div></div>
+                                                <div class="flex justify-between w-full text-[8px] text-base-content/40 px-1"><span>0</span><span>4s</span></div>
+                                                <input type="number" class="audio-numinput" step="1" min="0" max="4000">
+                                            </div>
+                                            <!-- Release -->
+                                            <div class="flex flex-col items-center gap-1"
+                                                 x-init="AudioKnob.attach($el, {
+                                                    key: 'dyn-exp-release',
+                                                    min: 50, max: 4000, step: 1, defaultValue: 100,
+                                                    getValue: () => dynamicsBlock('expander').release_ms ?? 50,
+                                                    send: (v) => setDynamicsParam('expander', 'release_ms', v),
+                                                    format: (v) => v.toFixed(0),
+                                                 })"
+                                                 x-effect="AudioKnob.update('dyn-exp-release', dynamicsBlock('expander').release_ms ?? 50)">
+                                                <div class="text-[10px] font-medium">Release</div>
+                                                <div class="audio-knob"><div class="audio-knob-indicator"></div></div>
+                                                <div class="flex justify-between w-full text-[8px] text-base-content/40 px-1"><span>50</span><span>4s</span></div>
+                                                <input type="number" class="audio-numinput" step="1" min="50" max="4000">
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- ============ Compressor ============ -->
+                                    <div class="card bg-base-300 p-3 space-y-3">
+                                        <div class="flex items-center justify-between">
+                                            <h3 class="font-bold text-sm">Compressor</h3>
+                                            <input type="checkbox" class="toggle toggle-primary toggle-sm"
+                                                   :checked="dynamicsBlock('compressor').enabled"
+                                                   @change="setDynamicsParam('compressor', 'enabled', $event.target.checked)">
+                                        </div>
+                                        <div class="grid grid-cols-3 gap-2">
+                                            <!-- Threshold -->
+                                            <div class="flex flex-col items-center gap-1 col-span-1"
+                                                 x-init="AudioKnob.attach($el, {
+                                                    key: 'dyn-comp-threshold',
+                                                    min: -50, max: 0, step: 0.1, defaultValue: -20,
+                                                    getValue: () => dynamicsBlock('compressor').threshold_db ?? -50,
+                                                    send: (v) => setDynamicsParam('compressor', 'threshold_db', v),
+                                                    format: (v) => v.toFixed(1),
+                                                 })"
+                                                 x-effect="AudioKnob.update('dyn-comp-threshold', dynamicsBlock('compressor').threshold_db ?? -50)">
+                                                <div class="text-[10px] font-medium">Threshold</div>
+                                                <div class="audio-knob"><div class="audio-knob-indicator"></div></div>
+                                                <div class="flex justify-between w-full text-[8px] text-base-content/40 px-1"><span>-50</span><span>0 dB</span></div>
+                                                <input type="number" class="audio-numinput" step="0.1" min="-50" max="0">
+                                            </div>
+                                            <!-- empty (Compressor has no Range) -->
+                                            <div></div>
+                                            <!-- Ratio -->
+                                            <div class="flex flex-col items-center gap-1"
+                                                 x-init="AudioKnob.attach($el, {
+                                                    key: 'dyn-comp-ratio',
+                                                    min: 1.2, max: 20, step: 0.1, defaultValue: 2,
+                                                    getValue: () => dynamicsBlock('compressor').ratio ?? 1.2,
+                                                    send: (v) => setDynamicsParam('compressor', 'ratio', v),
+                                                    format: (v) => v.toFixed(1) + ':1',
+                                                    parse: (s) => parseFloat(String(s).replace(/\s*:\s*1\s*$/, '')),
+                                                 })"
+                                                 x-effect="AudioKnob.update('dyn-comp-ratio', dynamicsBlock('compressor').ratio ?? 1.2)">
+                                                <div class="text-[10px] font-medium">Ratio</div>
+                                                <div class="audio-knob"><div class="audio-knob-indicator"></div></div>
+                                                <div class="flex justify-between w-full text-[8px] text-base-content/40 px-1"><span>1.2:1</span><span>20:1</span></div>
+                                                <input type="text" class="audio-numinput">
+                                            </div>
+                                            <!-- Attack -->
+                                            <div class="flex flex-col items-center gap-1"
+                                                 x-init="AudioKnob.attach($el, {
+                                                    key: 'dyn-comp-attack',
+                                                    min: 0.7, max: 100, step: 0.1, defaultValue: 5,
+                                                    getValue: () => dynamicsBlock('compressor').attack_ms ?? 0.7,
+                                                    send: (v) => setDynamicsParam('compressor', 'attack_ms', v),
+                                                    format: (v) => v.toFixed(0),
+                                                 })"
+                                                 x-effect="AudioKnob.update('dyn-comp-attack', dynamicsBlock('compressor').attack_ms ?? 0.7)">
+                                                <div class="text-[10px] font-medium">Attack</div>
+                                                <div class="audio-knob"><div class="audio-knob-indicator"></div></div>
+                                                <div class="flex justify-between w-full text-[8px] text-base-content/40 px-1"><span>0.7</span><span>100 ms</span></div>
+                                                <input type="number" class="audio-numinput" step="0.1" min="0.7" max="100">
+                                            </div>
+                                            <!-- Hold -->
+                                            <div class="flex flex-col items-center gap-1"
+                                                 x-init="AudioKnob.attach($el, {
+                                                    key: 'dyn-comp-hold',
+                                                    min: 0, max: 4000, step: 1, defaultValue: 0,
+                                                    getValue: () => dynamicsBlock('compressor').hold_ms ?? 0,
+                                                    send: (v) => setDynamicsParam('compressor', 'hold_ms', v),
+                                                    format: (v) => v.toFixed(0),
+                                                 })"
+                                                 x-effect="AudioKnob.update('dyn-comp-hold', dynamicsBlock('compressor').hold_ms ?? 0)">
+                                                <div class="text-[10px] font-medium">Hold</div>
+                                                <div class="audio-knob"><div class="audio-knob-indicator"></div></div>
+                                                <div class="flex justify-between w-full text-[8px] text-base-content/40 px-1"><span>0</span><span>4s</span></div>
+                                                <input type="number" class="audio-numinput" step="1" min="0" max="4000">
+                                            </div>
+                                            <!-- Release -->
+                                            <div class="flex flex-col items-center gap-1"
+                                                 x-init="AudioKnob.attach($el, {
+                                                    key: 'dyn-comp-release',
+                                                    min: 50, max: 4000, step: 1, defaultValue: 100,
+                                                    getValue: () => dynamicsBlock('compressor').release_ms ?? 50,
+                                                    send: (v) => setDynamicsParam('compressor', 'release_ms', v),
+                                                    format: (v) => v.toFixed(0),
+                                                 })"
+                                                 x-effect="AudioKnob.update('dyn-comp-release', dynamicsBlock('compressor').release_ms ?? 50)">
+                                                <div class="text-[10px] font-medium">Release</div>
+                                                <div class="audio-knob"><div class="audio-knob-indicator"></div></div>
+                                                <div class="flex justify-between w-full text-[8px] text-base-content/40 px-1"><span>50</span><span>4s</span></div>
+                                                <input type="number" class="audio-numinput" step="1" min="50" max="4000">
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- ============ Limiter ============ -->
+                                    <div class="card bg-base-300 p-3 space-y-3">
+                                        <div class="flex items-center justify-between">
+                                            <h3 class="font-bold text-sm">Limiter</h3>
+                                            <input type="checkbox" class="toggle toggle-primary toggle-sm"
+                                                   :checked="dynamicsBlock('limiter').enabled"
+                                                   @change="setDynamicsParam('limiter', 'enabled', $event.target.checked)">
+                                        </div>
+                                        <div class="grid grid-cols-3 gap-2">
+                                            <!-- Threshold (centered: empty | knob | empty) -->
+                                            <div></div>
+                                            <div class="flex flex-col items-center gap-1"
+                                                 x-init="AudioKnob.attach($el, {
+                                                    key: 'dyn-lim-threshold',
+                                                    min: -60, max: 0, step: 0.1, defaultValue: -10,
+                                                    getValue: () => dynamicsBlock('limiter').threshold_db ?? -60,
+                                                    send: (v) => setDynamicsParam('limiter', 'threshold_db', v),
+                                                    format: (v) => v.toFixed(1),
+                                                 })"
+                                                 x-effect="AudioKnob.update('dyn-lim-threshold', dynamicsBlock('limiter').threshold_db ?? -60)">
+                                                <div class="text-[10px] font-medium">Threshold</div>
+                                                <div class="audio-knob"><div class="audio-knob-indicator"></div></div>
+                                                <div class="flex justify-between w-full text-[8px] text-base-content/40 px-1"><span>-60</span><span>0 dB</span></div>
+                                                <input type="number" class="audio-numinput" step="0.1" min="-60" max="0">
+                                            </div>
+                                            <div></div>
+                                            <!-- Attack -->
+                                            <div class="flex flex-col items-center gap-1"
+                                                 x-init="AudioKnob.attach($el, {
+                                                    key: 'dyn-lim-attack',
+                                                    min: 0.7, max: 30, step: 0.1, defaultValue: 5,
+                                                    getValue: () => dynamicsBlock('limiter').attack_ms ?? 0.7,
+                                                    send: (v) => setDynamicsParam('limiter', 'attack_ms', v),
+                                                    format: (v) => v.toFixed(0),
+                                                 })"
+                                                 x-effect="AudioKnob.update('dyn-lim-attack', dynamicsBlock('limiter').attack_ms ?? 0.7)">
+                                                <div class="text-[10px] font-medium">Attack</div>
+                                                <div class="audio-knob"><div class="audio-knob-indicator"></div></div>
+                                                <div class="flex justify-between w-full text-[8px] text-base-content/40 px-1"><span>0.7</span><span>30 ms</span></div>
+                                                <input type="number" class="audio-numinput" step="0.1" min="0.7" max="30">
+                                            </div>
+                                            <!-- Hold -->
+                                            <div class="flex flex-col items-center gap-1"
+                                                 x-init="AudioKnob.attach($el, {
+                                                    key: 'dyn-lim-hold',
+                                                    min: 0, max: 4000, step: 1, defaultValue: 0,
+                                                    getValue: () => dynamicsBlock('limiter').hold_ms ?? 0,
+                                                    send: (v) => setDynamicsParam('limiter', 'hold_ms', v),
+                                                    format: (v) => v.toFixed(0),
+                                                 })"
+                                                 x-effect="AudioKnob.update('dyn-lim-hold', dynamicsBlock('limiter').hold_ms ?? 0)">
+                                                <div class="text-[10px] font-medium">Hold</div>
+                                                <div class="audio-knob"><div class="audio-knob-indicator"></div></div>
+                                                <div class="flex justify-between w-full text-[8px] text-base-content/40 px-1"><span>0</span><span>4s</span></div>
+                                                <input type="number" class="audio-numinput" step="1" min="0" max="4000">
+                                            </div>
+                                            <!-- Release -->
+                                            <div class="flex flex-col items-center gap-1"
+                                                 x-init="AudioKnob.attach($el, {
+                                                    key: 'dyn-lim-release',
+                                                    min: 50, max: 4000, step: 1, defaultValue: 100,
+                                                    getValue: () => dynamicsBlock('limiter').release_ms ?? 50,
+                                                    send: (v) => setDynamicsParam('limiter', 'release_ms', v),
+                                                    format: (v) => v.toFixed(0),
+                                                 })"
+                                                 x-effect="AudioKnob.update('dyn-lim-release', dynamicsBlock('limiter').release_ms ?? 50)">
+                                                <div class="text-[10px] font-medium">Release</div>
+                                                <div class="audio-knob"><div class="audio-knob-indicator"></div></div>
+                                                <div class="flex justify-between w-full text-[8px] text-base-content/40 px-1"><span>50</span><span>4s</span></div>
+                                                <input type="number" class="audio-numinput" step="1" min="50" max="4000">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                            </div>
+                        </template>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>

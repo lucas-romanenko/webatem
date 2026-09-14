@@ -1,0 +1,31 @@
+services:
+  webatem:
+    # The published image (amd64 + arm64, built by .github/workflows/image.yml
+    # on every release tag). `docker compose up -d` pulls it; developers build
+    # their own with `docker compose up -d --build`.
+    image: ghcr.io/lucas-romanenko/webatem:latest
+    build: .
+    # Host networking (not a bridge + port map) so LAN discovery works:
+    # the app must see the studio subnet directly to receive ATEM
+    # mDNS/Bonjour multicast and to hello-sweep the local /24. On a bridge
+    # network, multicast never arrives and a sweep would scan the docker
+    # subnet. The app binds host :8880 directly (set PORT via the
+    # entrypoint's env if 8880 is taken). Linux hosts only — host mode is
+    # a no-op on Docker Desktop for macOS/Windows; studio VMs are Linux.
+    network_mode: host
+    environment:
+      - SECRET_KEY=${SECRET_KEY:-}
+      - DEBUG=${DEBUG:-False}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-*}
+      - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:-}
+      - WEBSOCKET_ALLOWED_ORIGINS=${WEBSOCKET_ALLOWED_ORIGINS:-}
+      - TIME_ZONE=${TIME_ZONE:-UTC}
+      - TIME_FORMAT_24HR=${TIME_FORMAT_24HR:-True}
+      - APP_TITLE=${APP_TITLE:-WebATEM}
+      - PORT=${PORT:-8880}
+    volumes:
+      - webatem-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  webatem-data:

@@ -1,0 +1,131 @@
+{% comment %}
+USK flying-key section — enable checkbox, position/size numeric entries,
+and the keyframe controls (via control/_usk_keyframe.html). Shared by the
+Luma, Chroma and Pattern panels; fly state is per-keyer, not per-key-type.
+
+Params:
+  panel  'luma' | 'chroma' | 'pattern' — disambiguates the dve-rate input
+         id (all three panels coexist in the DOM under x-show, so DOM ids
+         must differ per panel). k = keyer index in scope from the x-for.
+{% endcomment %}
+<div class="space-y-3">
+<div class="form-control">
+<label class="label cursor-pointer justify-start gap-2 py-1">
+<input 
+type="checkbox" 
+class="checkbox checkbox-sm"
+:checked="$store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.fly_enabled || false"
+@change="$store.atem.setUSKFlyEnabled(k, $event.target.checked)">
+<span class="label-text text-sm font-medium">Flying Key</span>
+</label>
+</div>
+
+<!-- Flying Key Controls -->
+<div class="space-y-3 pl-6"
+:class="!($store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.fly_enabled) ? 'opacity-50 pointer-events-none' : ''">
+<!-- Position & Size Controls -->
+<div class="space-y-3">
+<div class="text-sm font-medium">Position & Size</div>
+
+<!-- Position Controls -->
+<div class="grid grid-cols-2 gap-x-6 gap-y-3 pl-6">
+<div class="flex items-center justify-between">
+<label class="text-sm opacity-70 mr-3">X:</label>
+<div class="flex items-center gap-1">
+<input 
+type="number" 
+class="input input-bordered input-sm w-20 text-center font-mono text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" 
+:value="($store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.dve_position_x || 0).toFixed(2)"
+@change="$store.atem.setUSKDVEPositionX(k, $event.target.value)"
+min="-1000" 
+max="1000" 
+step="0.01">
+<div class="flex flex-col">
+<button class="btn btn-ghost btn-xs p-0 h-4 min-h-0" @click="$store.atem.setUSKDVEPositionX(k, Math.min(16, ($store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.dve_position_x || 0) + 0.1))">
+<i class="bi bi-caret-up-fill text-sm"></i>
+</button>
+<button class="btn btn-ghost btn-xs p-0 h-4 min-h-0" @click="$store.atem.setUSKDVEPositionX(k, Math.max(-16, ($store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.dve_position_x || 0) - 0.1))">
+<i class="bi bi-caret-down-fill text-sm"></i>
+</button>
+</div>
+</div>
+</div>
+
+<div class="flex items-center justify-between">
+<label class="text-sm opacity-70 mr-3">Y:</label>
+<div class="flex items-center gap-1">
+<input 
+type="number" 
+class="input input-bordered input-sm w-20 text-center font-mono text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" 
+:value="($store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.dve_position_y || 0).toFixed(2)"
+@change="$store.atem.setUSKDVEPositionY(k, $event.target.value)"
+min="-1000" 
+max="1000" 
+step="0.01">
+<div class="flex flex-col">
+<button class="btn btn-ghost btn-xs p-0 h-4 min-h-0" @click="$store.atem.setUSKDVEPositionY(k, Math.min(9, ($store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.dve_position_y || 0) + 0.1))">
+<i class="bi bi-caret-up-fill text-sm"></i>
+</button>
+<button class="btn btn-ghost btn-xs p-0 h-4 min-h-0" @click="$store.atem.setUSKDVEPositionY(k, Math.max(-9, ($store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.dve_position_y || 0) - 0.1))">
+<i class="bi bi-caret-down-fill text-sm"></i>
+</button>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Size Controls -->
+<div class="grid grid-cols-2 gap-x-6 gap-y-3 pl-6">
+<div class="flex items-center justify-between">
+<label class="text-sm opacity-70 mr-3">Size X:</label>
+<div class="flex items-center gap-1">
+<input 
+type="number" 
+class="input input-bordered input-sm w-20 text-center font-mono text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" 
+:value="($store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.dve_size_x ?? 0).toFixed(2)"
+@change="$store.atem.setUSKDVESizeX(k, $event.target.value)"
+min="0" 
+max="99" 
+step="0.01">
+<div class="flex flex-col">
+<button class="btn btn-ghost btn-xs p-0 h-4 min-h-0" @click="$store.atem.setUSKDVESizeX(k, Math.min(10, ($store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.dve_size_x ?? 0) + 0.01))">
+<i class="bi bi-caret-up-fill text-sm"></i>
+</button>
+<button class="btn btn-ghost btn-xs p-0 h-4 min-h-0" @click="$store.atem.setUSKDVESizeX(k, Math.max(0, ($store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.dve_size_x ?? 0) - 0.01))">
+<i class="bi bi-caret-down-fill text-sm"></i>
+</button>
+</div>
+</div>
+</div>
+
+<div class="flex items-center justify-between">
+<label class="text-sm opacity-70 mr-3">Size Y:</label>
+<div class="flex items-center gap-1">
+<input 
+type="number" 
+class="input input-bordered input-sm w-20 text-center font-mono text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" 
+:value="($store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.dve_size_y ?? 0).toFixed(2)"
+@change="$store.atem.setUSKDVESizeY(k, $event.target.value)"
+min="0" 
+max="99" 
+step="0.01">
+<div class="flex flex-col">
+<button class="btn btn-ghost btn-xs p-0 h-4 min-h-0" @click="$store.atem.setUSKDVESizeY(k, Math.min(10, ($store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.dve_size_y ?? 0) + 0.01))">
+<i class="bi bi-caret-up-fill text-sm"></i>
+</button>
+<button class="btn btn-ghost btn-xs p-0 h-4 min-h-0" @click="$store.atem.setUSKDVESizeY(k, Math.max(0, ($store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.dve_size_y ?? 0) - 0.01))">
+<i class="bi bi-caret-down-fill text-sm"></i>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Divider -->
+<div class="divider my-3"></div>
+
+<!-- Flying Key Keyframe Controls -->
+{% include 'control/_usk_keyframe.html' with panel=panel %}
+</div>
+</div>

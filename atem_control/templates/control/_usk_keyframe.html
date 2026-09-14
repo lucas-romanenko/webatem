@@ -1,0 +1,161 @@
+{% comment %}
+USK flying-key keyframe controls — keyframe A/B set/jump, the DVE rate
+entry + Set button, Run-To controls and the infinite-position grid.
+Included by control/_usk_fly.html (luma/chroma/pattern panels) and
+directly by the DVE panel (a DVE key IS the flying key, so it carries
+these controls without the fly enable wrapper).
+
+Params:
+  panel  'luma' | 'chroma' | 'pattern' | 'dve' — disambiguates the
+         'usk<k>-<panel>-dve-rate' input id across the coexisting panels.
+{% endcomment %}
+<div class="space-y-3">
+<div class="text-sm font-medium">Flying Key Controls</div>
+
+<div class="space-y-3 pl-6">
+<!-- Keyframe Controls -->
+<div class="flex items-center justify-between">
+<label class="text-sm opacity-70">Keyframe:</label>
+<div class="flex items-center gap-2">
+<button 
+class="btn btn-sm min-w-[4rem]"
+:class="$store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.fly_keyframe_a_stored ? 'btn-primary' : 'btn-outline'"
+@click="$store.atem.send('set_keyer_fly_keyframe', {key_index: k, keyframe: 'a'})"
+title="Set current position as Keyframe A">
+Set A
+</button>
+<button 
+class="btn btn-sm min-w-[4rem]"
+:class="$store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.fly_keyframe_b_stored ? 'btn-primary' : 'btn-outline'"
+@click="$store.atem.send('set_keyer_fly_keyframe', {key_index: k, keyframe: 'b'})"
+title="Set current position as Keyframe B">
+Set B
+</button>
+</div>
+</div>
+
+<!-- DVE Rate -->
+<div class="flex items-center justify-between">
+<label class="text-sm opacity-70">Rate:</label>
+<div class="flex items-center gap-2">
+<input
+type="text"
+class="input input-bordered input-sm w-20 text-center font-mono"
+:id="'usk' + k + '-{{ panel }}-dve-rate'"
+x-model="$store.atem.inputs.uskDveRates[k]"
+@keydown.enter="$store.atem.send('set_usk_dve_rate', {key_index: k, rate: $store.atem.inputs.uskDveRates[k] || '1:00'}); $event.target.blur()"
+placeholder="1:00">
+<button
+class="btn btn-primary btn-sm"
+@click="$store.atem.send('set_usk_dve_rate', {key_index: k, rate: $store.atem.inputs.uskDveRates[k] || '1:00'})">
+Set
+</button>
+</div>
+</div>
+
+<!-- Run To Controls -->
+<div>
+<label class="text-sm opacity-70 block mb-2">Run To:</label>
+<div class="flex gap-2">
+<button 
+class="btn btn-sm flex-1"
+:class="$store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.fly_keyframe_a_stored ? 
+($store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.fly_is_at_keyframe_a ? 'btn-primary' : 'btn-outline') : 
+'btn-disabled opacity-50'"
+:disabled="!$store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.fly_keyframe_a_stored"
+@click="$store.atem.send('run_flying_key_keyframe', {key_index: k, keyframe: 'a'})"
+title="Run to Keyframe A">
+A
+</button>
+<button 
+class="btn btn-sm flex-1"
+:class="$store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.fly_keyframe_b_stored ? 
+($store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.fly_is_at_keyframe_b ? 'btn-primary' : 'btn-outline') : 
+'btn-disabled opacity-50'"
+:disabled="!$store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.fly_keyframe_b_stored"
+@click="$store.atem.send('run_flying_key_keyframe', {key_index: k, keyframe: 'b'})"
+title="Run to Keyframe B">
+B
+</button>
+<button 
+class="btn btn-sm flex-1"
+:class="$store.atem.state.mes[$store.atem.activeMe].usk?.data?.[k]?.fly_is_at_keyframe_full ? 'btn-primary' : 'btn-outline'"
+@click="$store.atem.send('run_flying_key_keyframe', {key_index: k, keyframe: 'full'})"
+title="Run to Full size/position">
+Full
+</button>
+</div>
+</div>
+
+<!-- Run To Infinite Grid -->
+<div>
+<label class="block text-sm font-medium mb-2 opacity-70">Run To Infinite:</label>
+<div class="inline-grid grid-cols-3 gap-1">
+<!-- Top Row -->
+<button class="btn btn-sm btn-outline w-16 h-10"
+@click="$store.atem.send('run_flying_key_infinite_direction', {key_index: k, direction: 1})"
+title="Top Left">
+<i class="bi bi-arrow-up-left text-sm"></i>
+</button>
+<button class="btn btn-sm btn-outline w-16 h-10"
+@click="$store.atem.send('run_flying_key_infinite_direction', {key_index: k, direction: 2})"
+title="Top">
+<i class="bi bi-arrow-up text-sm"></i>
+</button>
+<button class="btn btn-sm btn-outline w-16 h-10"
+@click="$store.atem.send('run_flying_key_infinite_direction', {key_index: k, direction: 3})"
+title="Top Right">
+<i class="bi bi-arrow-up-right text-sm"></i>
+</button>
+
+<!-- Middle Row -->
+<button class="btn btn-sm btn-outline w-16 h-10"
+@click="$store.atem.send('run_flying_key_infinite_direction', {key_index: k, direction: 4})"
+title="Left">
+<i class="bi bi-arrow-left text-sm"></i>
+</button>
+
+<!-- Center cell with two buttons -->
+<div class="flex gap-1 w-16 h-10">
+<button class="btn btn-sm btn-outline flex-1 h-10 p-0"
+@click="$store.atem.send('run_flying_key_infinite_direction', {key_index: k, direction: 0})"
+title="Expand">
+<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 16 16">
+<path d="M0 8h4L2 6v4zm12 0h4l-2-2v4zM8 0v4l2-2h-4zm0 12v4l-2-2h4z"/>
+</svg>
+</button>
+<button class="btn btn-sm btn-outline flex-1 h-10 p-0"
+@click="$store.atem.send('run_flying_key_infinite_direction', {key_index: k, direction: 5})"
+title="Contract">
+<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 16 16">
+<path d="M4 8H0l2 2V6zm12 0h-4l2-2v4zM8 4V0l-2 2h4zm0 12v-4l2 2H6z"/>
+</svg>
+</button>
+</div>
+
+<button class="btn btn-sm btn-outline w-16 h-10"
+@click="$store.atem.send('run_flying_key_infinite_direction', {key_index: k, direction: 6})"
+title="Right">
+<i class="bi bi-arrow-right text-sm"></i>
+</button>
+
+<!-- Bottom Row -->
+<button class="btn btn-sm btn-outline w-16 h-10"
+@click="$store.atem.send('run_flying_key_infinite_direction', {key_index: k, direction: 7})"
+title="Bottom Left">
+<i class="bi bi-arrow-down-left text-sm"></i>
+</button>
+<button class="btn btn-sm btn-outline w-16 h-10"
+@click="$store.atem.send('run_flying_key_infinite_direction', {key_index: k, direction: 8})"
+title="Bottom">
+<i class="bi bi-arrow-down text-sm"></i>
+</button>
+<button class="btn btn-sm btn-outline w-16 h-10"
+@click="$store.atem.send('run_flying_key_infinite_direction', {key_index: k, direction: 9})"
+title="Bottom Right">
+<i class="bi bi-arrow-down-right text-sm"></i>
+</button>
+</div>
+</div>
+</div>
+</div>

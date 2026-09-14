@@ -1,0 +1,282 @@
+/* WebATEM brand — from docs/brand/handoff/README.md (high fidelity: match exactly).
+ *
+ * This sheet is WebATEM's own and loads LAST: after the compiled Tailwind /
+ * DaisyUI sheet and after theme.css (which a sync tool used to
+ * regenerates from the upstream project's theme — never edit that one). It
+ * (1) redefines the DaisyUI 4 role tokens on [data-theme="dark"] with the
+ * brand palette, (2) sets the two families — Archivo for the interface, IBM
+ * Plex Mono for anything a machine reported — and (3) restyles the control
+ * surface: raised grey buttons, PROGRAM red and PREVIEW green as the only
+ * state fills, 8 px buttons / 6 px inputs / 14 px cards.
+ *
+ * Rules that hold (handoff §2): the state colours ARE the brand; --pgm is
+ * never a fill for anything that is not live and --pvw never for anything
+ * not cued; --link is text only, never a fill.
+ */
+
+@font-face { font-family: "Archivo"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/Archivo-400-latin-ext.woff2") format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Archivo"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/Archivo-400-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Archivo"; font-style: normal; font-weight: 500; font-display: swap; src: url("fonts/Archivo-500-latin-ext.woff2") format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Archivo"; font-style: normal; font-weight: 500; font-display: swap; src: url("fonts/Archivo-500-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Archivo"; font-style: normal; font-weight: 600; font-display: swap; src: url("fonts/Archivo-600-latin-ext.woff2") format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Archivo"; font-style: normal; font-weight: 600; font-display: swap; src: url("fonts/Archivo-600-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Archivo"; font-style: normal; font-weight: 800; font-display: swap; src: url("fonts/Archivo-800-latin-ext.woff2") format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Archivo"; font-style: normal; font-weight: 800; font-display: swap; src: url("fonts/Archivo-800-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/IBMPlexMono-400-latin-ext.woff2") format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/IBMPlexMono-400-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url("fonts/IBMPlexMono-500-latin-ext.woff2") format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 500; font-display: swap; src: url("fonts/IBMPlexMono-500-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 600; font-display: swap; src: url("fonts/IBMPlexMono-600-latin-ext.woff2") format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 600; font-display: swap; src: url("fonts/IBMPlexMono-600-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+
+:root {
+    /* The handoff's tokens, verbatim. */
+    --ink:            #0E0F10;
+    --surface:        #141618;
+    --surface-raised: #1E2124;
+    --border:         #26292C;
+    --border-strong:  #34383C;
+    --text:           #EDEDEA;
+    --text-muted:     #9A9E9F;
+    --text-faint:     #7E8386;
+    --pgm:            #D62718;
+    --pvw:            #2FD07A;
+    --link:           #FF7A6B;
+    --link-hover:     #FF9A8E;
+    --paper:          #F2F1EE;
+    --font-ui:   "Archivo", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+[data-theme="dark"] {
+    /* DaisyUI roles in OKLCH (the framework composes them as oklch(var(--x))). */
+    --p:   72.14% 0.1548 30.37;   /* --link #FF7A6B: the accent for text, focus, links */
+    --pc:  15.08% 0.0034 264.51;  /* ink on it, where a fill cannot be avoided */
+    --s:   72.14% 0.1548 30.37;
+    --sc:  15.08% 0.0034 264.51;
+    --a:   72.14% 0.1548 30.37;
+    --ac:  15.08% 0.0034 264.51;
+    --n:   24.43% 0.0069 250.68;  /* --surface-raised #1E2124 */
+    --nc:  94.00% 0.0025 106.47;  /* --text #EDEDEA */
+    --b1:  15.08% 0.0034 264.51;  /* --ink #0E0F10 — page */
+    --b2:  18.49% 0.0044 246.71;  /* --surface #141618 — cards */
+    --b3:  24.43% 0.0069 250.68;  /* --surface-raised #1E2124 — buttons, inputs, chrome */
+    --bc:  94.00% 0.0025 106.47;  /* --text #EDEDEA */
+    --in:  72.14% 0.1548 30.37;
+    --inc: 15.08% 0.0034 264.51;
+    --su:  76.51% 0.1926 152.94;  /* --pvw #2FD07A — cued / connected */
+    --suc: 15.08% 0.0034 264.51;  /* dark ink on green, never white */
+    --wa:  88.18% 0.1541 90.33;   /* keys / BKGD stay the amber the panels use (a third state) */
+    --wac: 18.83% 0.0296 81.93;
+    --er:  69.42% 0.1975 17.51;   /* form errors — distinct from --pgm, which means LIVE */
+    --erc: 15.08% 0.0034 264.51;
+
+    --rounded-btn:   8px;
+    --rounded-box:   14px;
+    --rounded-badge: 999px;
+
+    /* Supporting values theme.css defined for the control page. */
+    --chrome:        #0A0B0C;
+    --chrome-line:   var(--border);
+    --chrome-fg:     var(--text);
+    --chrome-muted:  var(--text-muted);
+    --chrome-accent: var(--link);
+    --line:          var(--border);
+    --line-soft:     #1E2124;
+    --zebra:         rgba(255, 255, 255, 0.02);
+    --input:         var(--surface-raised);
+    --input-solid:   var(--surface-raised);
+    --input-line:    var(--border-strong);
+    --ink-2:         var(--text-muted);
+    --ink-3:         var(--text-faint);
+    --ink-4:         #4A5054;
+
+    /* Program tally — the brand red, darkened so white clears 4.5:1 (5.0:1). */
+    --pgm-red:         var(--pgm);
+    --pgm-red-content: #FFFFFF;
+}
+
+/* ---- type ------------------------------------------------------------ */
+body { font-family: var(--font-ui); color: var(--text); }
+.font-mono, code, kbd, pre, samp { font-family: var(--font-mono); }
+a { color: var(--link); }
+a:hover { color: var(--link-hover); }
+h1, h2, h3, .card-title { letter-spacing: -0.02em; }
+
+/* Overline / control label: mono 10–11 px, 0.18em, uppercase, faint. */
+.brand-overline { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-faint); font-weight: 400; }
+.brand-data { font-family: var(--font-mono); }
+
+/* ---- the wordmark, wherever it is set in text ----------------------- */
+.brand-wordmark { font-family: var(--font-ui); font-weight: 800; letter-spacing: -0.03em; line-height: 1; color: var(--text); white-space: nowrap; }
+.brand-wordmark > span { font-weight: 400; color: var(--text-muted); }
+.brand-mark { display: block; flex: none; }
+.brand-mark svg { display: block; width: 100%; height: 100%; }
+
+/* ---- buttons: raised grey, border-strong, 8 px, mono ---------------- */
+.btn {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: none;
+    border-radius: 8px;
+}
+.btn:not(.btn-link):not(.btn-ghost):not(.btn-outline):not(.btn-pgm):not(.btn-success):not(.btn-warning):not(.btn-error):not(.bg-red-600):not(.bg-green-600) {
+    background-color: var(--surface-raised);
+    border: 1px solid var(--border-strong);
+    color: var(--text);
+}
+.btn-primary, .btn-primary:hover { background-color: var(--surface-raised); border-color: var(--border-strong); color: var(--text); }
+.btn:not(.btn-pgm):not(.bg-red-600):not(.bg-green-600):not(.btn-ghost):not(.btn-link):hover { border-color: var(--text-faint); background-color: #24272B; }
+.btn-outline { border: 1px solid var(--border-strong); color: var(--text-muted); background-color: var(--surface-raised); }
+.btn-outline:hover { color: var(--text); border-color: var(--text-faint); background-color: #24272B; }
+.btn-ghost { color: var(--text-muted); }
+.btn-ghost:hover { color: var(--text); background-color: var(--surface-raised); }
+.btn-disabled, .btn[disabled], .btn:disabled { background-color: var(--surface-raised) !important; border-color: var(--border) !important; color: var(--text-faint) !important; }
+.checkbox-primary:checked, .checkbox:checked { background-color: var(--text); border-color: var(--text); --chkbg: var(--text); --chkfg: var(--ink); }
+
+/* Inputs / selects: 6 px, raised, border-strong. */
+.input, .select, .textarea, .input-bordered, .select-bordered {
+    background-color: var(--surface-raised);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    color: var(--text);
+}
+.input:focus, .select:focus, .textarea:focus { outline: none; border-color: var(--text-faint); box-shadow: 0 0 0 2px oklch(var(--p) / 0.25); }
+.input.font-mono, input[type="number"], input[inputmode="numeric"] { font-family: var(--font-mono); }
+
+/* Cards: surface, hairline border, 14 px. */
+.card { border-radius: 14px; }
+.card.bg-base-200, .card.bg-base-100 { border: 1px solid var(--border); }
+.modal-box { border-radius: 14px; border: 1px solid var(--border-strong); background-color: var(--surface); }
+.badge { font-family: var(--font-mono); font-weight: 600; letter-spacing: 0.06em; }
+
+/* Our scrollbar thumb: chrome, not accent. */
+.cbar-thumb { background: var(--text-faint); }
+.cbar.is-dragging .cbar-thumb { background: var(--text-muted); }
+
+/* ---- the control surface --------------------------------------------- */
+/* Source buttons: inactive = raised grey / muted text / strong border;
+   live (program) = --pgm with white; cued (preview) = --pvw with ink. The
+   backlit bloom follows the brand values. */
+.source-btn, .control-btn { font-family: var(--font-mono); font-weight: 600; border-radius: 8px; }
+.source-btn.btn-outline, .control-btn:not(.bg-red-600):not(.btn-warning) {
+    background-color: var(--surface-raised);
+    color: var(--text-muted);
+    border: 1px solid var(--border-strong);
+}
+.source-btn.btn-outline:hover, .control-btn:not(.bg-red-600):not(.btn-warning):hover { color: var(--text); border-color: var(--text-faint); background-color: #24272B; }
+.source-btn.bg-red-600, .control-btn.bg-red-600, .source-btn.bg-red-600:hover, .control-btn.bg-red-600:hover {
+    background-color: var(--pgm);
+    border-color: var(--pgm);
+    color: #FFFFFF;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.22),
+        inset 0 0 12px rgba(255, 255, 255, 0.12),
+        0 0 10px 2px color-mix(in srgb, var(--pgm) 55%, transparent),
+        0 0 26px 6px color-mix(in srgb, var(--pgm) 30%, transparent);
+}
+.source-btn.bg-green-600, .source-btn.bg-green-600:hover {
+    background-color: var(--pvw);
+    border-color: var(--pvw);
+    color: var(--ink);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.25),
+        inset 0 0 12px rgba(255, 255, 255, 0.15),
+        0 0 10px 2px color-mix(in srgb, var(--pvw) 55%, transparent),
+        0 0 26px 6px color-mix(in srgb, var(--pvw) 30%, transparent);
+}
+/* AUTO (handoff §4): raised grey with the strong border — not amber. The
+   template gives the big AUTO button btn-warning; the amber stays for the
+   lit next-transition keys (.control-btn) and the small SHIFT toggle. */
+.btn-warning:not(.control-btn):not(.btn-sm):not(.btn-xs) {
+    background-color: var(--surface-raised);
+    border: 1px solid var(--border-strong);
+    color: var(--text);
+    box-shadow: none;
+}
+.btn-warning:not(.control-btn):not(.btn-sm):not(.btn-xs):hover { border-color: var(--text-faint); background-color: #24272B; }
+/* CUT / AUTO and the other transition controls: mono, tracked, uppercase. */
+.btn-pgm { font-family: var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; border-radius: 8px; }
+.btn-pgm, .btn-pgm:hover { background-color: var(--pgm); border-color: var(--pgm); color: #FFFFFF; }
+/* Bus card titles: the overline, in the state colour. */
+.card-title.text-pgm { color: var(--pgm); }
+.card-title.text-success { color: var(--pvw); }
+
+/* ---- outline buttons keep a readable label on hover ------------------
+   DaisyUI's .btn-outline.btn-<colour>:hover fills with that colour and
+   flips the text to its content colour — on this palette a near-black
+   label on a dark fill (the Connect page's recent / discovered chips were
+   unreadable under the pointer, Lucas 2026-09-14). The brand has no
+   accent fill: an outline button is raised grey, lighter under the
+   pointer, and the label is always --text. Same specificity as DaisyUI's
+   rule and later in the cascade, so it wins. */
+.btn-outline.btn-primary, .btn-outline.btn-secondary, .btn-outline.btn-accent, .btn-outline.btn-info {
+    background-color: var(--surface-raised);
+    border-color: var(--border-strong);
+    color: var(--text);
+}
+.btn-outline.btn-primary:hover, .btn-outline.btn-secondary:hover, .btn-outline.btn-accent:hover, .btn-outline.btn-info:hover,
+.btn-outline.btn-primary:focus-visible, .btn-outline.btn-secondary:focus-visible {
+    background-color: #24272B;
+    border-color: var(--text-faint);
+    color: var(--text);
+}
+
+/* ---- fields that hold machine data (an IP, a port) ------------------- */
+input.brand-data, input.brand-data::placeholder { font-family: var(--font-mono); }
+input.brand-data::placeholder { font-style: normal; font-weight: 400; letter-spacing: 0; color: var(--text-faint); opacity: 1; }
+
+/* ---- the Settings drawer, in the control surface's own language ------
+   The page is hairline cards with mono overline headers (PROGRAM, T-BAR,
+   KEYS); the drawer was a flat near-black sheet with sentence-case rows
+   in the UI face, and read like another app (Lucas, 2026-09-14). Same
+   surface, same border, same overline — the section bodies keep the
+   controls they always had. */
+.settings-panel { background-color: var(--surface); border-left: 1px solid var(--border); }
+.settings-panel > div:first-child { background-color: var(--surface-raised); border-bottom-color: var(--border); }
+.settings-panel > div:first-child h2 {
+    font-family: var(--font-mono); font-size: 12px; font-weight: 600;
+    letter-spacing: 0.18em; text-transform: uppercase; color: var(--text);
+}
+.settings-panel > div:first-child h2 .bi { color: var(--text-faint); }
+/* The accordion rows. Addressed by their own shape, not by position: the
+   panel's last child is the overlay scrollbar (custom-scrollbar.js), so a
+   :last-child path silently matches nothing. */
+.settings-panel .border-b { border-bottom-color: var(--border); }
+.settings-panel button.w-full.text-left {
+    padding: 12px 16px;
+    font-family: var(--font-mono); font-size: 11px; font-weight: 400;
+    letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-muted);
+}
+.settings-panel button.w-full.text-left:hover { background-color: var(--surface-raised); color: var(--text); }
+.settings-panel button.w-full.text-left .bi { color: var(--text-faint); font-size: 12px; }
+/* a text accent that is the brand's, not DaisyUI's colour roles */
+.link-brand { color: var(--link); }
+.link-brand:hover { color: var(--link-hover); text-decoration: underline; }
+
+/* ---- inside an open section: the panel's own vocabulary ---------------
+   A field label is an overline like the ones on the page (PROGRAM, T-BAR);
+   the value beside it is already mono. Checkbox and radio text is a
+   <span> in the markup, so it keeps sentence case — those are controls,
+   not labels. */
+.settings-panel .acc-body label,
+.settings-panel .acc-body div.text-sm.font-medium,
+.settings-panel .acc-body .text-sm.font-semibold {
+    font-family: var(--font-mono); font-size: 10px; font-weight: 400;
+    letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-faint);
+    opacity: 1;
+}
+.settings-panel .acc-body .text-sm.font-semibold { padding-bottom: 8px; }
+/* a label that IS a control (a checkbox's own <label>) keeps its shape */
+.settings-panel .acc-body label.cursor-pointer,
+.settings-panel .acc-body label:has(input) {
+    font-family: var(--font-ui); font-size: 14px; letter-spacing: normal;
+    text-transform: none; color: var(--text);
+}
+/* Sliders: the filled part and the thumb ring are grey, not the near-white
+   DaisyUI default that read as a different app. The track keeps DaisyUI's
+   translucent fill so the border-luma gradient sliders still show through. */
+.range { --range-shdw: var(--text-muted); }
+.range::-webkit-slider-thumb { background-color: var(--surface); }
+.range::-moz-range-thumb { background-color: var(--surface); }

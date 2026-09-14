@@ -1,0 +1,115 @@
+<!-- app/atem_control/templates/connect.html - Clean version with only button loading -->
+{% extends "base.html" %}
+{% load static static_v %}
+
+{% block title %}Connect to ATEM{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static_v 'css/atem_connect.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="min-h-[calc(100vh-12rem)] flex items-start justify-center p-4 pt-24">
+    <div class="card w-full max-w-md bg-base-200">
+        <div class="card-body">
+            <!-- Header -->
+            <div class="text-center mb-6 relative">
+                <div class="flex items-center justify-center gap-[14px] mb-3">
+                    <span class="brand-mark" style="width:44px;height:44px">{% include "brand/_mark.svg" %}</span>
+                    <span class="brand-wordmark" style="font-size:30px"><span>web</span>ATEM</span>
+                </div>
+                <p style="color:var(--text-muted)">Browser control for ATEM switchers.</p>
+            </div>
+
+            <!-- Connection Form -->
+            <form onsubmit="connectToAtem(event)" class="space-y-4" data-control-url="{% url 'atem_control:control' %}">
+                <div class="form-control">
+                    <label class="label" for="ipAddress">
+                        <span class="label-text font-medium">ATEM IP Address</span>
+                    </label>
+                    <!-- IP-only connect: validated client-side before the
+                         WebSocket attempt. -->
+                    <div class="relative">
+                        <input type="text" id="ipAddress" name="ipAddress" placeholder="Enter IP address"
+                            value="{{ initial_ip|default:'' }}"
+                            autocomplete="off"
+                            required class="input input-bordered w-full brand-data">
+                        <ul id="ipSuggestions"
+                            class="menu absolute left-0 right-0 top-full mt-1 p-2 shadow-lg bg-base-100 rounded-box z-30 max-h-72 overflow-y-auto flex-nowrap hidden">
+                        </ul>
+                    </div>
+                </div>
+
+                {% if recent_atems %}
+                <!-- Recent ATEMs -->
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text text-sm text-base-content/70">Recent Connections</span>
+                    </label>
+                    <div class="flex flex-wrap gap-2">
+                        {% for atem in recent_atems %}
+                        <button type="button" class="btn btn-sm btn-outline btn-primary"
+                            onclick="setIP('{{ atem.ip_address }}')"
+                            title="{% if atem.equipment_name %}{{ atem.equipment_name }} - {% endif %}{{ atem.ip_address }}">
+                            {% if atem.equipment_name %}
+                            {{ atem.equipment_name }}
+                            {% else %}
+                            {{ atem.ip_address }}
+                            {% endif %}
+                        </button>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if discovery_enabled %}
+                <!-- On your network: mDNS-discovered ATEMs + opt-in subnet scan.
+                     Populated by atem_discovery.js; hidden entirely on a network
+                     where nothing is found and no scan has run. -->
+                <div class="form-control" id="discoverySection">
+                    <label class="label gap-2">
+                        <span class="label-text text-sm text-base-content/70">On Your Network</span>
+                        <span class="flex items-center gap-1">
+                            <input type="text" id="scanSubnet"
+                                class="input input-xs input-bordered w-28 font-mono"
+                                placeholder="192.168.1"
+                                title="Subnet to scan (first three octets)">
+                            <button type="button" id="scanBtn"
+                                class="btn btn-xs btn-ghost gap-1"
+                                title="Rescan this subnet for ATEMs that don't advertise over Bonjour">
+                                <i class="bi bi-arrow-clockwise"></i> Rescan
+                            </button>
+                        </span>
+                    </label>
+                    <div class="flex flex-wrap gap-2 max-h-56 overflow-y-auto" id="discoveryList"></div>
+                    <p class="text-xs text-base-content/50 mt-1 hidden" id="discoveryEmpty">
+                        Looking for ATEMs on your network… they appear here
+                        automatically. If one doesn't advertise, hit
+                        <span class="font-medium">Rescan</span>.
+                    </p>
+                </div>
+                {% endif %}
+
+                <button type="submit" class="btn btn-primary w-full" id="connectBtn">
+                    <i class="bi bi-plug mr-2"></i>
+                    Connect to ATEM
+                </button>
+            </form>
+
+            <!-- Status Message -->
+            <div class="alert hidden" id="statusMessage" role="alert">
+                <span id="statusMessageText"></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+{% comment %} The host's switcher list for the name-or-IP suggestions (json_script
+   escapes it); empty standalone, where discovery fills the page live. {% endcomment %}
+{{ atem_equipment|json_script:"atem-equipment-data" }}
+<script src="{% static_v 'js/atem_connect.js' %}"></script>
+{% if discovery_enabled %}<script src="{% static_v 'js/atem_discovery.js' %}"></script>{% endif %}
+{% endblock %}

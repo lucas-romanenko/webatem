@@ -1,0 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Everything visual beyond Tailwind/daisyUI utilities lives in
+   atem_control/static/css/theme.css (generated from the upstream theme sheet
+   by a sync tool that no longer exists) and loads AFTER the compiled sheet. */

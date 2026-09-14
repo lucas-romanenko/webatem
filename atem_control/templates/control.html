@@ -1,0 +1,811 @@
+{% extends "base.html" %}
+{% load static static_v %}
+
+{% block title %}ATEM Control Panel{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static_v 'css/atem_control.css' %}">
+{% endblock %}
+
+{% block content %}
+<div x-data="atemControlPage"
+     x-effect="audioPanelOpen && !document.hidden ? $store.atem.subscribeAudioMeters() : $store.atem.unsubscribeAudioMeters()"
+     @visibilitychange.window="if (document.hidden) $store.atem.unsubscribeAudioMeters(); else if (audioPanelOpen) $store.atem.subscribeAudioMeters()"
+     @drop.window="dragOverSlotIdx = null; dragOverPlayerIdx = null"
+     @dragend.window="dragOverSlotIdx = null; dragOverPlayerIdx = null">
+    <!-- Main ATEM Content. Overlays dim + blur it THROUGH their backdrop
+         (.atem-overlay-backdrop) — nothing filters this element itself. -->
+    <div class="min-h-screen bg-base-100 p-4 relative atem-main-content"
+         :class="[$store.atem.bodyWarningClass]">
+    <!-- Loading Overlay - shows until ATEM is fully connected with state.
+         Disconnect handling is via redirect: on mid-session ATEM loss,
+         inactivity timeout, or manual disconnect, the operator goes back
+         to /atem/ with an appropriate alert there. -->
+    <div x-show="!$store.atem.connected || !$store.atem.stateReady" class="absolute inset-0 bg-base-100 z-40 flex items-start justify-center p-4 pt-24">
+        <div class="card w-full max-w-md bg-base-200">
+            <div class="card-body text-center">
+                <div class="flex flex-col items-center gap-4">
+                    <div class="loading loading-spinner loading-lg text-primary"></div>
+                    <h2 class="text-xl font-bold">Loading ATEM Control</h2>
+                    <p class="text-base-content/70">Initializing connection and loading controls...</p>
+                    <p class="text-sm text-base-content/50" x-text="'Status: ' + ($store.atem.statusText || 'Connecting...')"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content - only shows when ATEM is connected and has state -->
+    <div class="max-w-[2000px] mx-auto relative controls-transition" x-show="$store.atem.connected && $store.atem.stateReady" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100">
+        
+{% include 'control/_header.html' %}
+
+        <!-- M/E selector (Stage 4A) — only rendered on multi-M/E units, so
+             single-M/E switchers look exactly as before. Buttons switch
+             which M/E the per-M/E surfaces (buses, transition, USKs, FtB)
+             render and control; background M/Es stay live in state.mes. -->
+        <div class="mb-6" x-show="($store.atem.state.mes?.length ?? 1) > 1" x-cloak>
+            <div class="card bg-base-200">
+                <div class="card-body py-3">
+                    {% comment %} flex-wrap: each M/E button is min-w-20, so a 4-M/E
+                    switcher ran the row off a phone screen and M/E 4 could not be
+                    reached at all. It wraps to a second line instead. {% endcomment %}
+                    <div class="flex flex-wrap items-center gap-3 gap-y-2">
+                        <span class="text-sm font-semibold opacity-70">M/E</span>
+                        <template x-for="(me, i) in $store.atem.state.mes" :key="i">
+                            <button class="btn btn-sm min-w-20"
+                                    :class="i === $store.atem.activeMe ? 'btn-primary' : 'bg-base-300 hover:bg-base-content hover:text-base-100'"
+                                    @click="$store.atem.setActiveMe(i)"
+                                    x-text="'M/E ' + (i + 1)"></button>
+                        </template>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Grid -->
+        <!-- 2xl: the bus cards cap their own width, so the left column sizes
+             to content and the Keys column absorbs the rest — no dead space
+             beside Program/Preview, bigger USK/DSK banks. -->
+        <!-- --atem-btn: the ONE square-button size shared by Program/Preview/
+             USK/DSK tracks, per breakpoint — every control square is the same
+             size, scaling together with the screen. -->
+        <div class="grid grid-cols-1 lg:grid-cols-[3fr_auto_2fr] xl:grid-cols-[5fr_auto_4fr] 2xl:grid-cols-[auto_auto_minmax(0,1fr)] gap-6 lg:gap-8 [--atem-btn:2.75rem] lg:[--atem-btn:3rem] xl:[--atem-btn:3.25rem] 2xl:[--atem-btn:4rem]">
+            
+            <!-- Left: Sources and Controls -->
+            <div class="space-y-6">
+                
+                <!-- Program Sources -->
+                <div class="card bg-base-200">
+                    <div class="card-body">
+                        <h2 class="card-title text-pgm mb-4">
+                            <span class="w-3 h-3 bg-pgm rounded-full"></span>
+                            Program
+                            <button x-show="$store.atem.busBanked()" x-cloak
+                                :class="$store.atem.busShifted() ? 'btn btn-sm btn-warning shadow-lg ml-auto' : 'btn btn-sm btn-outline hover:border-[oklch(var(--wa))] ml-auto'"
+                                @click="$store.atem.toggleBusShift()"
+                                title="Show the other source bank (or hold Shift)">
+                                SHIFT
+                            </button>
+                        </h2>
+                        <!-- ASC-style two-row bus: cameras, a spacer, then the
+                             internals cluster; geometry comes from busGeom() per the
+                             connected model's topology. Empty cells keep the two
+                             rows' columns aligned. -->
+                        {% comment %} Tracks are a fixed --atem-btn, never minmax(0,…):
+                        collapsing columns overlapped every label on a switcher with
+                        many inputs. The ASC row needs a control surface's width, which
+                        a phone has not got, so below sm .atem-bus-row wraps into as
+                        many lines as it needs, and .atem-bus-big wraps a BANKED
+                        switcher below lg too (a 4 M/E does not fit a tablet either).
+                        Rules in atem_control.css; the column template travels as
+                        --bus-tpl so a stylesheet can replace it. Desktop keeps this
+                        two-row shape exactly. {% endcomment %}
+                        <div class="atem-bus flex flex-col gap-0.5 [--bus-gap:0.25rem] 2xl:[--bus-gap:1.25rem]"
+                             :class="{ 'atem-bus-big': $store.atem.busBanked() }">
+                            <template x-for="(row, ri) in $store.atem.busGeom().rows" :key="'r' + ri">
+                                <div class="atem-bus-row grid gap-0.5"
+                                     :style="{ '--bus-tpl': 'repeat(' + $store.atem.busGeom().camCols + ', var(--atem-btn)) var(--bus-gap) repeat(' + $store.atem.busGeom().midCols + ', var(--atem-btn)) var(--bus-gap) repeat(' + $store.atem.busGeom().xCols + ', var(--atem-btn))' }">
+                                    <template x-for="(s, ci) in row" :key="ri + '-' + ci + '-' + (s ? s.source : 'e')">
+                                        <div class="min-w-0" :class="{ 'atem-bus-pad': !s }">
+                                            <template x-if="s">
+                                                <button
+                                                    :class="$store.atem.getSourceButtonClass('program', s.source)"
+                                                    :title="s.long"
+                                                    @click="$store.atem.send('set_program', {source: s.source})"
+                                                    x-text="s.short"
+                                                    class="aspect-square flex items-center justify-center font-semibold text-center leading-tight p-1 transition-all duration-200 hover:scale-105 active:scale-95 w-full min-w-0 min-h-0 h-auto text-xs sm:text-sm lg:text-base">
+                                                </button>
+                                            </template>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Preview Sources -->
+                <div class="card bg-base-200">
+                    <div class="card-body">
+                        <h2 class="card-title text-success mb-4">
+                            <span class="w-3 h-3 bg-success rounded-full"></span>
+                            Preview
+                            <button x-show="$store.atem.busBanked()" x-cloak
+                                :class="$store.atem.busShifted() ? 'btn btn-sm btn-warning shadow-lg ml-auto' : 'btn btn-sm btn-outline hover:border-[oklch(var(--wa))] ml-auto'"
+                                @click="$store.atem.toggleBusShift()"
+                                title="Show the other source bank (or hold Shift)">
+                                SHIFT
+                            </button>
+                        </h2>
+                        <!-- ASC-style two-row bus: cameras, a spacer, then the
+                             internals cluster; geometry comes from busGeom() per the
+                             connected model's topology. Empty cells keep the two
+                             rows' columns aligned. -->
+                        {% comment %} Tracks are a fixed --atem-btn, never minmax(0,…):
+                        collapsing columns overlapped every label on a switcher with
+                        many inputs. The ASC row needs a control surface's width, which
+                        a phone has not got, so below sm .atem-bus-row wraps into as
+                        many lines as it needs, and .atem-bus-big wraps a BANKED
+                        switcher below lg too (a 4 M/E does not fit a tablet either).
+                        Rules in atem_control.css; the column template travels as
+                        --bus-tpl so a stylesheet can replace it. Desktop keeps this
+                        two-row shape exactly. {% endcomment %}
+                        <div class="atem-bus flex flex-col gap-0.5 [--bus-gap:0.25rem] 2xl:[--bus-gap:1.25rem]"
+                             :class="{ 'atem-bus-big': $store.atem.busBanked() }">
+                            <template x-for="(row, ri) in $store.atem.busGeom().rows" :key="'r' + ri">
+                                <div class="atem-bus-row grid gap-0.5"
+                                     :style="{ '--bus-tpl': 'repeat(' + $store.atem.busGeom().camCols + ', var(--atem-btn)) var(--bus-gap) repeat(' + $store.atem.busGeom().midCols + ', var(--atem-btn)) var(--bus-gap) repeat(' + $store.atem.busGeom().xCols + ', var(--atem-btn))' }">
+                                    <template x-for="(s, ci) in row" :key="ri + '-' + ci + '-' + (s ? s.source : 'e')">
+                                        <div class="min-w-0" :class="{ 'atem-bus-pad': !s }">
+                                            <template x-if="s">
+                                                <button
+                                                    :class="$store.atem.getSourceButtonClass('preview', s.source)"
+                                                    :title="s.long"
+                                                    @click="$store.atem.send('set_preview', {source: s.source})"
+                                                    x-text="s.short"
+                                                    class="aspect-square flex items-center justify-center font-semibold text-center leading-tight p-1 transition-all duration-200 hover:scale-105 active:scale-95 w-full min-w-0 min-h-0 h-auto text-xs sm:text-sm lg:text-base">
+                                                </button>
+                                            </template>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+
+{% include 'control/_transition_controls.html' %}
+                
+            </div>
+
+            <!-- Center: T-Bar -->
+            <div class="tbar-column">
+                <div class="card bg-base-200 h-full">
+                    <div class="card-body flex flex-col justify-center items-center">
+                        <h2 class="card-title mb-4 text-center">
+                            <i class="bi bi-shuffle text-primary"></i>
+                            T-Bar
+                        </h2>
+                        
+                        <div class="tbar-section-vertical flex-1 flex items-center justify-center">
+                            <div class="tbar-container-vertical">
+                                <div class="tbar-track-vertical" id="tbarTrack">
+                                    <!-- T-Bar Handle with correct ID -->
+                                    <div class="tbar-handle-vertical" id="tbarHandle">
+                                        <div class="tbar-handle-inner-vertical"></div>
+                                    </div>
+                                    
+                                    <!-- Progress indicator -->
+                                    <div class="tbar-progress-vertical" id="tbarProgress"></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="text-center mt-4">
+                            <span class="text-xs font-mono text-[color:var(--ink-3)]" id="tbarPositionDisplay">Position: 0%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right: Keys and Effects -->
+            <div class="space-y-4">
+                
+                <!-- Keys -->
+                <div class="card bg-base-200">
+                    <div class="card-body">
+                        <h2 class="card-title mb-2">
+                            <i class="bi bi-layers text-info"></i>
+                            Keys
+                        </h2>
+                        
+                        <!-- ATEM-panel-style banks: near-contiguous buttons (2px
+                             gaps), capped bank widths, and the same two-row shape on
+                             both sides so DSK ON AIR aligns with the USK ON AIR row
+                             and DSK AUTO with the BKGD/KEY row. Sized for the worst
+                             quick-panel case: 4 USKs + 2 DSKs (DSK 3/4 and per-DSK
+                             rate live in the settings accordions). Splits
+                             side-by-side from xl up; below that the banks stack so
+                             buttons keep a usable size. -->
+                        <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,5fr)_minmax(0,2fr)] gap-5">
+                            <!-- Upstream Keys — bound to the active M/E -->
+                            <div>
+                                <h3 class="text-sm font-semibold mb-2 opacity-70">USKs</h3>
+                                <div class="space-y-2">
+                                    <!-- USK On Air Row -->
+                                    <div class="grid gap-0.5"
+                                         :style="{ gridTemplateColumns: 'repeat(' + $store.atem.uskCols() + ', var(--atem-btn))' }">
+                                        <div></div>
+                                        <template x-for="(state, index) in $store.atem.state.mes[$store.atem.activeMe].usk.states" :key="index">
+                                            <button
+                                                :class="$store.atem.getControlButtonClass('usk', index)"
+                                                @click="$store.atem.send('toggle_usk', {key_index: index})"
+                                                class="aspect-square flex items-center justify-center font-semibold text-center leading-tight p-1 transition-all duration-200 hover:scale-105 active:scale-95 w-full min-w-0 min-h-0 h-auto text-[10px] sm:text-xs">
+                                                ON AIR
+                                            </button>
+                                        </template>
+                                    </div>
+
+                                    <!-- Transition Selection Row -->
+                                    <div class="grid gap-0.5"
+                                         :style="{ gridTemplateColumns: 'repeat(' + $store.atem.uskCols() + ', var(--atem-btn))' }">
+                                        <button
+                                            :class="$store.atem.getTransitionSelectionButtonClass('background')"
+                                            @click="$store.atem.send('toggle_transition_background')"
+                                            class="aspect-square flex items-center justify-center font-semibold text-center leading-tight p-1 transition-all duration-200 hover:scale-105 active:scale-95 w-full min-w-0 min-h-0 h-auto text-[10px] sm:text-xs">
+                                            BKGD
+                                        </button>
+                                        <!-- One KEY button per USK on the active M/E (topology-driven,
+                                             Stage 3C — renders none until the capability counts arrive). -->
+                                        <template x-for="i in ($store.atem.state.topology?.usksPerMe?.[$store.atem.activeMe] ?? 0)" :key="i">
+                                            <button
+                                                :class="$store.atem.getTransitionSelectionButtonClass('key', i-1)"
+                                                @click="$store.atem.send('toggle_transition_key', {key_index: i-1})"
+                                                class="aspect-square flex items-center justify-center font-semibold text-center leading-tight p-1 transition-all duration-200 hover:scale-105 active:scale-95 w-full min-w-0 min-h-0 h-auto text-[10px] sm:text-xs">
+                                                <span x-text="'KEY' + i"></span>
+                                            </button>
+                                        </template>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Downstream Keys — up to 2, as two rows mirroring the
+                                 USK bank so the ON AIR and AUTO rows line up. The rare
+                                 4-DSK units (4 M/E Constellations) drive DSK 3/4 from
+                                 their settings accordions, which carry their own
+                                 ON AIR / AUTO / rate. -->
+                            <div>
+                                <!-- Per-column numbering in the heading line — same
+                                     text size/margin as the USKs heading so the button
+                                     rows stay level with the USK bank. -->
+                                <div class="grid gap-0.5 mb-2 justify-center"
+                                     :style="{ gridTemplateColumns: 'repeat(' + Math.min($store.atem.state.topology?.dsks ?? 1, 2) + ', minmax(0, var(--atem-btn)))' }">
+                                    <template x-for="d in Math.min($store.atem.state.topology?.dsks ?? 1, 2)" :key="'dsk-label-' + d">
+                                        <h3 class="text-sm font-semibold opacity-70 text-center" x-text="'DSK ' + d"></h3>
+                                    </template>
+                                </div>
+                                <div class="space-y-2">
+                                    <div class="grid gap-0.5 justify-center"
+                                         :style="{ gridTemplateColumns: 'repeat(' + Math.min($store.atem.state.topology?.dsks ?? 1, 2) + ', minmax(0, var(--atem-btn)))' }">
+                                        <template x-for="d in Math.min($store.atem.state.topology?.dsks ?? 1, 2)" :key="'dsk-onair-' + d">
+                                            <button
+                                                :class="$store.atem.getControlButtonClass('dsk', d-1)"
+                                                :title="'DSK ' + d + ' on air'"
+                                                @click="$store.atem.send('toggle_dsk', {dsk: d-1})"
+                                                class="aspect-square flex items-center justify-center font-semibold text-center leading-tight p-1 w-full min-w-0 min-h-0 h-auto text-[10px] sm:text-xs transition-all duration-200 hover:scale-105 active:scale-95">
+                                                ON AIR
+                                            </button>
+                                        </template>
+                                    </div>
+                                    <div class="grid gap-0.5 justify-center"
+                                         :style="{ gridTemplateColumns: 'repeat(' + Math.min($store.atem.state.topology?.dsks ?? 1, 2) + ', minmax(0, var(--atem-btn)))' }">
+                                        <template x-for="d in Math.min($store.atem.state.topology?.dsks ?? 1, 2)" :key="'dsk-auto-' + d">
+                                            <button
+                                                :class="$store.atem.getControlButtonClass('dsk_auto', d-1)"
+                                                :title="'DSK ' + d + ' auto transition'"
+                                                @click="$store.atem.send('dsk_auto', {dsk: d-1})"
+                                                class="aspect-square flex items-center justify-center font-semibold text-center leading-tight p-1 w-full min-w-0 min-h-0 h-auto text-[10px] sm:text-xs transition-all duration-200 hover:scale-105 active:scale-95">
+                                                AUTO
+                                            </button>
+                                        </template>
+                                    </div>
+                                    <!-- Per-DSK auto rate — same look + countdown
+                                         behaviour as the transition / FTB rate inputs. -->
+                                    <div class="flex flex-col items-center gap-1 mt-3">
+                                        <template x-for="d in Math.min($store.atem.state.topology?.dsks ?? 1, 2)" :key="'dsk-rate-' + d">
+                                            <div class="flex items-center gap-2">
+                                                <span class="text-xs font-medium whitespace-nowrap"
+                                                      x-text="Math.min($store.atem.state.topology?.dsks ?? 1, 2) > 1 ? 'DSK ' + d + ':' : 'Rate:'"></span>
+                                                <input type="text"
+                                                    :class="$store.atem.getRateInputClass('dsk' + (d-1))"
+                                                    class="w-16 h-8"
+                                                    :id="'dskRate' + (d-1)"
+                                                    :title="'DSK ' + d + ' rate'"
+                                                    x-model="$store.atem.inputs.dskRates[d-1]"
+                                                    @keydown.enter="$store.atem.send('set_dsk_rate', {dsk: d-1, rate: $store.atem.inputs.dskRates[d-1]}); $event.target.blur()">
+                                                <button class="btn btn-primary btn-xs"
+                                                    @click="$store.atem.send('set_dsk_rate', {dsk: d-1, rate: $store.atem.inputs.dskRates[d-1]})">
+                                                    Set
+                                                </button>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+{% include 'control/_transition_style.html' %}
+
+{% include 'control/_macros.html' %}
+
+{% include 'control/_fade_to_black.html' %}
+            </div>
+        </div>
+    </div>
+    </div>
+    <!-- End of main ATEM content -->
+
+{% include 'control/_hyperdeck_panel.html' %}
+
+{% include 'control/_media_pool.html' %}
+
+    <!-- Video Mode Change Confirmation Dialog -->
+    <div x-cloak x-show="pendingVideoModeChange !== null"
+         class="fixed inset-0 z-[210] flex items-center justify-center p-4"
+         @keydown.escape.window="pendingVideoModeChange = null"
+         @keydown.enter.window.prevent="if (pendingVideoModeChange) { const _toId = pendingVideoModeChange.toId; pendingVideoModeChange = null; ATEMControl.cmd('set_video_mode', { mode: _toId }); }">
+        <!-- Backdrop -->
+        <div class="atem-overlay-backdrop absolute inset-0"
+             @click="pendingVideoModeChange = null"
+             x-transition:enter="transition-opacity ease-out duration-200"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100"
+             x-transition:leave="transition-opacity ease-in duration-150"
+             x-transition:leave-start="opacity-100"
+             x-transition:leave-end="opacity-0"></div>
+
+        <!-- Dialog -->
+        <div class="card bg-base-200 w-full max-w-md relative"
+             @click.stop
+             x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="opacity-0 scale-95"
+             x-transition:enter-end="opacity-100 scale-100"
+             x-transition:leave="transition ease-in duration-150"
+             x-transition:leave-start="opacity-100 scale-100"
+             x-transition:leave-end="opacity-0 scale-95">
+            <div class="card-body p-5">
+                <h3 class="text-lg font-bold flex items-center gap-2">
+                    <i class="bi bi-exclamation-triangle text-warning"></i>
+                    Change video mode?
+                </h3>
+
+                <!-- From / To labels -->
+                <div class="flex items-center gap-3 mt-3 text-sm">
+                    <div class="flex-1 bg-base-300 rounded p-3 text-center">
+                        <div class="text-xs text-base-content/60">Current</div>
+                        <div class="font-mono font-semibold mt-0.5"
+                             x-text="pendingVideoModeChange ? pendingVideoModeChange.fromLabel : ''"></div>
+                    </div>
+                    <i class="bi bi-arrow-right text-base-content/50 text-lg"></i>
+                    <div class="flex-1 bg-warning/20 rounded p-3 text-center border border-warning/40">
+                        <div class="text-xs text-base-content/60">New</div>
+                        <div class="font-mono font-semibold mt-0.5"
+                             x-text="pendingVideoModeChange ? pendingVideoModeChange.toLabel : ''"></div>
+                    </div>
+                </div>
+
+                <!-- Consequences -->
+                <div class="alert alert-warning mt-4 py-3 text-sm">
+                    <i class="bi bi-broadcast"></i>
+                    <div>
+                        <div class="font-bold">Changing the video mode will:</div>
+                        <ul class="text-xs opacity-90 mt-1 list-disc list-inside space-y-0.5">
+                            <li>Resync the switcher and drop outputs for ~3 seconds.</li>
+                            <li>Clear the entire media pool — all uploaded stills will be deleted.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="card-actions justify-end mt-4 gap-2">
+                    <button class="btn btn-ghost" @click="pendingVideoModeChange = null">Cancel</button>
+                    <button class="btn btn-warning gap-2"
+                            @click="const _toId = pendingVideoModeChange.toId; pendingVideoModeChange = null; ATEMControl.cmd('set_video_mode', { mode: _toId })">
+                        <i class="bi bi-arrow-clockwise"></i>
+                        Change Mode
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+{% include 'control/_profile_modal.html' %}
+
+{% include 'control/_fairlight.html' %}
+
+    <!-- Settings Panel Overlay. Esc closes it; the listener is in the
+         CAPTURE phase so it runs before the video-mode confirm dialog's
+         bubble-phase Esc handler (earlier in the DOM) and still sees that
+         dialog open — Esc on the confirm closes only the confirm. -->
+    <div class="fixed inset-0 z-[200] pointer-events-none" x-show="settingsOpen" x-cloak
+         @keydown.escape.window.capture="if (pendingVideoModeChange === null) settingsOpen = false">
+        <!-- Backdrop: dims + blurs the page through it; click closes -->
+        <div class="atem-overlay-backdrop absolute inset-0 pointer-events-auto"
+             @click="settingsOpen = false"
+             x-transition:enter="transition-opacity ease-out duration-200"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100"
+             x-transition:leave="transition-opacity ease-in duration-150"
+             x-transition:leave-start="opacity-100"
+             x-transition:leave-end="opacity-0"></div>
+
+        <!-- Settings Panel -->
+        <div class="settings-panel absolute right-0 top-0 h-full w-full max-w-md bg-base-200 shadow-2xl pointer-events-auto flex flex-col"
+            @click.stop
+            x-show="settingsOpen"
+            x-transition:enter="transition ease-out duration-200"
+            x-transition:enter-start="transform translate-x-full"
+            x-transition:enter-end="transform translate-x-0"
+            x-transition:leave="transition ease-in duration-150"
+            x-transition:leave-start="transform translate-x-0"
+            x-transition:leave-end="transform translate-x-full">
+            
+            <!-- Settings Header - FIXED: flex-shrink-0 to prevent compression -->
+            <div class="flex items-center justify-between p-4 border-b border-base-300 flex-shrink-0">
+                <h2 class="text-lg font-semibold">
+                    <i class="bi bi-gear mr-2"></i>
+                    Settings
+                </h2>
+                <button class="btn btn-ghost btn-sm" @click="settingsOpen = false">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+            
+            <!-- Settings Content - FIXED: flex-1 min-h-0 for proper scrolling -->
+            <div class="p-4 space-y-2 flex-1 min-h-0 overflow-y-auto pb-8" x-data="{
+                openSections: {
+                    switcherName: false,
+                    colorGenerators: false,
+                    videoMode: false,
+                    inputLabels: false,
+                    usks: {},
+                    transitions: false,
+                    dsks: {},
+                    ftb: false,
+                    outputs: false,
+                    hyperdecks: false
+                },
+                selectedTransitionTab: 'Mix'
+            }">
+
+                {% include 'control/_atem_info.html' %}
+
+                <!-- Color Generators - SIMPLE VERSION -->
+                <div class="border-b border-base-300">
+                    <button 
+                        class="w-full p-4 text-left font-medium text-base-content hover:bg-base-300 flex items-center justify-between transition-colors"
+                        @click="openSections.colorGenerators = !openSections.colorGenerators">
+                        <span>Color Generators</span>
+                        <i class="bi bi-chevron-down transition-transform duration-200" 
+                           :class="openSections.colorGenerators ? 'rotate-180' : ''"></i>
+                    </button>
+                    <div x-show="openSections.colorGenerators"
+                         x-collapse.duration.200ms
+                         class="px-4 acc-body">
+                        <div class="space-y-4 text-sm">
+                            
+                            <!-- Color Selection: one button per generator, count
+                                 from topology (g = 1-based) -->
+                            <div>
+                                <label class="block text-xs font-medium mb-2">Select Color Generator</label>
+                                <div class="flex gap-2">
+                                    <template x-for="g in ($store.atem.state.topology?.colorGenerators ?? 0)" :key="g">
+                                        <button
+                                            class="btn btn-sm flex-1"
+                                            :class="$store.atem.colorGen.selectedGenerator === g - 1 ? 'btn-primary' : 'btn-outline'"
+                                            @click="$store.atem.selectColorGenerator(g - 1)">
+                                            Color <span x-text="g"></span>
+                                        </button>
+                                    </template>
+                                </div>
+                            </div>
+                            
+                            <!-- Color Preview -->
+                            <div class="text-center">
+                                <div class="w-16 h-16 mx-auto rounded border-2 border-base-300" 
+                                     :style="`background-color: ${$store.atem.currentColorHex}`">
+                                </div>
+                                <!-- Editable Hex Input -->
+                                <div class="mt-2" x-data="{ 
+                                    hexInput: '', 
+                                    isValid: true,
+                                    init() {
+                                        this.hexInput = $store.atem.currentColorHex;
+                                        // Watch for external changes to currentColorHex
+                                        this.$watch('$store.atem.currentColorHex', (newHex) => {
+                                            if (document.activeElement !== this.$refs.hexInput) {
+                                                this.hexInput = newHex;
+                                                this.isValid = true;
+                                            }
+                                        });
+                                    }
+                                }">
+                                    <input 
+                                        type="text" 
+                                        class="input input-xs w-20 mx-auto text-center font-mono text-xs"
+                                        :class="isValid ? 'input-bordered' : 'input-bordered input-error'"
+                                        x-model="hexInput"
+                                        x-ref="hexInput"
+                                        @input="
+                                            isValid = $store.atem.isValidHex($event.target.value);
+                                            if (isValid) $store.atem.updateColorGenFromHex($event.target.value);
+                                        "
+                                        @focus="$event.target.select()"
+                                        @keydown.enter="$event.target.blur()"
+                                        @blur="if (!isValid) { hexInput = $store.atem.currentColorHex; isValid = true; }"
+                                        placeholder="#FF0000"
+                                        maxlength="7"
+                                        title="Enter hex color (e.g., #FF0000, FF0000, #F00, or F00)"
+                                        spellcheck="false"
+                                        autocomplete="off"
+                                    >
+                                    <div class="text-xs mt-1 opacity-60">Hex Color</div>
+                                </div>
+                            </div>
+                            
+                            <!-- Hue Slider -->
+                            <div>
+                                <div class="flex items-center justify-between mb-1">
+                                    <label class="text-xs font-medium">Hue</label>
+                                    <span class="text-xs bg-base-300 px-2 py-1 rounded font-mono" 
+                                          x-text="`${Math.round($store.atem.colorGen.hue)}°`">
+                                    </span>
+                                </div>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="359.9"
+                                    step="0.1"
+                                    class="range range-sm w-full"
+                                    style="background: linear-gradient(to right, #ff0000 0%, #ffff00 16.66%, #00ff00 33.33%, #00ffff 50%, #0000ff 66.66%, #ff00ff 83.33%, #ff0000 100%);"
+                                    :value="$store.atem.colorGen.hue"
+                                    @pointerdown="$store.atem.startColorGenSliderDrag('hue')"
+                                    @input="$store.atem.updateColorGenHue($event.target.value)"
+                                    @pointerup="$store.atem.releaseColorGenHue($event.target.value)"
+                                    @pointercancel="$store.atem.releaseColorGenHue($event.target.value)"
+                                >
+                            </div>
+                            
+                            <!-- Saturation Slider -->
+                            <div>
+                                <div class="flex items-center justify-between mb-1">
+                                    <label class="text-xs font-medium">Saturation</label>
+                                    <span class="text-xs bg-base-300 px-2 py-1 rounded font-mono" 
+                                          x-text="`${Math.round($store.atem.colorGen.saturation)}%`">
+                                    </span>
+                                </div>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="100"
+                                    step="0.1"
+                                    class="range range-sm w-full"
+                                    :value="$store.atem.colorGen.saturation"
+                                    @pointerdown="$store.atem.startColorGenSliderDrag('saturation')"
+                                    @input="$store.atem.updateColorGenSaturation($event.target.value)"
+                                    @pointerup="$store.atem.releaseColorGenSaturation($event.target.value)"
+                                    @pointercancel="$store.atem.releaseColorGenSaturation($event.target.value)"
+                                >
+                            </div>
+                            
+                            <!-- Luminance Slider -->
+                            <div>
+                                <div class="flex items-center justify-between mb-1">
+                                    <label class="text-xs font-medium">Luminance</label>
+                                    <span class="text-xs bg-base-300 px-2 py-1 rounded font-mono" 
+                                          x-text="`${Math.round($store.atem.colorGen.luma)}%`">
+                                    </span>
+                                </div>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="100"
+                                    step="0.1"
+                                    class="range range-sm w-full"
+                                    style="background: linear-gradient(to right, #000000, #ffffff);"
+                                    :value="$store.atem.colorGen.luma"
+                                    @pointerdown="$store.atem.startColorGenSliderDrag('luma')"
+                                    @input="$store.atem.updateColorGenLuma($event.target.value)"
+                                    @pointerup="$store.atem.releaseColorGenLuma($event.target.value)"
+                                    @pointercancel="$store.atem.releaseColorGenLuma($event.target.value)"
+                                >
+                            </div>
+                            
+                        </div>
+                    </div>
+                </div>
+
+{% include 'control/_settings_usk.html' %}
+
+{% include 'control/_settings_transition.html' %}
+
+
+
+
+{% include 'control/_settings_dsk.html' %}
+
+                <!-- Input Labels — rename cameras / outputs / media to mirror
+                     Software Control's three tabs. Per-row x-data with
+                     x-effect-driven sync that only updates the local field
+                     when it's NOT focused, so external changes (other
+                     browser sessions, profile restore) don't blow away an
+                     in-progress edit. Commits on blur, only if value changed. -->
+                <div class="border-b border-base-300"
+                     x-data="{ selectedLabelsTab: 'inputs' }">
+                    <button
+                        class="w-full p-4 text-left font-medium text-base-content hover:bg-base-300 flex items-center justify-between transition-colors"
+                        @click="openSections.inputLabels = !openSections.inputLabels">
+                        <span>Source Labels</span>
+                        <i class="bi bi-chevron-down transition-transform duration-200"
+                           :class="openSections.inputLabels ? 'rotate-180' : ''"></i>
+                    </button>
+                    <div x-show="openSections.inputLabels"
+                         x-collapse.duration.200ms
+                         class="px-4 acc-body">
+                        <p class="text-xs text-base-content/60 mb-2">
+                            Rename sources to your preferred names. Labels appear in every dropdown.
+                            Tab between fields; changes save when you leave the field.
+                        </p>
+
+                        <!-- Sub-tabs: Inputs / Outputs / Media -->
+                        <div class="flex border-b border-base-300 -mx-4 mb-3">
+                            <button
+                                class="flex-1 px-3 py-2 text-xs font-medium -mb-px transition-colors text-center"
+                                :class="selectedLabelsTab === 'inputs' ? 'border-b-2 border-b-primary text-primary bg-base-100' : 'text-base-content/70 hover:text-base-content hover:bg-base-300'"
+                                @click="selectedLabelsTab = 'inputs'">
+                                Inputs
+                                <span class="text-base-content/50"
+                                      x-text="'(' + ($store.atem.state?.inputLabels?.inputs?.length || 0) + ')'"></span>
+                            </button>
+                            <button
+                                class="flex-1 px-3 py-2 text-xs font-medium -mb-px transition-colors text-center"
+                                :class="selectedLabelsTab === 'outputs' ? 'border-b-2 border-b-primary text-primary bg-base-100' : 'text-base-content/70 hover:text-base-content hover:bg-base-300'"
+                                @click="selectedLabelsTab = 'outputs'">
+                                Outputs
+                                <span class="text-base-content/50"
+                                      x-text="'(' + ($store.atem.state?.inputLabels?.outputs?.length || 0) + ')'"></span>
+                            </button>
+                            <button
+                                class="flex-1 px-3 py-2 text-xs font-medium -mb-px transition-colors text-center"
+                                :class="selectedLabelsTab === 'media' ? 'border-b-2 border-b-primary text-primary bg-base-100' : 'text-base-content/70 hover:text-base-content hover:bg-base-300'"
+                                @click="selectedLabelsTab = 'media'">
+                                Media
+                                <span class="text-base-content/50"
+                                      x-text="'(' + ($store.atem.state?.inputLabels?.media?.length || 0) + ')'"></span>
+                            </button>
+                        </div>
+
+                        <!-- Header row -->
+                        <div class="grid grid-cols-[3rem_1fr_5.5rem] gap-2 items-center mb-1 text-xs text-base-content/50 uppercase tracking-wide">
+                            <span>Src</span>
+                            <span>Long name</span>
+                            <span>Short</span>
+                        </div>
+
+                        <!-- Empty state per tab -->
+                        <div x-show="!(($store.atem.state?.inputLabels?.[selectedLabelsTab] || []).length)"
+                             class="text-xs text-base-content/40 py-3 text-center"
+                             x-text="'No ' + selectedLabelsTab + ' to label.'"></div>
+
+                        <!-- Rows for the selected tab -->
+                        <div class="space-y-1.5">
+                            <template x-for="row in ($store.atem.state?.inputLabels?.[selectedLabelsTab] || [])"
+                                      :key="selectedLabelsTab + '-' + row.source">
+                                <div x-data="{
+                                        longLocal: row.long,
+                                        shortLocal: row.short,
+                                    }"
+                                     x-effect="
+                                        if (document.activeElement !== $refs.lng) longLocal = row.long;
+                                        if (document.activeElement !== $refs.shrt) shortLocal = row.short;
+                                     "
+                                     class="grid grid-cols-[3rem_1fr_5.5rem] gap-2 items-center">
+                                    <span class="text-xs font-mono text-base-content/70" x-text="row.source"></span>
+                                    <input type="text" maxlength="20" x-ref="lng"
+                                           class="input input-bordered input-sm w-full"
+                                           x-model="longLocal"
+                                           @keydown.enter="$event.target.blur()"
+                                           @blur="if (longLocal !== row.long) ATEMControl.cmd('set_input_label', { source: row.source, long_name: longLocal })">
+                                    <input type="text" maxlength="4" x-ref="shrt"
+                                           class="input input-bordered input-sm w-full font-mono"
+                                           x-model="shortLocal"
+                                           @keydown.enter="$event.target.blur()"
+                                           @blur="if (shortLocal !== row.short) ATEMControl.cmd('set_input_label', { source: row.source, short_name: shortLocal })">
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Video Mode — destructive (~3 s output drop on resync).
+                     Dropdown is populated from $store.atem.state.videoModes
+                     (parsed from the _VMC capability field). On change, fires
+                     set_video_mode only if the picked id differs from current. -->
+                <div class="border-b border-base-300">
+                    <button
+                        class="w-full p-4 text-left font-medium text-base-content hover:bg-base-300 flex items-center justify-between transition-colors"
+                        @click="openSections.videoMode = !openSections.videoMode">
+                        <span>Video Mode</span>
+                        <i class="bi bi-chevron-down transition-transform duration-200"
+                           :class="openSections.videoMode ? 'rotate-180' : ''"></i>
+                    </button>
+                    <div x-show="openSections.videoMode"
+                         x-collapse.duration.200ms
+                         class="px-4 acc-body">
+                        <div class="space-y-2 text-sm">
+                            <select class="select select-bordered select-sm w-full"
+                                    :value="$store.atem.state?.videoMode?.id ?? -1"
+                                    :disabled="!($store.atem.state?.videoModes?.length)"
+                                    @change="(() => {
+                                        const newId = parseInt($event.target.value, 10);
+                                        const cur = $store.atem.state?.videoMode?.id ?? -1;
+                                        if (newId === cur) return;
+                                        // Pop the styled confirmation modal. Snap the select
+                                        // back to the current mode immediately — the actual
+                                        // change (or revert) is decided by the modal.
+                                        const modes = $store.atem.state?.videoModes || [];
+                                        const fromMode = modes.find(m => m.id === cur);
+                                        const toMode = modes.find(m => m.id === newId);
+                                        pendingVideoModeChange = {
+                                            fromId: cur,
+                                            fromLabel: fromMode ? fromMode.label : String(cur),
+                                            toId: newId,
+                                            toLabel: toMode ? toMode.label : String(newId),
+                                        };
+                                        $event.target.value = String(cur);
+                                    })()">
+                                <template x-for="m in ($store.atem.state?.videoModes || [])" :key="m.id">
+                                    <option :value="m.id" :selected="m.id === ($store.atem.state?.videoMode?.id ?? -1)" x-text="m.label"></option>
+                                </template>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- End of wrapper with x-data -->
+
+    <!-- ATEM inventory for the header quick-connect name-or-IP suggestions
+         (json_script escapes the closing-script tag plus <, >, & so a
+         hostile equipment name can't break out of the inline block) -->
+    {{ atem_equipment|json_script:"atem-equipment-data" }}
+
+    <!-- {deck_ip: name} for inventory HyperDecks, so Settings > HyperDecks can
+         label a bound slot with its equipment name (the ATEM only knows the IP). -->
+    {{ hyperdeck_names|json_script:"hyperdeck-names-data" }}
+    <script>
+        try {
+            window.ATEM_HYPERDECK_NAMES = JSON.parse(
+                document.getElementById('hyperdeck-names-data').textContent || '{}');
+        } catch (e) { window.ATEM_HYPERDECK_NAMES = {}; }
+    </script>
+
+    <!-- Include Alpine.js and Custom JavaScript -->
+    <script src="{% static_v 'js/atem_control_page.js' %}"></script>
+    <!-- @alpinejs/collapse: x-collapse height animation for the settings
+         accordion. Registers on alpine:init, so it must load BEFORE core. -->
+    <script defer src="{% static 'vendor/alpinejs-collapse-3.14.3.min.js' %}"></script>
+    <script defer src="{% static 'vendor/alpine.min.js' %}"></script>
+    <script src="{% static_v 'js/atem_control.js' %}"></script>
+    <script src="{% static_v 'js/atem_realtime_slider.js' %}"></script>
+    <script src="{% static_v 'js/atem_profile.js' %}"></script>
+    <script src="{% static_v 'js/atem_hyperdeck.js' %}"></script>
+
+{% comment %} A hosting platform adds its own panels and scripts here (a template that
+   extends control.html and fills control_extra), leaving this file alone. {% endcomment %}
+{% block control_extra %}{% endblock %}
+{% endblock %}

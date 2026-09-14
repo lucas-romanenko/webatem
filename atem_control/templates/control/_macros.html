@@ -1,0 +1,41 @@
+                <!-- Macros -->
+                <div class="card bg-base-200">
+                    <div class="card-body">
+                        <div class="flex items-center justify-between mb-2">
+                            <h2 class="card-title mb-0">
+                                <i class="bi bi-play-circle text-accent"></i>
+                                Macros
+                            </h2>
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs opacity-60">Page <span x-text="$store.atem.macros.currentPage + 1"></span></span>
+                                <div class="flex gap-1">
+                                    <button 
+                                        class="btn btn-xs btn-outline"
+                                        :class="$store.atem.macros.currentPage === 0 ? 'btn-disabled' : ''"
+                                        :disabled="$store.atem.macros.currentPage === 0"
+                                        @click="$store.atem.macros.currentPage--">
+                                        <i class="bi bi-chevron-left"></i>
+                                    </button>
+                                    <button 
+                                        class="btn btn-xs btn-outline"
+                                        :class="($store.atem.macros.currentPage + 1) * $store.atem.macros.perPage >= $store.atem.macros.total ? 'btn-disabled' : ''"
+                                        :disabled="($store.atem.macros.currentPage + 1) * $store.atem.macros.perPage >= $store.atem.macros.total"
+                                        @click="$store.atem.macros.currentPage++">
+                                        <i class="bi bi-chevron-right"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-4 gap-2">
+                            <template x-for="macro in $store.atem.currentPageMacros" :key="macro.number">
+                                <button 
+                                    class="btn btn-sm btn-outline transition-all duration-200 hover:scale-105 active:scale-95 whitespace-nowrap overflow-hidden text-ellipsis min-h-8 text-xs p-1"
+                                    :data-macro="macro.number"
+                                    @click="$store.atem.executeMacro(macro.number)"
+                                    :title="macro.name"
+                                    x-text="macro.name">
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+                </div>
