@@ -9,13 +9,12 @@ are reproduced in the repository root
 |---|---|---|---|
 | `alpine.min.js` | 3.14.3 | <https://github.com/alpinejs/alpine> | MIT |
 | `alpinejs-collapse-3.14.3.min.js` | 3.14.3 | <https://github.com/alpinejs/alpine> (`@alpinejs/collapse`) | MIT |
-| `../fonts/poppins/` (TTF, 5 weights) | — | <https://github.com/itfoundry/Poppins> | OFL 1.1 (`OFL.txt` alongside) |
 | `bootstrap-icons/` (CSS + woff/woff2 fonts) | 1.11.3 | <https://github.com/twbs/icons> | MIT |
 | `webatem.css` | built | Tailwind CSS 3.4.16 + daisyUI 4.12.24 | MIT |
 
-Not in this directory but first-party: `../css/theme.css` (one dark theme in
-DaisyUI 4 variable syntax; loads after `webatem.css`) and `../brand/brand.css`
-(the palette that shows; loads last).
+Not in this directory but first-party: `../brand/brand.css` — the one sheet
+that styles the app (palette in DaisyUI 4 variable syntax, the two brand
+families, the control surface and the shared components). It loads last.
 
 `webatem.css` is **not committed** — the Docker build's CSS stage
 compiles it from `styles/app.css` + `tailwind.config.js` (versions pinned

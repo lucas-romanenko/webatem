@@ -10,15 +10,13 @@
     {% block extra_css %}{% endblock %}
 
     <!-- Self-hosted: Tailwind + daisyUI compiled into one static stylesheet
-         at build time (see Dockerfile css stage), then the theme sheet (the
-         control-page look it grew out of),
-         icons + fonts vendored. No external CDN — works on an air-gapped
-         studio network. -->
+         at build time (see Dockerfile css stage), icons vendored. No external
+         CDN — works on an air-gapped studio network. -->
     <link rel="stylesheet" href="{% static 'vendor/webatem.css' %}">
-    <link rel="stylesheet" href="{% static_v 'css/theme.css' %}">
     <link rel="stylesheet" href="{% static 'vendor/bootstrap-icons/bootstrap-icons.min.css' %}">
     <!-- The brand (docs/brand/handoff): palette, Archivo + IBM Plex Mono, the
-         control-surface rules. WebATEM's own, loads last, wins. -->
+         control-surface rules and the component rules folded in from the old
+         theme.css (2026-09-15). WebATEM's own, loads last, wins. -->
     <link rel="stylesheet" href="{% static_v 'brand/brand.css' %}">
 
     <!-- Installed to a home screen: the manifest names it and hands over the

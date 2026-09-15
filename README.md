@@ -331,7 +331,8 @@ wherever `DATA_DIR` points.
   WebATEM uses it as an installed dependency, unmodified.
   [hyperdeckwire](https://github.com/lucas-romanenko/bmdwire/tree/main/hyperdeckwire) is MIT.
 - Bundled frontend assets (Alpine.js and its collapse plugin, Bootstrap Icons,
-  Tailwind/daisyUI) are MIT and the Poppins font is OFL, with notices in
+  Tailwind/daisyUI) are MIT and the Archivo and IBM Plex Mono fonts are OFL,
+  with notices in
   [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
 
 Security posture and how to report vulnerabilities: [SECURITY.md](SECURITY.md).
