@@ -15,7 +15,7 @@
  * work). Still NOT for selects inside JS-cloned template rows — clones
  * lose the facade's listeners.
  *
- * Loaded globally from base.html (defer). Styles: wa-theme.css .wa-select-*.
+ * Loaded globally from base.html (defer). Styles: brand.css .wa-select-*.
  */
 
 (function () {
