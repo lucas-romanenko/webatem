@@ -1,0 +1,55 @@
+name: Something is broken
+description: A fault in WebATEM itself, not a question about a switcher model.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        If the issue is "I pointed it at a switcher model you have never
+        tested", use the **Switcher report** template instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How do I make it happen?
+      placeholder: |
+        1. Open the control page for a switcher
+        2. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: WebATEM version
+      placeholder: 1.2.0
+    validations:
+      required: true
+  - type: dropdown
+    id: how
+    attributes:
+      label: How are you running it?
+      options:
+        - Windows installer
+        - macOS disk image
+        - Linux binary
+        - pipx or pip
+        - Docker
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Switcher model, if one is involved
+      placeholder: ATEM 1 M/E Constellation HD
+  - type: textarea
+    id: logs
+    attributes:
+      label: Anything in the log?
+      description: The launcher window has a log. Paste the lines around the problem. It is rendered as code, no backticks needed.
+      render: text

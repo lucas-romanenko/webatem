@@ -86,6 +86,31 @@ behind each strip:
 </p>
 ---
 
+## Which switchers has it run on?
+
+**Every hour it has ever run has been against ATEM 1 M/E Constellation HD
+switchers**, where it drives a working broadcast operation daily. That is one
+model out of a large family, and it is the honest answer to "will it work
+with mine".
+
+It should work more widely than that. The protocol is the same across the
+range, the control surface is built from what each switcher reports about
+itself rather than from a hardcoded model list, and features a switcher does
+not have simply do not appear. But should is not the same as does, and
+nobody has checked.
+
+So if you have a Mini, a Mini Pro, a Television Studio, a 2 M/E or 4 M/E, or
+anything else with an ATEM badge on it, **trying this and telling me what
+happened is the single most useful thing you can do for the project**. It
+does not matter whether it works. An issue saying which model you have and
+what went wrong is worth more than one that says it went fine.
+
+One known limit while you are here: still upload and capture assume a 1080p
+switcher. Other video modes connect and control fine, but the media features
+are untested there.
+
+---
+
 ## Get started
 
 ### Option A. Download it  *(Mac, Windows)*
