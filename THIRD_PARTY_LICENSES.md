@@ -77,9 +77,3 @@ Font License, Version 1.1; the full texts are
 `atem_control/static/brand/fonts/OFL-IBMPlexMono.txt`, beside the woff2
 files (latin and latin-ext subsets, as served by Google Fonts).
 
-## Poppins (font)
-
-Copyright 2020 The Poppins Project Authors (https://github.com/itfoundry/Poppins).
-Licensed under the SIL Open Font License, Version 1.1. The full license text
-is `atem_control/static/fonts/poppins/OFL.txt`, beside the TTFs. The font is
-self-hosted so the UI needs no internet access.

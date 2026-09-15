@@ -87,8 +87,7 @@ are gone — until 2026-09-13 this app was resynced from that platform's
 checkout). Two rules follow. Nothing specific to that platform's company —
 names, studios, clients, addresses — enters this repo. And nothing generic
 stays only over there: a behaviour both need lands here, with a working
-default, and reaches the platform with the next release. `theme.css` is
-hand-owned now (it used to be generated); WebATEM-wide styling goes in
+default, and reaches the platform with the next release. WebATEM-wide styling goes in
 `atem_control/static/brand/brand.css`, which `base.html` loads LAST and which
 therefore wins. Discovery is WebATEM-only by decision — a platform with an
 equipment database turns it off through the hooks.
@@ -298,7 +297,7 @@ hand in repository settings).
   wait for `Alpine.store('atem').stateReady && state.sources`.
 - CSS is compiled (`npm run build:css` → `atem_control/static/vendor/webatem.css`,
   not committed; CI and the image build it). A new utility class needs the
-  build. `[hidden]` is made to win at the end of `theme.css` — keep it.
+  build. `[hidden]` is made to win at the end of `brand.css` — keep it there, last.
 - Commit messages say why; the standing attribution trailer applies.
 - Never touch a downstream checkout from here; what a host needs arrives as
   a hook method or a template slot with a working default (see Ownership).

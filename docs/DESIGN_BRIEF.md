@@ -63,14 +63,15 @@ colours, crowns, or wordmarks.
   (`_tray_image` in `webatem/launcher.py` loads it with Pillow) — a colour
   icon there is wrong for the macOS menu bar, which wants a monochrome
   template image.
-- **Colour tokens**: `atem_control/static/css/theme.css`, DaisyUI 4 variables in
+- **Colour tokens**: `atem_control/static/brand/brand.css`, DaisyUI 4 variables in
   OKLCH. The dark theme today: primary `--p: 73.85% 0.1646 56.80` (an orange,
   ≈ #F68B2A) on black content; base-100 / 200 / 300 ≈ #26282B / #2E3033 /
   #36393D; base-content white; success green, warning yellow, error
   `69.42% 0.1975 17.51` (≈ #FF5C6E); program tally `--pgm-red: #FF4557`
   (deliberately separate from error); `--rounded-btn: 10px`,
   `--rounded-box: 16px`. Read the file for the full set.
-- **Type**: Poppins, self-hosted (`atem_control/static/fonts/`), licence OFL.
+- **Type**: Archivo for the interface and IBM Plex Mono for anything a machine
+  reported, both self-hosted (`atem_control/static/brand/fonts/`), licence OFL.
   Tailwind 3 + DaisyUI 4 compiled by `npm run build:css` into
   `atem_control/static/vendor/webatem.css`.
 - **Launcher window**: `webatem/templates/launcher.html`, 520×700, black
@@ -128,9 +129,9 @@ unless stated. Sizes are pixels.
    Rules that hold: program tally is a saturated broadcast red distinct from
    the error colour; preview is green; keys / BKGD are amber / yellow; unlit
    buttons stay raised neutral grey; lit buttons keep the backlit glow.
-8. **Type scale** — keep Poppins unless something licence-clean is clearly
-   better; give sizes / weights for the launcher window (title, status,
-   labels, buttons) and the control page headings.
+8. **Type scale** — keep Archivo and IBM Plex Mono unless something
+   licence-clean is clearly better; give sizes / weights for the launcher
+   window (title, status, labels, buttons) and the control page headings.
 9. **Optional**: a DMG background 660×400 at @2x (`build/desktop/dmg-background.png`)
    for a drag-to-Applications window (the workflow would need a create-dmg
    step — note it, do not build it unless asked).
@@ -141,15 +142,17 @@ unless stated. Sizes are pixels.
 
 ## How things are wired (read before editing)
 
-- `atem_control/static/css/theme.css` is hand-owned (until 2026-09-13 a sync
-  tool regenerated it; that tool is gone). The brand palette lives in
-  `atem_control/static/brand/brand.css`, loaded **after** `theme.css` in
-  `webatem/templates/base.html` (DaisyUI reads the tokens from the last
-  `[data-theme=dark]` rule that sets them).
+- `atem_control/static/brand/brand.css` is the only stylesheet the app owns:
+  the palette, the two families, the control surface and the shared
+  components. `webatem/templates/base.html` loads it after the compiled
+  Tailwind sheet, so it wins (DaisyUI reads the tokens from the last
+  `[data-theme=dark]` rule that sets them). A second sheet, `theme.css`,
+  was folded into it on 2026-09-15: everything it decided this one decided
+  again below it, and the rest styled pages WebATEM does not have.
 - The compiled stylesheet is not committed; CI and the Docker build run
   `npm run build:css`. New utility classes need that build.
-- `[hidden] { display: none !important }` sits at the end of `theme.css`; keep
-  it winning.
+- `[hidden] { display: none !important }` sits at the end of `brand.css`; keep
+  it winning, and keep it last.
 - Icons are committed files; no workflow generates them. PyInstaller reads
   `build/desktop/icon.icns` / `icon.ico` (`build/desktop/webatem.spec`).
 - The launcher's tray image is loaded with Pillow; pystray on macOS shows the
