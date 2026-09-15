@@ -105,6 +105,11 @@ happened is the single most useful thing you can do for the project**. It
 does not matter whether it works. An issue saying which model you have and
 what went wrong is worth more than one that says it went fine.
 
+A [switcher report](../../issues/new?template=switcher-report.yml) takes a
+minute and needs no code. If you go further and fix what you found, a patch
+for a switcher I do not own is welcome on your word plus a green test suite:
+see [CONTRIBUTING.md](CONTRIBUTING.md).
+
 One known limit while you are here: still upload and capture assume a 1080p
 switcher. Other video modes connect and control fine, but the media features
 are untested there.
