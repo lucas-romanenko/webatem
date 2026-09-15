@@ -3,7 +3,6 @@
 Sub-modules:
     consumer.py — ``ATEMConsumer`` (Channels WebSocket consumer)
     commands.py — WebSocket-verb → op dispatch table (``ops`` built by walking
-                  the per-feature ``pyatem.messages.<feature>`` modules;
-                  ``pyatem.operations`` was deleted 2026-05-14)
+                  the per-feature ``atemwire.messages.<feature>`` modules)
     logging.py  — ``ATEMConnectionLoggingMixin`` (connect/disconnect audit trail)
 """

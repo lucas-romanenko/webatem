@@ -56,7 +56,7 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
     WebSocket consumer for ATEM switcher control.
 
     Features:
-        - Dynamic command mapping to PyATEMMax methods
+        - Dynamic command mapping through the ``commands`` dispatch table
         - Adaptive polling with smart interval adjustment
         - Connection/disconnection logging with session duration
         - Idle disconnect, if the host asks for one (``hooks.idle_disconnect_seconds``)
