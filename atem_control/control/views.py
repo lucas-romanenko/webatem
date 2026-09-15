@@ -15,7 +15,7 @@ from django.shortcuts import render
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
 
-from atemwire._state import build_full_state
+from atemwire.state import build_full_state
 from atemwire.pool import ATEMInstanceManager
 
 from atem_control import discovery, hooks

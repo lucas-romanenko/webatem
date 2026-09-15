@@ -4,7 +4,7 @@ Pure-function tests (no Django harness):
 
   * ``describe_save_sections`` — ``me_tabs`` availability and per-M/E
     USK-cell sizing from a fake connected topology (the same
-    mixerstate shape ``pyatem._state._me_count`` / ``_me_keyer_count``
+    mixerstate shape ``atemwire.state.me_count`` / ``me_keyer_count``
     read).
   * ``describe_load_sections`` — availability is topology AND file
     (a 1-M/E file on a 4-M/E topology greys M/E 2-4; a block beyond

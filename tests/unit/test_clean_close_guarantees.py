@@ -27,7 +27,7 @@ import types
 import pytest
 
 from atem_control import uploader as U
-from atemwire.pool import ATEMInstanceManager, _close_all_sessions_at_exit
+from atemwire.pool import ATEMInstanceManager, close_all_sessions_at_exit
 from atemwire.protocol import AtemProtocol
 
 
@@ -315,7 +315,7 @@ def test_pool_atexit_sends_goodbye_for_live_instances():
             'connection': fake_conn,
         }
     try:
-        _close_all_sessions_at_exit()
+        close_all_sessions_at_exit()
         assert transport.goodbyes == 1
     finally:
         with ATEMInstanceManager._instance_lock:
@@ -329,7 +329,7 @@ def test_pool_atexit_survives_dead_entries():
         }
         ATEMInstanceManager._instances['__test_atexit3__'] = {'connection': None}
     try:
-        _close_all_sessions_at_exit()          # must not raise
+        close_all_sessions_at_exit()          # must not raise
     finally:
         with ATEMInstanceManager._instance_lock:
             ATEMInstanceManager._instances.pop('__test_atexit2__', None)

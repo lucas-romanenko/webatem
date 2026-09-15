@@ -15,7 +15,7 @@ import time
 from channels.generic.websocket import AsyncWebsocketConsumer
 from asgiref.sync import sync_to_async
 from atem_control.media_pool import watcher as media_pool_service
-from atemwire._state import ATEMStateMixin
+from atemwire.state import ATEMStateMixin
 from atemwire.messages.fairlight import enable_fairlight_levels
 from atemwire.pool import ATEMInstanceManager
 from atem_control.control.commands import dispatch as dispatch_command

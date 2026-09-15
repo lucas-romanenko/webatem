@@ -33,7 +33,7 @@ _REFERENCE_XML = os.path.join(
 
 def _fake_atem(me_count=1, keyers=None):
     """Minimal connected-atem stand-in: a ``mixerstate`` shaped the way
-    ``pyatem._state._me_count`` / ``_me_keyer_count`` read it."""
+    ``atemwire.state.me_count`` / ``me_keyer_count`` read it."""
     keyers = keyers or {}
     return SimpleNamespace(mixerstate={
         'topology': SimpleNamespace(me_units=me_count),
