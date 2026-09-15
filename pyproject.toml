@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "webatem"
-version = "1.1.2"
+version = "1.2.0"
 description = "Browser-based control for Blackmagic ATEM switchers: run it, open the browser, your switchers are there"
 readme = "README.md"
 license = { text = "MIT" }
@@ -28,8 +28,14 @@ dependencies = [
     "whitenoise>=6,<7",
     "zeroconf>=0.140,<1",
     "ifaddr>=0.2,<1",
-    "atemwire==0.15.0.dev1",
-    "hyperdeckwire==0.1.0.dev1",
+    # A compatible range, not an exact pin: bmdwire is where the wire
+    # commands live, and a new ATEM or HyperDeck command published there
+    # should reach a WebATEM install without waiting for a WebATEM release.
+    # Safe because this app only imports those packages' public surfaces,
+    # which 1.x will not break. An exact pin belongs in whatever DEPLOYS
+    # this (a lock file, or a host's own requirements), not here.
+    "atemwire>=1.0,<2",
+    "hyperdeckwire>=1.0,<2",
 ]
 
 [project.optional-dependencies]

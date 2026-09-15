@@ -76,7 +76,7 @@ from PIL import Image
 # step. atem_to_image would double-decode.
 from atemwire.imaging import atem_to_rgb
 from atemwire.pool import ATEMInstanceManager
-from atemwire._state import decode_name, md5_hex
+from atemwire.state import decode_name, md5_hex
 
 
 logger = logging.getLogger(__name__)

@@ -13,7 +13,7 @@ Per-M/E layout (Stage 4C-2): both descriptors always emit
 ``PLATFORM_MAX_MES`` (4) ``me_tabs`` entries — ``{index, available,
 reason}`` — so the dialog renders the same 4-tab frame on every model.
 Tab availability is capability-driven from the connected mixerstate
-(``_me_count``, the same source ``build_full_state`` uses); the load
+(``me_count``, the same source ``build_full_state`` uses); the load
 dialog additionally requires the uploaded XML to contain that M/E's
 ``<MixEffectBlock>``. Sections inside an M/E tab carry me-namespaced
 ids (``me<N>_program`` … ``me<N>_usk_<k>``, ``me_tab: N`` 0-based);
@@ -28,8 +28,19 @@ Global section ids stay flat and match the ``SaveOptions`` /
 import re
 from typing import TYPE_CHECKING, List
 
-from atemwire._state import _me_count, _me_keyer_count
-from atemwire.profile._xml import _int
+from atemwire.state import me_count, me_keyer_count
+
+
+def _int(s, default: int = 0) -> int:
+    """Parse an XML attribute as an int, falling back rather than raising.
+    Local on purpose: this used to import atemwire's XML internals for six
+    lines of parsing, which tied the dialog to a private module."""
+    if s is None or s == '':
+        return default
+    try:
+        return int(float(s))
+    except (TypeError, ValueError):
+        return default
 from atemwire.profile.options import MixEffectOptions, PLATFORM_MAX_MES
 
 if TYPE_CHECKING:
@@ -171,10 +182,10 @@ def describe_save_sections(atem) -> dict:
 
     ``me_tabs`` is always ``PLATFORM_MAX_MES`` (4) entries of
     ``{index, available, reason}``; a tab is available when its index
-    is below the connected switcher's ``_me_count``. Each available
+    is below the connected switcher's ``me_count``. Each available
     tab contributes per-M/E sections (program, preview,
     next_transition, transition_style, fade_to_black, usk_1..k where
-    k is that M/E's ``_me_keyer_count``) with me-namespaced ids
+    k is that M/E's ``me_keyer_count``) with me-namespaced ids
     (``me<N>_<name>``); unavailable tabs contribute no sections — the
     frontend renders them greyed and inert. USK cells beyond an M/E's
     real keyer count are absent, not greyed.
@@ -203,12 +214,12 @@ def describe_save_sections(atem) -> dict:
     """
     _accept_atem_or_protocol(atem)
     mx = _mixerstate(atem)
-    me_count = _me_count(mx)
+    live_me_count = me_count(mx)
 
     me_tabs = []
     sections = []
     for me in range(PLATFORM_MAX_MES):
-        available = me < me_count
+        available = me < live_me_count
         me_tabs.append({
             'index': me,
             'available': available,
@@ -218,7 +229,7 @@ def describe_save_sections(atem) -> dict:
             continue
         for name, label, reason in _ME_CELLS:
             sections.append(_me_cell(me, name, label, reason=reason))
-        for k in range(_me_keyer_count(mx, me)):
+        for k in range(me_keyer_count(mx, me)):
             sections.append(
                 _me_cell(me, f'usk_{k + 1}', f'Upstream Key {k + 1}'))
 
@@ -352,7 +363,7 @@ def describe_load_sections(profile: 'Profile', atem) -> dict:
     switcher's topology.
 
     An M/E tab is available iff its index is below the connected
-    ``_me_count`` AND the XML contains its ``<MixEffectBlock>``
+    ``me_count`` AND the XML contains its ``<MixEffectBlock>``
     (block→index resolution mirrors apply's ``_iter_me_blocks``:
     missing/invalid ``index`` attribute counts as 0). Within an
     available tab, **only cells whose XML element is actually present
@@ -377,7 +388,7 @@ def describe_load_sections(profile: 'Profile', atem) -> dict:
     """
     _accept_atem_or_protocol(atem)
     mx = _mixerstate(atem)
-    me_count = _me_count(mx)
+    live_me_count = me_count(mx)
     root = profile.root
 
     # ---- Per-M/E blocks, keyed by index (first block wins on a
@@ -391,7 +402,7 @@ def describe_load_sections(profile: 'Profile', atem) -> dict:
     sections = []
     for me in range(PLATFORM_MAX_MES):
         block = blocks.get(me)
-        if me >= me_count:
+        if me >= live_me_count:
             me_tabs.append({'index': me, 'available': False,
                             'reason': _REASON_NO_ME})
             continue
