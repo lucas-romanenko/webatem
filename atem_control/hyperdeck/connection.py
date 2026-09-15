@@ -20,7 +20,7 @@ Cached decks are now released two ways:
     modal left behind while other activity continues. An OPEN modal polls at
     ~1 Hz so its own deck never goes idle.
   * An ``atexit`` hook closes every cached deck (``Hyperdeck.close()`` sends a
-    polite ``quit``), mirroring ``pyatem.pool._close_all_sessions_at_exit``.
+    polite ``quit``), mirroring ``atemwire.pool._close_all_sessions_at_exit``.
 """
 import atexit
 import logging
@@ -130,7 +130,7 @@ def _close_all_decks_at_exit():
     """Interpreter-exit safety net (SH-20 FIX 2026-07-06): close every cached
     deck session. ``Hyperdeck.close()`` sends a polite ``quit`` before closing
     the socket, so the deck sees a clean controller departure instead of an
-    abandoned session. Mirrors ``pyatem.pool._close_all_sessions_at_exit`` —
+    abandoned session. Mirrors ``atemwire.pool._close_all_sessions_at_exit`` —
     no per-IP lock juggling at interpreter shutdown, just best-effort closes.
     """
     with _REGISTRY_LOCK:

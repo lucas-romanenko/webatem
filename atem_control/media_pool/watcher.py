@@ -1,10 +1,10 @@
 """
 Media Pool Watcher — event-driven watcher + downloader for the on-ATEM media pool.
 
-Lives in the app rather than pyatem/ because the thumbnail caching,
+Lives in the app rather than in atemwire because the thumbnail caching,
 JPEG encoding, observer dispatch, ref-counted registry, and
 upload-lockout coordination are application concerns, not protocol
-concerns. pyatem owns the pooled connection, ``download_still``, and the
+concerns. atemwire owns the pooled connection, ``download_still``, and the
 ``change:mediaplayer-*`` events; orchestration is here.
 
 The watcher RIDES THE SHARED POOLED CONNECTION (ASC-style step 5,
@@ -39,7 +39,7 @@ Threads per watcher:
        fresh protocol (every pool reconnect builds a new AtemProtocol).
        On each bind the slot/player view is rebuilt from the pooled
        connection's own mixerstate — the state dump already lives there.
-       pyatem event callbacks fire on the POOLED connection's worker
+       atemwire event callbacks fire on the POOLED connection's worker
        thread; they only mutate the cache and push tasks onto the work
        queue (keep them cheap).
     2. Worker thread — consumes the work queue: downloads via
@@ -182,7 +182,7 @@ def group_name(ip_address: str) -> str:
 
 
 def _encode_thumbnail_from_rgba(rgba_bytes: bytes, width: int, height: int) -> bytes:
-    """Build a JPEG thumbnail from pyatem's RGBA8888 output. pyatem returns
+    """Build a JPEG thumbnail from atemwire's RGBA8888 output. atemwire returns
     a raw RGBA byte string sized width*height*4 — PIL adopts that directly
     via Image.frombytes."""
     img = Image.frombytes('RGBA', (width, height), rgba_bytes)
@@ -228,7 +228,7 @@ class MediaPoolWatcher:
 
         # Work queue consumed by the worker thread. Holds download + decode +
         # broadcast tasks so the pooled connection's worker thread (where the
-        # pyatem event handlers fire) never runs PIL / observer handlers.
+        # atemwire event handlers fire) never runs PIL / observer handlers.
         self._work_queue: "queue.Queue" = queue.Queue()
 
         # Pending-download claims: slot_idx -> hash currently queued or in
@@ -741,7 +741,7 @@ class MediaPoolWatcher:
         )
         self._enqueue_broadcast('snapshot', self.get_snapshot())
 
-    # ---------- pyatem event handlers (supervisor thread) ----------
+    # ---------- atemwire event handlers (supervisor thread) ----------
 
     def _register_handlers(self):
         p = self._protocol
@@ -872,9 +872,9 @@ class MediaPoolWatcher:
             # Skip downloads while the hash is still all-zero; MPfe re-fires
             # once hashing completes.
             #
-            # Gate on _connected_flag (set when pyatem fires 'connected' after
+            # Gate on _connected_flag (set when atemwire fires 'connected' after
             # InCm): during the initial state dump, MPfe can arrive before
-            # VidM. If we kick off a transfer in that window, pyatem's
+            # VidM. If we kick off a transfer in that window, atemwire's
             # file-transfer-data handler hits KeyError on
             # mixerstate['video-mode'] (protocol.py:316) every 20 packets and
             # the receive loop dies. _on_connected back-fills downloads for
@@ -1109,7 +1109,7 @@ class MediaPoolWatcher:
                 failure = str(e)
         if raw_ycbcr is None:
             if failure is not None and not self._stop_event.is_set():
-                # 'lock never granted' is pyatem's timeout enrichment when
+                # 'lock never granted' is atemwire's timeout enrichment when
                 # the PLCK went unanswered — the foreign-lock-holder
                 # signature. Any other failure shape leaves the flag alone.
                 if 'lock never granted' in failure:

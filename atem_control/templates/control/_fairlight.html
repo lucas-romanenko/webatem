@@ -11,7 +11,7 @@
          AudioMeters in atem_control.js.
 
          EQ band detail / dynamics tuning aren't surfaced in this MVP
-         (per pyatem coverage: comp/lim/exp can't be written today). -->
+         (per atemwire coverage: comp/lim/exp can't be written today). -->
     <div class="fixed inset-0 z-[200] pointer-events-none" x-show="audioPanelOpen" x-cloak
          @keydown.escape.window="if (!audioModal) audioPanelOpen = false">
         <!-- Backdrop. x-show on the backdrop is load-bearing — without it,
@@ -292,7 +292,7 @@
                             <div class="row-phones flex items-center justify-center">
                                 <div class="audio-phones-btn"
                                      :class="strip.soloed ? 'is-soloed' : ''"
-                                     :title="strip.soloed ? 'Soloed (read-only — solo wire command not in pyatem yet)' : 'Headphones / solo (read-only)'">
+                                     :title="strip.soloed ? 'Soloed (read-only — solo wire command not in atemwire yet)' : 'Headphones / solo (read-only)'">
                                     <i class="bi bi-headphones"></i>
                                 </div>
                             </div>
@@ -423,7 +423,7 @@
 
          EQ panel is fully writable. Dynamics is mostly read-only — only
          dynamics_makeup_db has a setter; threshold/ratio/attack/hold/release
-         per comp/lim/exp section aren't decoded by pyatem yet, so we
+         per comp/lim/exp section aren't decoded by atemwire yet, so we
          expose them as a clear read-only notice rather than a dead UI.
     -->
     <div class="fixed inset-0 z-[210] pointer-events-none" x-show="audioModal" x-cloak
@@ -701,7 +701,7 @@
                      Each section's params live on a per-block dict
                      (audioModalSubject().compressor / .limiter / .expander)
                      populated by AICP/AILP/AIXP receive-side parsers in
-                     pyatem. Writes go via set_audio_<block> dispatch.
+                     atemwire. Writes go via set_audio_<block> dispatch.
 
                      Master rail still gets the makeup-only view since
                      master dynamics on Fairlight is a single make-up gain
@@ -743,14 +743,14 @@
                              (gate has fixed implicit ratio). The
                              ATEM-side mode toggle wire format isn't
                              fully decoded — tracked as TODO in
-                             pyatem.FairlightExpanderPropertiesCommand. -->
+                             atemwire.FairlightExpanderPropertiesCommand. -->
                         <template x-if="audioModal?.stripId !== '_master'">
                             <div class="space-y-3"
                                  x-data="{
                                     /* Tri-state for the Expander block:
                                        'expander' | 'gate' | 'none'. Reads
                                        the real mode byte (decoded from
-                                       AIXP byte 17 in pyatem.messages.fairlight) so
+                                       AIXP byte 17 in atemwire.messages.fairlight) so
                                        it's bidirectional with anything
                                        else changing the mode (Software
                                        Control on the Mac, another
