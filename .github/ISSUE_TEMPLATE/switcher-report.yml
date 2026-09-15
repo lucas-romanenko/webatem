@@ -1,0 +1,63 @@
+name: Switcher report (any model)
+description: You pointed WebATEM at an ATEM. Tell me what happened, whether it worked or not.
+title: "[switcher] "
+labels: ["switcher-report"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        WebATEM has only ever run against ATEM 1 M/E Constellation HD
+        switchers. Every other model is untested, so this report is useful
+        **whether or not it worked**. A working Mini is as worth knowing
+        about as a broken one.
+  - type: input
+    id: model
+    attributes:
+      label: Which switcher?
+      description: The model as ATEM Software Control names it.
+      placeholder: ATEM Mini Pro ISO
+    validations:
+      required: true
+  - type: dropdown
+    id: outcome
+    attributes:
+      label: How did it go?
+      options:
+        - It worked
+        - It mostly worked, something was wrong
+        - It connected but was unusable
+        - It would not connect at all
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: If something was wrong, what did you expect and what did you get? Screenshots help.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: WebATEM version
+      description: Shown in the launcher window, or `pip show webatem`.
+      placeholder: 1.2.0
+    validations:
+      required: true
+  - type: dropdown
+    id: how
+    attributes:
+      label: How are you running it?
+      options:
+        - Windows installer
+        - macOS disk image
+        - Linux binary
+        - pipx or pip
+        - Docker
+    validations:
+      required: true
+  - type: textarea
+    id: video_mode
+    attributes:
+      label: Video mode, if you know it
+      description: 1080p50, 2160p29.97 and so on. Still upload and capture assume 1080p, so this matters for media problems.
