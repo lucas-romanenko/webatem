@@ -1,5 +1,5 @@
 """
-pyatem-based media pool upload service.
+atemwire-based media pool upload service.
 
 Used by the application's uploader worker (``run_uploader`` management
 command) and one-off callers (downtime-overlay button uploads, profile-
@@ -9,9 +9,9 @@ aggressive-drain mode for bulk-upload throughput (~3 s per 1080p still
 vs. ~25 s with ACK-paced sends), and verifies each upload via MPfe
 hash equality.
 
-Lives in the app rather than pyatem/ because tally cycle-wait,
+Lives in the app rather than in atemwire because tally cycle-wait,
 PIL image prep, progress callbacks, and hash-verify policy are feature
-concerns, not protocol concerns. pyatem owns ``protocol.upload()``;
+concerns, not protocol concerns. atemwire owns ``protocol.upload()``;
 everything around it is policy.
 
 Validated tuning + gotchas:
@@ -558,7 +558,7 @@ def _run_for_single_ip(ip_address: str,
                        canceller: _Canceller,
                        log_append: Callable[[str], None],
                        macro_xml_path: Optional[str] = None) -> List[ItemResult]:
-    """Open one pyatem socket, upload all slot_paths tuples for this IP.
+    """Open one atemwire socket, upload all slot_paths tuples for this IP.
 
     If ``macro_xml_path`` is provided and every image upload succeeded,
     the XML's <MacroPool> section is applied to the ATEM on the same
@@ -691,7 +691,7 @@ def execute_upload(items: List[tuple],
                    log_append: Optional[Callable[[str], None]] = None,
                    log_line_prefix: str = '') -> List[ItemResult]:
     """Upload N images to M ATEMs. Items can span multiple IPs; the function
-    groups by IP internally and opens one pyatem socket per unique IP.
+    groups by IP internally and opens one atemwire socket per unique IP.
 
     :param items: list of ``(ip, slot, image_path)`` tuples. ``slot`` is
         0-indexed. May be empty for a macros-only submission (see

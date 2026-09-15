@@ -1,13 +1,13 @@
 """
-ATEM Command Dispatch — WebSocket verb → pyatem operation.
+ATEM Command Dispatch — WebSocket verb → atemwire operation.
 
 Each frontend command string maps to a lambda that extracts arguments from
 the JSON message body and calls the corresponding function on the ``ops``
 namespace. This file contains zero protocol knowledge: no mixerstate reads,
-no wire-unit math, no pyatem Command construction. The library vocabulary
-lives entirely in the ``pyatem.messages.<feature>`` modules.
+no wire-unit math, no atemwire Command construction. The library vocabulary
+lives entirely in the ``atemwire.messages.<feature>`` modules.
 
-``ops`` is built at module load by walking each ``pyatem.messages.<feature>``
+``ops`` is built at module load by walking each ``atemwire.messages.<feature>``
 module and collecting its public callables. The feature module list is the
 explicit guard against silent miss-imports — a new feature module must be
 added there to surface its ops through the dispatch table.
@@ -33,7 +33,7 @@ from atemwire.messages import (
 # Build the ops namespace at module load. Each feature module exports
 # its operation wrappers as top-level functions; we walk the list of
 # feature modules and copy each public callable onto ``ops``. Same
-# pattern as ``pyatem.atem._OPERATIONS``.
+# pattern as ``atemwire.atem._OPERATIONS``.
 _OPS_MODULES = (
     switching, color_generator, fade_to_black, media, input_video,
     upstream_keyer, macros, downstream_keyer, transition, fairlight, hyperdeck,
