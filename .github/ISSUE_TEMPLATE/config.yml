@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/lucas-romanenko/webatem/security/advisories/new
+    about: Report privately, not as a public issue. Read SECURITY.md first; "there is no login" is the documented design, not a finding.
+  - name: The protocol libraries
+    url: https://github.com/lucas-romanenko/bmdwire
+    about: Wire-level problems (a command that does not reach the switcher, a field decoded wrong) belong in bmdwire, which is where the protocol lives.
