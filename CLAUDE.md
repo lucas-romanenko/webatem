@@ -150,9 +150,23 @@ through a new hook method with a working default, never a direct import.
 
   The byte-on-disk question is separately open and NOT closed by the above:
   Django spools any body over 2.5 MB to a temp file before the view runs, so an
-  unbounded POST is an unbounded write. A `Content-Length` check before
-  `request.FILES` is the cheap guard; it was built and then removed by product
-  decision. Reopen it as a resource question, not as a validation rule.
+  unbounded POST is an unbounded write. It was built once and then removed by
+  product decision. Reopen it as a resource question, not as a validation rule,
+  and if you rebuild the guard, rebuild it knowing these two things, because
+  both make it weaker than it looks:
+
+  * **A view-level check prevents the SECOND copy, not the first.** By the time
+    the view runs, the body is already in Django's temp file. Checking
+    `upload_file.size` stops the permanent copy into the job dir; the temp one
+    already cost the disk and Django reaps it when the request ends. So "the
+    cheap guard caps disk" overstates it.
+  * **`Content-Length` is the client's claim, not a measurement.** Checking it
+    before `request.FILES` is right, and it has to be before, because touching
+    `request.FILES` is what makes Django read the stream at all. But a lying
+    header walks through it, and a chunked request carries no `Content-Length`
+    to check. It stops the honest 40 GB POST, which is the realistic case here,
+    and it is not a bound. The complete version counts bytes at the ASGI
+    boundary, which is more machinery than this has ever been worth.
 
 - **Every page that POSTs sets the CSRF cookie** (`ensure_csrf_cookie` on
   `atem_connect` / `atem_control`, and on the launcher's two). Nothing else
