@@ -156,12 +156,13 @@ warns you the first time. One-time, then it opens normally:
 
 - **macOS:** double-click, let it get blocked, then **System Settings →
   Privacy & Security → “Open Anyway”**. (On older macOS: right-click → Open.)
-- **Windows:** unzip the folder first, then **More info → Run anyway** on the
-  SmartScreen prompt for `webatem.exe` inside it. (The builds are not
-  code-signed: Windows warns about any unsigned program the first time.)
+- **Windows:** **More info → Run anyway** on the SmartScreen prompt for the
+  installer, once. (Windows warns about any unsigned program the first time.)
 
-Removing the warning entirely requires paid Apple/Microsoft signing
-certificates, planned but not done yet.
+The macOS build signs and notarizes itself as soon as the repository holds
+an Apple Developer ID (the build workflow says which secrets); from that
+release on the download opens with no warning. Windows signing is a
+separate paid certificate, not done.
 </details>
 
 ### Option B. Host it  *(a whole team; always on)*

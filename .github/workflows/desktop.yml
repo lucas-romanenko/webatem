@@ -131,15 +131,39 @@ jobs:
           [ -n "$ok" ] || { echo "::error::the frozen build never served /atem/"; exit 1; }
           echo "the frozen build serves /atem/"
 
-      # 7. Package per-OS: macOS -> ad-hoc-signed .app in a drag-to-Applications
-      #    .dmg; Windows -> an Inno Setup installer around the app folder;
-      #    Linux -> the bare binary. The Windows download was a single
-      #    self-extracting exe until 0.6.3 (which Chrome blocked as a virus —
-      #    that shape is what heuristic scanners score worst) and then a zip,
-      #    which is not how a finished application arrives.
+      # 7. Package per-OS: macOS -> a signed .app in a drag-to-Applications
+      #    .dmg, notarized and stapled when the Apple credentials are set
+      #    (below), ad-hoc signed otherwise; Windows -> an Inno Setup
+      #    installer around the app folder; Linux -> the bare binary. The
+      #    Windows download was a single self-extracting exe until 0.6.3
+      #    (which Chrome blocked as a virus — that shape is what heuristic
+      #    scanners score worst) and then a zip, which is not how a finished
+      #    application arrives.
+      #
+      #    macOS signing needs FIVE repository secrets, all from one Apple
+      #    Developer Program membership (developer.apple.com, paid yearly):
+      #      MACOS_CERT_P12        a "Developer ID Application" certificate
+      #                            exported from Keychain Access as .p12,
+      #                            base64-encoded (`base64 -i cert.p12`)
+      #      MACOS_CERT_PASSWORD   the password given at export
+      #      APPLE_ID              the Apple ID e-mail of the account
+      #      APPLE_TEAM_ID         the 10-character Team ID (Membership page)
+      #      APPLE_APP_PASSWORD    an app-specific password for that Apple ID
+      #                            (appleid.apple.com -> Sign-In and Security)
+      #    With them the .app is signed with the hardened runtime and the
+      #    entitlements in build/desktop/entitlements.plist, the .dmg is
+      #    submitted to Apple's notary service and the ticket stapled, so the
+      #    download opens with no warning at all. Without them the build is
+      #    exactly what it was: ad-hoc signed, "Open Anyway" on first launch.
       - name: Package
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: |
-          set -euxo pipefail
+          set -euo pipefail
           mkdir -p out
           case "$RUNNER_OS" in
             macOS)
@@ -149,15 +173,69 @@ jobs:
               want="${{ matrix.mac_arch }}"
               echo "built arch: $got (want $want)"
               [ "$got" = "$want" ] || { echo "::error::built $got but wanted $want"; exit 1; }
-              # Ad-hoc sign so the app runs without the codesign dance (Apple
-              # Silicon refuses unsigned binaries). Not notarized — the first
-              # open still needs right-click Open / Open Anyway.
-              codesign --force --deep --sign - dist/WebATEM.app
-              codesign --verify --deep --strict dist/WebATEM.app && echo "ad-hoc signed OK"
+              if [ -n "$MACOS_CERT_P12" ]; then
+                echo "Developer ID signing: certificate present"
+                # A throwaway keychain holding only this certificate; the
+                # runner is discarded after the job, but the password never
+                # reaches the log (set -x is off in this step on purpose).
+                KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+                KEYCHAIN_PW="$(openssl rand -hex 16)"
+                echo "$MACOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+                security create-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN"
+                security set-keychain-settings -lut 21600 "$KEYCHAIN"
+                security unlock-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN"
+                security import "$RUNNER_TEMP/cert.p12" -P "$MACOS_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+                security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PW" "$KEYCHAIN"
+                security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+                rm -f "$RUNNER_TEMP/cert.p12"
+                IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN" | grep -o '"Developer ID Application: [^"]*"' | head -1 | tr -d '"')
+                [ -n "$IDENTITY" ] || { echo "::error::no Developer ID Application identity in the certificate"; exit 1; }
+                echo "signing as: $IDENTITY"
+                # Hardened runtime + entitlements on every Mach-O inside the
+                # bundle, innermost first (--deep is deprecated and signs in
+                # the wrong order for nested frameworks), then the bundle.
+                find dist/WebATEM.app/Contents -type f \( -name '*.so' -o -name '*.dylib' -o -perm -u+x \) -print0 \
+                  | while IFS= read -r -d '' f; do
+                      file -b "$f" | grep -q 'Mach-O' || continue
+                      codesign --force --options runtime --timestamp \
+                        --entitlements build/desktop/entitlements.plist --sign "$IDENTITY" "$f"
+                    done
+                codesign --force --options runtime --timestamp \
+                  --entitlements build/desktop/entitlements.plist --sign "$IDENTITY" dist/WebATEM.app
+                codesign --verify --deep --strict --verbose=2 dist/WebATEM.app && echo "Developer ID signed OK"
+              else
+                # Ad-hoc sign so the app runs at all (Apple Silicon refuses
+                # unsigned binaries). Not notarized: the first open needs
+                # System Settings -> Privacy & Security -> Open Anyway.
+                echo "no MACOS_CERT_P12 secret: ad-hoc signing (first open needs Open Anyway)"
+                codesign --force --deep --sign - dist/WebATEM.app
+                codesign --verify --deep --strict dist/WebATEM.app && echo "ad-hoc signed OK"
+              fi
               mkdir -p dmgroot
               cp -R dist/WebATEM.app dmgroot/
               ln -s /Applications dmgroot/Applications
               hdiutil create -volname WebATEM -srcfolder dmgroot -ov -format UDZO "out/${{ matrix.asset }}"
+              if [ -n "$MACOS_CERT_P12" ]; then
+                codesign --force --timestamp --sign "$IDENTITY" "out/${{ matrix.asset }}"
+                # Apple scans the disk image and everything in it; --wait
+                # blocks until the verdict (a few minutes). A rejection prints
+                # the log so the reason is in the run, not behind a UUID.
+                if ! xcrun notarytool submit "out/${{ matrix.asset }}" --apple-id "$APPLE_ID" \
+                       --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait --output-format json > notary.json; then
+                  cat notary.json; exit 1
+                fi
+                cat notary.json
+                status=$(python3 -c 'import json;print(json.load(open("notary.json"))["status"])')
+                if [ "$status" != "Accepted" ]; then
+                  id=$(python3 -c 'import json;print(json.load(open("notary.json"))["id"])')
+                  xcrun notarytool log "$id" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" || true
+                  echo "::error::notarization $status"; exit 1
+                fi
+                # The ticket travels inside the .dmg, so Gatekeeper is happy
+                # offline too (a Mac that cannot reach Apple at first open).
+                xcrun stapler staple "out/${{ matrix.asset }}"
+                spctl --assess --type open --context context:primary-signature -v "out/${{ matrix.asset }}" && echo "notarized and stapled OK"
+              fi
               ;;
             Windows)
               # dist/WebATEM/ (webatem.exe beside its _internal folder) goes
