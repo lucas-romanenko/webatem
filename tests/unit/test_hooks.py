@@ -205,14 +205,45 @@ def test_connection_log_carries_the_switcher_name(host_hooks):
     assert ('connection', 'connection', '10.1.1.1', None) in host_hooks.calls
 
 
-def test_default_still_check_is_1080p(tmp_path, settings):
+def test_default_still_check_takes_any_image(tmp_path, settings):
+    """Drop what you like on a slot, as in ATEM Software Control: the upload
+    path fits it to the switcher's own frame, so the check is only 'is this an
+    image'. A host that wants a stricter rule overrides validate_still."""
     from PIL import Image
-    from atem_control.media_pool.views import validate_and_resize_1080p
-    big = tmp_path / 'big.jpg'; Image.new('RGB', (3840, 2160)).save(big, 'JPEG')
-    assert validate_and_resize_1080p(str(big), 'big.jpg') == (True, None) and Image.open(big).size == (1920, 1080)
-    small = tmp_path / 'small.jpg'; Image.new('RGB', (1280, 720)).save(small, 'JPEG')
-    ok, err = validate_and_resize_1080p(str(small), 'small.jpg')
-    assert not ok and 'too small' in err
+    from atem_control.hooks import Hooks
+    h = Hooks()
+
+    for name, size in [('uhd.jpg', (3840, 2160)),      # bigger than any frame
+                       ('small.jpg', (1280, 720)),     # smaller, once refused
+                       ('square.png', (500, 500)),     # not 16:9, once refused
+                       ('tall.png', (400, 1200))]:     # portrait
+        f = tmp_path / name
+        Image.new('RGB', size).save(f)
+        assert h.validate_still('10.1.1.1', str(f), name) == (True, None), name
+
+    # Still refuses what is not an image at all.
+    junk = tmp_path / 'notapicture.jpg'; junk.write_bytes(b'this is not a jpeg')
+    ok, err = h.validate_still('10.1.1.1', str(junk), 'notapicture.jpg')
+    assert not ok and 'not a readable image' in err
+
+
+def test_media_pool_upload_refuses_an_oversized_body(client, host_hooks, monkeypatch, tmp_path):
+    """No login by design means anyone who reaches the page can post a body, so
+    there is a ceiling. The ceiling is patched down here rather than posting 64
+    MB; what matters is that the refusal happens and nothing is written."""
+    from PIL import Image
+    from atem_control.media_pool import views as v
+    monkeypatch.setattr(v, 'MAX_UPLOAD_BYTES', 32)
+
+    f = tmp_path / 'still.png'
+    Image.new('RGB', (1920, 1080)).save(f)          # comfortably over 32 bytes
+    with open(f, 'rb') as fh:
+        r = client.post('/atem/media-pool-upload/',
+                        data={'ip': '10.1.1.1', 'slot': '0', 'image': fh})
+    assert r.status_code == 413, r.content
+    assert 'too large' in r.json()['error']
+    assert not any(c[0] == 'upload_still' for c in host_hooks.calls), \
+        'a refused upload must not reach the host'
 
 
 @pytest.mark.django_db
