@@ -116,17 +116,26 @@ through a new hook method with a working default, never a direct import.
 ## Surface rules paid for on real hardware
 
 - **Never leave `protocol.loop()` unpumped while a session is open.** Event
-  dispatch and the switcher's keepalives happen only inside it. The upload
-  busy-wait pumps it and the macro apply spawns a thread to; frame prep did
-  neither, which was invisible while every image arrived at frame size and
-  prep was milliseconds. 1.3.0 stopped resizing on the way in, so prep became
-  seconds of Lanczos on a large source with the loop silent: the switcher
-  timed the session out mid-upload and the abandoned session took ATEM
-  Software Control down with it on the same switcher. Reported from a real
-  drag and drop, not from a test. Fixed in 1.3.1 by running prep on a worker
-  with a pump thread beside it, the same shape the macro apply already used.
-  Pinned by `test_frame_prep_pumps.py`, which MEASURES the pump count rather
-  than asserting a code shape: unpumped it is 0, pumped it is dozens.
+  dispatch happens only inside it: a transfer's LKOB, FTCD and FTDC are not
+  acted on until the loop runs. The upload busy-wait pumps it and the macro
+  apply spawns a thread to; frame prep did neither, and since 1.3.1 it runs
+  on a worker with a pump thread beside it, the same shape the macro apply
+  already used. Pinned by `test_frame_prep_pumps.py`, which MEASURES the
+  pump count rather than asserting a code shape: unpumped it is 0, pumped it
+  is dozens. **Correction (2026-09-16):** the 1.3.1 note said an unpumped
+  loop starves the switcher's keepalives and times the session out. It does
+  not: ACKs are sent by the transport's own UDP thread, so a silent loop
+  keeps the session alive; it only delays event handling. The stall and
+  disconnect reported with 1.3.0 were not explained by prep. What WAS found
+  on the wire that day, and fixed in atemwire 1.0.3, is in that package's
+  `docs/MEDIA_LOCK.md`: the transport dropped the first packet after the
+  state dump, which, when a lock was requested during the dump, was the
+  LKOB, so the session held the media lock without knowing it ("locked by
+  another instance" with nobody else there); `wait_ready` returned on the
+  first dump packet; and FTDE 6 (a two-client collision, the loser still
+  holding the lock) was treated as fatal. The 1.3.2 premise that a goodbye
+  leaves a held lock behind was also wrong: the switcher releases it within
+  10 ms, and reaps an abandoned session in ~5 s, not 5 minutes.
 
   The general rule: if you add anything slow between opening a session and
   closing it, pump the loop across it or hand the work to a thread that does.
