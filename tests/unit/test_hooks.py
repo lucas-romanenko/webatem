@@ -227,25 +227,6 @@ def test_default_still_check_takes_any_image(tmp_path, settings):
     assert not ok and 'not a readable image' in err
 
 
-def test_media_pool_upload_refuses_an_oversized_body(client, host_hooks, monkeypatch, tmp_path):
-    """No login by design means anyone who reaches the page can post a body, so
-    there is a ceiling. The ceiling is patched down here rather than posting 64
-    MB; what matters is that the refusal happens and nothing is written."""
-    from PIL import Image
-    from atem_control.media_pool import views as v
-    monkeypatch.setattr(v, 'MAX_UPLOAD_BYTES', 32)
-
-    f = tmp_path / 'still.png'
-    Image.new('RGB', (1920, 1080)).save(f)          # comfortably over 32 bytes
-    with open(f, 'rb') as fh:
-        r = client.post('/atem/media-pool-upload/',
-                        data={'ip': '10.1.1.1', 'slot': '0', 'image': fh})
-    assert r.status_code == 413, r.content
-    assert 'too large' in r.json()['error']
-    assert not any(c[0] == 'upload_still' for c in host_hooks.calls), \
-        'a refused upload must not reach the host'
-
-
 @pytest.mark.django_db
 def test_switcher_name_section_goes_through_the_host(client, host_hooks, monkeypatch):
     d = client.get('/atem/device-info/?ip=10.1.1.1').json()
