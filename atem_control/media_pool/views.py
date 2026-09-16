@@ -27,10 +27,6 @@ from atem_control.storage import UPLOADS_DIR, ensure_dir
 
 logger = logging.getLogger(__name__)
 
-# Ceiling on a dropped still. A 1080p frame is a few MB and a 2160p one is
-# not much more, so this is invisible to real use and only ever stops a body
-# that was never going to be a picture.
-MAX_UPLOAD_BYTES = 64 * 1024 * 1024
 
 
 def _make_job_dir():
@@ -88,38 +84,10 @@ def media_pool_upload(request):
     if not (0 <= slot < 32):
         return JsonResponse({'success': False, 'error': 'Slot must be 0-31'}, status=400)
 
-    # Refuse an oversized body BEFORE request.FILES is touched, because
-    # touching it is what makes Django read the stream and spool anything over
-    # 2.5 MB to a temp file. This is not a rule about what you may drop on a
-    # slot: a still is a few MB and the switcher's own frame is the only shape
-    # that matters (see hooks.validate_still). It is here because this app has
-    # no login by design, so anyone who can reach the page can post a body,
-    # and without a ceiling that body can be any size at all.
-    declared = request.META.get('CONTENT_LENGTH') or 0
-    try:
-        declared = int(declared)
-    except (TypeError, ValueError):
-        declared = 0
-    if declared > MAX_UPLOAD_BYTES:
-        return JsonResponse(
-            {'success': False,
-             'error': f'Image too large ({declared // 1048576} MB). '
-                      f'The limit is {MAX_UPLOAD_BYTES // 1048576} MB.'},
-            status=413)
-
     if 'image' not in request.FILES:
         return JsonResponse({'success': False, 'error': 'No image provided'}, status=400)
 
     upload_file = request.FILES['image']
-    # A lying Content-Length gets this far. Django's temp copy already exists
-    # and it reaps that itself; refusing here stops the second, permanent copy
-    # into the job directory.
-    if upload_file.size > MAX_UPLOAD_BYTES:
-        return JsonResponse(
-            {'success': False,
-             'error': f'Image too large ({upload_file.size // 1048576} MB). '
-                      f'The limit is {MAX_UPLOAD_BYTES // 1048576} MB.'},
-            status=413)
     file_name = str(upload_file).replace(' ', '_')
 
     timestamp, job_dir = _make_job_dir()

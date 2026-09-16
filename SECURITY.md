@@ -35,6 +35,13 @@ same trust model as the physical panel it replaces:
 - **No authentication or authorization** — see above.
 - **No TLS** — terminate it at a reverse proxy.
 - **No rate limiting.**
+- **No size limit on a still dropped into the media pool.** Deliberate: the
+  app is ATEM Software Control in a browser, operators do drop very large
+  source images, and a ceiling low enough to be a defence would be low enough
+  to refuse real work. Anyone who can reach the page can already cut program
+  and take a show to black, so filling a disk is not the interesting thing
+  they could do. If that matters in your deployment, cap the body at the
+  reverse proxy (`client_max_body_size` in nginx).
 
 ## Exposing it beyond the studio LAN
 
