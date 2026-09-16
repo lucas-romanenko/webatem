@@ -21,3 +21,7 @@ atem_control/static/vendor/webatem.css
 /build/temp.*/
 # written by the Windows packaging step
 build/desktop/version.iss
+
+# Working notes for the maintainer, kept local; not part of the project.
+CLAUDE.md
+.claude/
