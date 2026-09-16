@@ -292,14 +292,16 @@ Django + Channels (single ASGI worker, uvicorn)
 ATEM switchers (UDP 9910) · HyperDecks (TCP 9993 / FTP)
 ```
 
-- **[atemwire](https://github.com/lucas-romanenko/bmdwire/tree/main/atemwire)** (PyPI) is the
+- **[atemwire](https://github.com/lucas-romanenko/bmdwire/tree/main/atemwire)** is the
   ATEM protocol library, a substantially modified fork of Martijn Braam's
   pyatem: declarative wire-format DSL, hardened UDP transport (in-order
   delivery, retransmit serving, clean session close), ref-counted connection
   pooling, native interleaved bulk transfers, macro bytecode transfer, and
   ASC-compatible profile save/restore. A small C extension does YCbCr↔RGB
   conversion. **[hyperdeckwire](https://github.com/lucas-romanenko/bmdwire/tree/main/hyperdeckwire)**
-  (PyPI) drives the HyperDecks. Both are pinned in `pyproject.toml`; a
+  drives the HyperDecks. Both ship in the one
+  [bmdwire](https://pypi.org/project/bmdwire/) distribution, which
+  `pyproject.toml` asks for as a range and `requirements.txt` pins; a
   library change is a release there and a pin bump here.
 - **`atem_control/`** is the Django app: the WebSocket consumer, a declarative
   command dispatch table, the media-pool watcher, LAN discovery, and the UI.
