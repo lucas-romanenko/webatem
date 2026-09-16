@@ -205,6 +205,33 @@ def test_connection_log_carries_the_switcher_name(host_hooks):
     assert ('connection', 'connection', '10.1.1.1', None) in host_hooks.calls
 
 
+def test_default_still_check_refuses_a_decompression_bomb(tmp_path):
+    """"Any image at any size" is about the picture, not about what the process
+    will decode. Pillow's ceiling stays at its default (it is NOT disabled), and
+    it fires on the header's declared size inside Image.open, before a pixel is
+    decoded. Named explicitly because DecompressionBombError is neither an
+    OSError nor a ValueError, so an unnamed one escapes as an unhandled
+    exception instead of a refusal. One ASGI worker by design: a 3 GB decode
+    mid-show is not a thing to find out about in production."""
+    from PIL import Image
+    from atem_control.hooks import Hooks
+
+    assert Image.MAX_IMAGE_PIXELS is not None, 'the bomb ceiling must not be disabled'
+
+    bomb = tmp_path / 'bomb.png'
+    Image.MAX_IMAGE_PIXELS = None                      # only to write the file
+    try:
+        Image.new('L', (30000, 30000)).save(bomb, 'PNG', compress_level=9)
+    finally:
+        Image.MAX_IMAGE_PIXELS = 89478485              # the shipped default
+
+    assert bomb.stat().st_size < 2_000_000, 'under 2 MB on disk, ~3 GB decoded'
+
+    ok, err = Hooks().validate_still('10.1.1.1', str(bomb), 'bomb.png')
+    assert not ok
+    assert 'too large to decode' in err
+
+
 def test_default_still_check_takes_any_image(tmp_path, settings):
     """Drop what you like on a slot, as in ATEM Software Control: the upload
     path fits it to the switcher's own frame, so the check is only 'is this an

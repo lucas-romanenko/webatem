@@ -136,6 +136,24 @@ through a new hook method with a working default, never a direct import.
   not the interesting thing to protect. A host that wants a rule overrides
   `validate_still`; AV Server does, sized from the switcher's recorded mode.
 
+  **Two separate questions, and only one of them is settled by that.** The
+  product call is about the PICTURE: no dimension rule, no byte ceiling. It did
+  not decide anything about what the process will DECODE, and those are not the
+  same. Pillow's `MAX_IMAGE_PIXELS` stays at its default and is NOT disabled;
+  `_validate_image_fast` names `DecompressionBombError` explicitly, because it
+  is neither an OSError nor a ValueError and an unnamed one escapes as an
+  unhandled exception rather than a refusal. A 30000x30000 PNG is 850 KB on
+  disk and 3 GB decoded, and this runs one ASGI worker by design. Pinned by
+  `test_default_still_check_refuses_a_decompression_bomb`. Do not disable the
+  ceiling to "accept any image": the bomb is refused at `Image.open`, on the
+  header, before a pixel is read, so it costs a real picture nothing.
+
+  The byte-on-disk question is separately open and NOT closed by the above:
+  Django spools any body over 2.5 MB to a temp file before the view runs, so an
+  unbounded POST is an unbounded write. A `Content-Length` check before
+  `request.FILES` is the cheap guard; it was built and then removed by product
+  decision. Reopen it as a resource question, not as a validation rule.
+
 - **Every page that POSTs sets the CSRF cookie** (`ensure_csrf_cookie` on
   `atem_connect` / `atem_control`, and on the launcher's two). Nothing else
   does: 0.5.0 removed the connect page's settings dialog and with it the last
