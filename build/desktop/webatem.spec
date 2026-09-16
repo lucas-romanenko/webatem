@@ -49,7 +49,12 @@ def _win_version_file():
         StringStruct('FileDescription', 'WebATEM - browser control for ATEM switchers'),
         StringStruct('FileVersion', '{_version()}'),
         StringStruct('InternalName', 'webatem'),
-        StringStruct('LegalCopyright', 'MIT licensed. Not affiliated with the switcher manufacturer.'),
+        # WebATEM's own code is MIT, but this bundle is a Combined Work: it
+        # contains atemwire and pystray, both LGPL-3.0. Saying only "MIT"
+        # here would misstate what is inside. Their licence texts ride along
+        # in the bundle (dist-info/licenses), and the full source is public,
+        # so a user can rebuild against their own atemwire.
+        StringStruct('LegalCopyright', 'MIT, and bundles atemwire and pystray under LGPL-3.0. Not affiliated with the switcher manufacturer.'),
         StringStruct('OriginalFilename', 'webatem.exe'),
         StringStruct('ProductName', 'WebATEM'),
         StringStruct('ProductVersion', '{_version()}')])]),

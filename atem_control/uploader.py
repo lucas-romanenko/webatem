@@ -44,6 +44,7 @@ from dataclasses import dataclass
 from typing import Callable, List, Optional
 
 from PIL import Image, UnidentifiedImageError
+from PIL.Image import DecompressionBombError
 from atemwire.protocol import AtemProtocol
 from atemwire.imaging import rgb_to_atem
 from atemwire.ready import wait_ready
@@ -272,10 +273,18 @@ def _wait_for_safe_upload_window(protocol, slot_0_indexed: int,
 
 def _validate_image_fast(image_path: str):
     """Upfront check — is this a file PIL can read? Catches corrupt / truncated
-    / zero-byte / not-an-image files BEFORE we waste tally-wait time on them."""
+    / zero-byte / not-an-image files BEFORE we waste tally-wait time on them.
+
+    Also the decompression-bomb gate. Pillow raises DecompressionBombError from
+    ``Image.open`` on the header's declared size, BEFORE decoding a pixel, so a
+    30000x30000 PNG that is 200 KB on disk never becomes 3.3 GB of RGBA. That
+    error is not an OSError or a ValueError, so it has to be named explicitly
+    or it escapes every caller as an unhandled exception instead of a refusal."""
     try:
         with Image.open(image_path) as im:
             im.verify()
+    except DecompressionBombError as e:
+        raise ValueError(f"image is too large to decode safely: {e}") from e
     except (UnidentifiedImageError, OSError, SyntaxError) as e:
         raise ValueError(f"not a readable image: {e}") from e
 
