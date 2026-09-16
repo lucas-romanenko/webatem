@@ -3,8 +3,8 @@
 # library into a project with its own pins; this file is applied as a
 # CONSTRAINTS file (pip install -c requirements.txt ".[desktop]") so those
 # builds get exactly the versions they were verified with without pulling in
-# anything the chosen extras do not ask for. Dependabot bumps the device
-# libraries here and in pyproject.toml together.
+# anything the chosen extras do not ask for. Bumped by hand, here and in
+# pyproject.toml together when a range moves.
 Django==6.0.7
 channels==4.3.2
 uvicorn==0.52.0
@@ -14,8 +14,7 @@ zeroconf==0.147.2
 ifaddr==0.2.0
 pystray==0.19.5
 pywebview==6.2.1
-atemwire==1.0.3
-hyperdeckwire==1.0.0
+bmdwire==1.1.0
 pytest==9.1.1
 pytest-django==4.12.0
 pytest-timeout==2.4.0

@@ -89,7 +89,7 @@ jobs:
           $PY -m pip install --upgrade pip setuptools wheel
           $PY -m pip install -c requirements.txt ".[desktop]" pyinstaller
 
-      # 4. atemwire (PyPI sdist) built its mediaconvert C extension inside the
+      # 4. bmdwire (PyPI sdist) built atemwire's mediaconvert C extension inside the
       #    pip install above with THIS build's compiler + architecture
       #    (ARCHFLAGS forces x86_64 for the Rosetta build). Prove it imports.
       - name: Check the C extension
