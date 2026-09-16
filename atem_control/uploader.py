@@ -348,13 +348,53 @@ def _upload_one(protocol, slot: int, image_path: str, width: int, height: int,
         return ItemResult(slot=slot, image_path=image_path, success=False,
                           error="cancelled before upload")
 
+    # Frame prep runs on a worker WITH THE LOOP PUMPED, because nothing else
+    # pumps it here. The session is already open at this point and the switcher
+    # expects its keepalives answered; event dispatch only happens inside
+    # protocol.loop(), which the upload busy-wait below does but which nothing
+    # does during prep. That was survivable while every image arrived already
+    # at frame size and prep was milliseconds. It stopped being survivable when
+    # the host default stopped resizing on the way in (1.3.0): a large source
+    # is seconds of Lanczos with the loop silent, the switcher times the
+    # session out mid-upload, and the abandoned session takes other clients
+    # (ATEM Software Control included) down with it. Same pump-thread shape as
+    # the macro apply below, and the same reason.
     t_prep = time.time()
+    prep_result: dict = {}
+    stop_prep_pump = threading.Event()
+
+    def _prep_pump():
+        while not stop_prep_pump.is_set():
+            try:
+                protocol.loop()
+            except Exception:
+                return
+
+    def _do_prep():
+        try:
+            prep_result['data'] = _prepare_frame(image_path, width, height)
+        except Exception as exc:
+            prep_result['error'] = exc
+
+    prep_pump = threading.Thread(target=_prep_pump, name='frame-prep-pump', daemon=True)
+    prep_worker = threading.Thread(target=_do_prep, name='frame-prep', daemon=True)
+    prep_pump.start()
+    prep_worker.start()
+    prep_worker.join()
+    stop_prep_pump.set()
     try:
-        atem_data = _prepare_frame(image_path, width, height)
-    except Exception as e:
+        from atemwire.transport import Wakeup
+        protocol.transport.thread_recv_queue.put(Wakeup())
+    except Exception:
+        pass
+    prep_pump.join(timeout=2.0)
+
+    if 'error' in prep_result:
+        e = prep_result['error']
         log_append(f"slot {slot_user}: FAIL — frame prep: {e}")
         return ItemResult(slot=slot, image_path=image_path, success=False,
                           error=f"frame prep failed: {e}")
+    atem_data = prep_result['data']
     log_append(f"slot {slot_user}: frame prep took {time.time() - t_prep:.2f}s")
 
     expected_hash = hashlib.md5(atem_data).digest()
