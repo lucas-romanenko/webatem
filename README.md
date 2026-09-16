@@ -129,6 +129,14 @@ are untested there.
 
 That's the whole setup. Nothing to install alongside it, no Python, no Docker.
 
+**On a Mac, one line in Terminal does both steps** and skips the first-launch
+security prompt described below (it downloads the right build for your chip,
+puts WebATEM in Applications and opens it):
+
+```sh
+curl -fsSL https://github.com/lucas-romanenko/webatem/releases/latest/download/install-mac.sh | sh
+```
+
 While it runs it is a small window plus an icon in the **menu bar (Mac) /
 system tray (Windows)**, the way Bitfocus Companion works, with nothing in the
 Dock or on the taskbar, only the icon. The window shows
@@ -156,13 +164,8 @@ warns you the first time. One-time, then it opens normally:
 
 - **macOS:** double-click, let it get blocked, then **System Settings →
   Privacy & Security → “Open Anyway”**. (On older macOS: right-click → Open.)
-  **Or skip that step entirely** by installing from Terminal, which puts
-  WebATEM in Applications and opens it with no warning (a browser marks
-  what it downloads for that check; this does not):
-
-  ```sh
-  curl -fsSL https://github.com/lucas-romanenko/webatem/releases/latest/download/install-mac.sh | sh
-  ```
+  Or skip it entirely with the Terminal line above: a browser marks what it
+  downloads for that check, and curl does not.
 - **Windows:** **More info → Run anyway** on the SmartScreen prompt for the
   installer, once. (Windows warns about any unsigned program the first time.)
 
