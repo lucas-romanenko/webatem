@@ -832,6 +832,18 @@ def execute_upload(items: List[tuple],
 
 
 def _close_protocol(protocol: AtemProtocol) -> None:
+    # Give the media lock back BEFORE the goodbye. An upload holds the store
+    # lock per frame and a failed or abandoned one can leave it held; a lock
+    # still ours at teardown is kept by the switcher for the rest of the
+    # session's life, and refuses every later client that wants the media
+    # store. That is a switcher that will not load a still, and an ATEM
+    # Software Control slot spinning on a thumbnail it cannot download.
+    # Synchronous, because the worker that would drain a queued command is
+    # already going away (atemwire.protocol.release_locks_now).
+    try:
+        protocol.release_locks_now()
+    except Exception:
+        pass
     # Protocol-level goodbye BEFORE the socket close — an abandoned session
     # wedges the switcher (see transport.close_session).
     try:
