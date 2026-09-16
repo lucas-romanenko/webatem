@@ -186,7 +186,8 @@ if IS_MAC:
         info_plist={
             'CFBundleName': 'WebATEM',
             'CFBundleDisplayName': 'WebATEM',
-            'CFBundleShortVersionString': '1.0.0',
+            'CFBundleShortVersionString': _version(),
+            'CFBundleVersion': _version(),
             'NSHighResolutionCapable': True,
             # Menu-bar app: no Dock icon, no app menu; Quit lives in the
             # status item's menu (like Companion).
