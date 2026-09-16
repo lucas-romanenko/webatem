@@ -14,7 +14,7 @@ zeroconf==0.147.2
 ifaddr==0.2.0
 pystray==0.19.5
 pywebview==6.2.1
-atemwire==1.0.2
+atemwire==1.0.3
 hyperdeckwire==1.0.0
 pytest==9.1.1
 pytest-django==4.12.0
