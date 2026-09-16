@@ -215,6 +215,10 @@ jobs:
               cp -R dist/WebATEM.app dmgroot/
               ln -s /Applications dmgroot/Applications
               hdiutil create -volname WebATEM -srcfolder dmgroot -ov -format UDZO "out/${{ matrix.asset }}"
+              # The Terminal installer (README: curl ... | sh) is one asset,
+              # published from the arm64 job; it picks the .dmg for the chip
+              # it runs on at install time.
+              [ "${{ matrix.name }}" = "macos-arm64" ] && cp build/desktop/install-mac.sh out/install-mac.sh || true
               if [ -n "$MACOS_CERT_P12" ]; then
                 codesign --force --timestamp --sign "$IDENTITY" "out/${{ matrix.asset }}"
                 # Apple scans the disk image and everything in it; --wait
@@ -258,6 +262,26 @@ jobs:
               cp dist/webatem "out/${{ matrix.asset }}"
               ;;
           esac
+
+      # 7a. macOS: install what we just built with the Terminal installer and
+      #     prove the copy in Applications carries no quarantine mark, which
+      #     is the whole point of that path (a browser download would).
+      - name: Install the disk image with install-mac.sh
+        if: runner.os == 'macOS'
+        env:
+          WEBATEM_DMG: out/${{ matrix.asset }}
+          WEBATEM_DEST: ${{ runner.temp }}/Applications
+          WEBATEM_NO_OPEN: "1"
+        run: |
+          set -euo pipefail
+          mkdir -p "$WEBATEM_DEST"
+          sh build/desktop/install-mac.sh
+          app="$WEBATEM_DEST/WebATEM.app"
+          [ -x "$app/Contents/MacOS/webatem" ] || { echo "::error::install-mac.sh left no app in $WEBATEM_DEST"; exit 1; }
+          if xattr -p com.apple.quarantine "$app" >/dev/null 2>&1; then
+            echo "::error::the installed app is quarantined"; exit 1
+          fi
+          codesign --verify --deep --strict "$app" && echo "installed by script, unquarantined, signature intact"
 
       # 7b. Windows: install what we just built and run THAT. The earlier
       #     smoke test proves the frozen folder works; this proves the thing
@@ -329,4 +353,8 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: out/${{ matrix.asset }}
+          # install-mac.sh exists only in the arm64 job's out/; an unmatched
+          # glob is a warning, not a failure.
+          files: |
+            out/${{ matrix.asset }}
+            out/install-mac.sh*
