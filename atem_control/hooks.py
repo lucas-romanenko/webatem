@@ -152,11 +152,24 @@ class Hooks:
 
     # ---- uploads ----------------------------------------------------------
     def validate_still(self, ip, file_path, file_name):
-        """Check (and, if the host allows, resize in place) a still dropped
-        on a media-pool slot of ``ip``. Return (ok, error). Default: exactly
-        1920x1080, or a larger 16:9 image resized down to it."""
-        from atem_control.media_pool import views as media_pool_views
-        return media_pool_views.validate_and_resize_1080p(file_path, file_name)
+        """Check a still dropped on a media-pool slot of ``ip``. Return
+        (ok, error).
+
+        Default: is it an image? That is all, because the upload path already
+        fits any image to the switcher's own frame the way ATEM Software
+        Control does. ``uploader._prepare_frame`` reads the live video mode,
+        scales to fit preserving aspect, and centres the result on a
+        transparent canvas at that resolution. Refusing a picture for being
+        the wrong shape would be refusing one the next step handles.
+
+        A host with a policy of its own (a studio that wants stills to match
+        a recorded video mode, or to refuse an upscale) overrides this."""
+        from atem_control.uploader import _validate_image_fast
+        try:
+            _validate_image_fast(file_path)
+        except ValueError as e:
+            return False, f"{file_name}: {e}"
+        return True, None
 
     def upload_still(self, ip, slot, file_path, job_dir, user=None):
         """A validated 1920x1080 file dropped on media-pool slot ``slot`` of

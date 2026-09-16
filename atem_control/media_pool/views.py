@@ -19,7 +19,6 @@ import time
 
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
-from PIL import Image
 
 from atem_control import hooks
 from atem_control.hooks import access_required
@@ -28,66 +27,16 @@ from atem_control.storage import UPLOADS_DIR, ensure_dir
 
 logger = logging.getLogger(__name__)
 
+# Ceiling on a dropped still. A 1080p frame is a few MB and a 2160p one is
+# not much more, so this is invisible to real use and only ever stops a body
+# that was never going to be a picture.
+MAX_UPLOAD_BYTES = 64 * 1024 * 1024
+
 
 def _make_job_dir():
     timestamp = str(time.time())
     job_dir = ensure_dir(UPLOADS_DIR / timestamp)
     return timestamp, str(job_dir)
-
-
-def _is_16_9(width, height):
-    return abs((width / height) - (16 / 9)) < 0.01
-
-
-def validate_and_process_image(file_path, file_name):
-    """Returns ``(ok, needs_resize, (width, height), error)``. Accepts
-    exactly 1920x1080, or larger 16:9 (resized down by the caller)."""
-    try:
-        with Image.open(file_path) as image:
-            width, height = image.size
-            if width == 1920 and height == 1080:
-                return True, False, (width, height), None
-            if width < 1920 or height < 1080:
-                return False, False, (width, height), (
-                    f"Image {file_name} is too small ({width}x{height}) "
-                    f"and cannot be resized."
-                )
-            if not _is_16_9(width, height):
-                return False, False, (width, height), (
-                    f"Image {file_name} must be 16:9 aspect ratio. "
-                    f"Current ratio: {width / height:.3f}."
-                )
-            return True, True, (width, height), None
-    except Exception as e:
-        return False, False, (0, 0), f"Error processing image {file_name}: {e}"
-
-
-def validate_and_resize_1080p(file_path, file_name):
-    """The default ``hooks.validate_still``: 1920x1080 exactly, or a larger
-    16:9 image resized down to it, in place. Returns (ok, error)."""
-    ok, needs_resize, original_dims, err = validate_and_process_image(file_path, file_name)
-    if not ok:
-        return False, err
-    if needs_resize:
-        resized, resize_msg = resize_image_to_1920x1080(file_path)
-        if not resized:
-            return False, resize_msg
-        logger.info(f"Resized {file_name} from {original_dims[0]}x{original_dims[1]}")
-    return True, None
-
-
-def resize_image_to_1920x1080(file_path):
-    """Resize a validated oversized 16:9 image to exactly 1920x1080."""
-    try:
-        with Image.open(file_path) as image:
-            image.thumbnail((1920, 1080), Image.Resampling.LANCZOS)
-            if image.mode != 'RGB':
-                image = image.convert('RGB')
-            image.save(file_path, 'JPEG', quality=95, optimize=True)
-        return True, "Resized to 1920x1080"
-    except Exception as e:
-        logger.error(f"Resize failed: {e}")
-        return False, f"Resize failed: {e}"
 
 
 def start_in_process_upload(ip, slot, file_path, job_dir):
@@ -139,10 +88,38 @@ def media_pool_upload(request):
     if not (0 <= slot < 32):
         return JsonResponse({'success': False, 'error': 'Slot must be 0-31'}, status=400)
 
+    # Refuse an oversized body BEFORE request.FILES is touched, because
+    # touching it is what makes Django read the stream and spool anything over
+    # 2.5 MB to a temp file. This is not a rule about what you may drop on a
+    # slot: a still is a few MB and the switcher's own frame is the only shape
+    # that matters (see hooks.validate_still). It is here because this app has
+    # no login by design, so anyone who can reach the page can post a body,
+    # and without a ceiling that body can be any size at all.
+    declared = request.META.get('CONTENT_LENGTH') or 0
+    try:
+        declared = int(declared)
+    except (TypeError, ValueError):
+        declared = 0
+    if declared > MAX_UPLOAD_BYTES:
+        return JsonResponse(
+            {'success': False,
+             'error': f'Image too large ({declared // 1048576} MB). '
+                      f'The limit is {MAX_UPLOAD_BYTES // 1048576} MB.'},
+            status=413)
+
     if 'image' not in request.FILES:
         return JsonResponse({'success': False, 'error': 'No image provided'}, status=400)
 
     upload_file = request.FILES['image']
+    # A lying Content-Length gets this far. Django's temp copy already exists
+    # and it reaps that itself; refusing here stops the second, permanent copy
+    # into the job directory.
+    if upload_file.size > MAX_UPLOAD_BYTES:
+        return JsonResponse(
+            {'success': False,
+             'error': f'Image too large ({upload_file.size // 1048576} MB). '
+                      f'The limit is {MAX_UPLOAD_BYTES // 1048576} MB.'},
+            status=413)
     file_name = str(upload_file).replace(' ', '_')
 
     timestamp, job_dir = _make_job_dir()
