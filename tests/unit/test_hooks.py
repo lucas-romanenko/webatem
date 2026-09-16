@@ -216,6 +216,10 @@ def test_default_still_check_refuses_a_decompression_bomb(tmp_path):
     from PIL import Image
     from atem_control.hooks import Hooks
 
+    # Asserted deliberately: the obvious future "fix" when a bomb error
+    # escapes somewhere is to set MAX_IMAGE_PIXELS = None and make the
+    # symptom go away, which removes the only thing standing between a
+    # crafted header and a multi-gigabyte decode on the one ASGI worker.
     assert Image.MAX_IMAGE_PIXELS is not None, 'the bomb ceiling must not be disabled'
 
     bomb = tmp_path / 'bomb.png'
