@@ -156,6 +156,13 @@ warns you the first time. One-time, then it opens normally:
 
 - **macOS:** double-click, let it get blocked, then **System Settings →
   Privacy & Security → “Open Anyway”**. (On older macOS: right-click → Open.)
+  **Or skip that step entirely** by installing from Terminal, which puts
+  WebATEM in Applications and opens it with no warning (a browser marks
+  what it downloads for that check; this does not):
+
+  ```sh
+  curl -fsSL https://github.com/lucas-romanenko/webatem/releases/latest/download/install-mac.sh | sh
+  ```
 - **Windows:** **More info → Run anyway** on the SmartScreen prompt for the
   installer, once. (Windows warns about any unsigned program the first time.)
 
