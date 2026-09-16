@@ -365,6 +365,15 @@ wherever `DATA_DIR` points.
   with notices in
   [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
 
+**The downloads are a Combined Work under the LGPL.** The Windows, macOS and
+Linux builds bundle atemwire and pystray, both LGPL-3.0, rather than
+installing them alongside. Their full licence texts travel inside the bundle,
+and because every line of WebATEM is public and MIT, you can install a
+modified atemwire and rebuild: `pip install -e ".[desktop]"` then
+`pyinstaller build/desktop/webatem.spec`. The macOS and Windows builds are
+one-directory, so the library also sits replaceable in `_internal/`; the Linux
+download is a single file, so rebuilding is the route there.
+
 Security posture and how to report vulnerabilities: [SECURITY.md](SECURITY.md).
 
 Not affiliated with or endorsed by Blackmagic Design. ATEM and HyperDeck are
