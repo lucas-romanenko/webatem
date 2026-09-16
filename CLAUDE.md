@@ -115,6 +115,27 @@ through a new hook method with a working default, never a direct import.
 
 ## Surface rules paid for on real hardware
 
+- **`atem_control` stays the module name. Do not propose renaming it** (Lucas,
+  2026-09-15). It is a generic top-level import claimed in every project that
+  installs this package, and one thing answers to four names here: the package
+  is `webatem`, the module `atem_control`, the Django app label `webatem_atem`,
+  the setting `WEBATEM_HOOKS`. That was weighed and kept. The collision is
+  hypothetical, no consumer has hit it, and the churn is thirty imports here
+  plus thirty in the host for a name that works. An outside review raised it as
+  a now-or-never; the answer was never. If it ever does collide, the fix is the
+  same size then as now, plus a major version.
+
+- **The media pool takes any image, at any size.** No aspect ratio rule, no
+  minimum, no byte ceiling. `uploader._prepare_frame` reads the switcher's live
+  video mode and fits whatever arrives to that frame, which is what ATEM
+  Software Control does and what this app is for. The strict 1920x1080 and 16:9
+  default that lived here until 2026-09-15 was a host's policy left behind by
+  the extraction, and it refused pictures the next step handled. A 64 MB upload
+  cap lasted one commit: operators drop source images past 100 MB, and this app
+  already hands anyone who can reach it the power to cut program, so a disk is
+  not the interesting thing to protect. A host that wants a rule overrides
+  `validate_still`; AV Server does, sized from the switcher's recorded mode.
+
 - **Every page that POSTs sets the CSRF cookie** (`ensure_csrf_cookie` on
   `atem_connect` / `atem_control`, and on the launcher's two). Nothing else
   does: 0.5.0 removed the connect page's settings dialog and with it the last
