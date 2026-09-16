@@ -115,6 +115,22 @@ through a new hook method with a working default, never a direct import.
 
 ## Surface rules paid for on real hardware
 
+- **Never leave `protocol.loop()` unpumped while a session is open.** Event
+  dispatch and the switcher's keepalives happen only inside it. The upload
+  busy-wait pumps it and the macro apply spawns a thread to; frame prep did
+  neither, which was invisible while every image arrived at frame size and
+  prep was milliseconds. 1.3.0 stopped resizing on the way in, so prep became
+  seconds of Lanczos on a large source with the loop silent: the switcher
+  timed the session out mid-upload and the abandoned session took ATEM
+  Software Control down with it on the same switcher. Reported from a real
+  drag and drop, not from a test. Fixed in 1.3.1 by running prep on a worker
+  with a pump thread beside it, the same shape the macro apply already used.
+  Pinned by `test_frame_prep_pumps.py`, which MEASURES the pump count rather
+  than asserting a code shape: unpumped it is 0, pumped it is dozens.
+
+  The general rule: if you add anything slow between opening a session and
+  closing it, pump the loop across it or hand the work to a thread that does.
+
 - **`atem_control` stays the module name. Do not propose renaming it** (Lucas,
   2026-09-15). It is a generic top-level import claimed in every project that
   installs this package, and one thing answers to four names here: the package
