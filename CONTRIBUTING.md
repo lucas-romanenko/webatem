@@ -57,6 +57,6 @@ or it silently does not exist.
 ## Licensing
 
 WebATEM is MIT. By opening a pull request you agree your contribution is
-released under the same licence. The protocol library it installs, atemwire,
-is LGPL-3.0-only and lives in the other repository, which matters if your
-change belongs there instead.
+released under the same licence. The ATEM protocol library it installs,
+atemwire (part of the bmdwire distribution), is LGPL-3.0-only and lives in
+the other repository, which matters if your change belongs there instead.

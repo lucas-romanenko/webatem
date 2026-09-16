@@ -29,8 +29,8 @@ COPY --from=css /build/webatem.css /app/atem_control/static/vendor/webatem.css
 
 # Install the app as the `webatem` package (pyproject.toml is the one list
 # of dependencies; the test extras are for the CI run inside this image).
-# gcc is here for ONE reason: atemwire builds its mediaconvert C extension
-# from the sdist where no wheel matches. Purged after.
+# gcc is here for ONE reason: bmdwire builds atemwire's mediaconvert C
+# extension from the sdist where no wheel matches. Purged after.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends gcc libc6-dev \
     && pip install --no-cache-dir --upgrade pip \
