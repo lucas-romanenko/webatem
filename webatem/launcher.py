@@ -34,7 +34,11 @@ other devices on the LAN can reach it), WEBATEM_DATA_DIR (override the
 per-user data location), WEBATEM_NO_BROWSER=1 (don't auto-open a browser),
 WEBATEM_NO_TRAY=1 (foreground mode even on a desktop), WEBATEM_NO_WINDOW=1
 (tray only, no window). ``--autostart`` on the command line is what the
-login entry passes: no browser at boot, window hidden.
+login entry passes: no browser at boot, window hidden. ``--resume`` is what
+an update passes when it starts the new version: back on the saved
+interface, window shown. ``--update`` and ``--uninstall`` are the terminal
+commands (webatem/updates.py, webatem/uninstall.py) and run before anything
+else.
 """
 import errno
 import os
@@ -602,6 +606,14 @@ def _window_process(url: str, hidden: bool = False) -> None:
         def uninstall(self):
             tell('uninstall')
 
+        # Updates go the same way: the settings JSON shows the status to
+        # anyone, but only this window (or the tray) checks or installs.
+        def check_updates(self):
+            tell('check')
+
+        def update(self):
+            tell('update')
+
     # Companion's launcher window is its own panel: no title bar, no
     # minimise / close buttons — it is shown and hidden from the menu bar
     # (tray) and its own Hide button, and dragged by its body.
@@ -664,6 +676,8 @@ class _WindowChild:
         self._proc = None
         self._shown = False
         self.on_uninstall = None          # the tray sets it: quit, then remove (main)
+        self.on_check = None              # the tray sets these two to the updater's
+        self.on_update = None
 
     def _command(self, hidden: bool = False):
         url = self._s.launcher_url
@@ -703,6 +717,10 @@ class _WindowChild:
                     self._shown = True
                 elif word == 'uninstall' and self.on_uninstall:
                     self.on_uninstall()
+                elif word == 'check' and self.on_check:
+                    self.on_check()
+                elif word == 'update' and self.on_update:
+                    self.on_update()
         except Exception:  # noqa: BLE001
             pass
         if self._proc is proc:
@@ -813,9 +831,10 @@ def _mac_menu_bar_icon(icon) -> None:
         pass
 
 
-def _run_tray(supervisor, controller, window, uninstall_requested=None) -> None:
+def _run_tray(supervisor, controller, window, uninstall_requested=None, updater=None) -> None:
     """Menu bar / system tray icon; returns when the user quits (or asked
-    the window to uninstall: ``uninstall_requested`` is set, main removes)."""
+    the window to uninstall: ``uninstall_requested`` is set, main removes).
+    With an ``updater``, an "Update to x.y.z" item appears when one exists."""
     import pystray
     from pystray import Menu, MenuItem
 
@@ -843,12 +862,26 @@ def _run_tray(supervisor, controller, window, uninstall_requested=None) -> None:
             window.hide()
         _on_ui_thread(icon.stop)
 
+    def update_offered(item=None):
+        if updater is None:
+            return False
+        st = updater.status()
+        return st['state'] == 'available' and st['by'] == 'app'
+
+    def update_label(item=None):
+        return f'Update to {updater.status()["latest"]}' if updater is not None else ''
+
+    def install_update(icon, item=None):
+        updater.install(lambda: quit_app(icon))
+
     if window is not None:
-        # Companion's three: the window carries the settings.
+        # Companion's three: the window carries the settings. A fourth only
+        # while an update is waiting.
         menu = Menu(
             MenuItem(not_running, None, enabled=False, visible=lambda item: not supervisor.running),
             MenuItem('Show/Hide window', lambda icon, item: window.toggle(), default=True),
             MenuItem('Launch GUI', lambda icon, item: _open_browser(gui_url()), enabled=lambda item: supervisor.running),
+            MenuItem(update_label, install_update, visible=update_offered),
             Menu.SEPARATOR,
             MenuItem('Quit', quit_app),
         )
@@ -858,6 +891,7 @@ def _run_tray(supervisor, controller, window, uninstall_requested=None) -> None:
             MenuItem('Open in browser', lambda icon, item: _open_browser(gui_url()), default=True),
             MenuItem('Server settings…', lambda icon, item: _open_browser(local_url().replace('/atem/', '/launcher/'))),
             MenuItem('Start at login', toggle_autostart, checked=lambda item: autostart_enabled()),
+            MenuItem(update_label, install_update, visible=update_offered),
             Menu.SEPARATOR,
             MenuItem('Quit', quit_app),
         )
@@ -871,6 +905,11 @@ def _run_tray(supervisor, controller, window, uninstall_requested=None) -> None:
             uninstall_requested.set()
             quit_app(icon)
         window.on_uninstall = uninstall_and_quit
+    if updater is not None:
+        updater.on_change = icon.update_menu
+        if window is not None:
+            window.on_check = updater.check_now
+            window.on_update = lambda: install_update(icon)
 
     def after_start():
         # A real failure is worth a notification; "waiting for a choice" is
@@ -927,7 +966,13 @@ def main() -> None:
         # data folder it is about to remove.
         from webatem import uninstall
         sys.exit(uninstall.cli(argv))
+    if '--update' in argv:
+        from webatem import updates
+        sys.exit(updates.cli(argv))
     autostarted = '--autostart' in argv
+    # --resume: an update starting the app again. Back on the interface the
+    # user chose, window shown, as if it had never stopped.
+    resumed = '--resume' in argv
     data_dir = _data_dir()
     # A windowed build has no console: send output to a log in the data dir
     # so a failure is diagnosable instead of silent.
@@ -972,16 +1017,20 @@ def main() -> None:
             has_window = False
     # "Run at login" and "Start minimized" are standing instructions to come
     # up working; so is this being the login start itself.
-    resume = autostarted or bool(cfg.get('start_minimized')) or autostart_enabled()
+    resume = autostarted or resumed or bool(cfg.get('start_minimized')) or autostart_enabled()
     listen_host = _listen_host(cfg, has_window, resume)
     supervisor = _Supervisor(None, listen_host, port, launcher_socket=launcher_socket)
     if launcher_socket is not None:
         supervisor.launcher_port = launcher_socket.getsockname()[1]
     controller = _Controller(supervisor)
     srv.runtime.register(controller)
-    from webatem import uninstall
+    from webatem import uninstall, updates
     uninstall.write_pid()                   # so `webatem --uninstall` can stop this copy first
     uninstall_requested = threading.Event()
+    updates.clear_downloads()               # last time's update has been installed
+    updater = updates.Updater(enabled=lambda: srv.load()['check_updates'])
+    controller.update_status = updater.status
+    updater.start()
     window = _WindowChild(supervisor) if has_window else None
     if window is not None:
         window.start(hidden=bool(cfg.get('start_minimized')) or autostarted)
@@ -1019,7 +1068,7 @@ def main() -> None:
 
     try:
         if want_tray:
-            _run_tray(supervisor, controller, window, uninstall_requested)
+            _run_tray(supervisor, controller, window, uninstall_requested, updater)
         else:
             booter.join()
             while supervisor._thread is not None and supervisor._thread.is_alive():

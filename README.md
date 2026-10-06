@@ -349,11 +349,20 @@ libraries carry their own suites in [bmdwire](https://github.com/lucas-romanenko
 per-OS downloads are built by the **Desktop builds** workflow
 (`pyinstaller build/desktop/webatem.spec`).
 
-## Removing it
+## Updating and removing it
+
+**Updates are one click.** The launcher looks for a new version when it starts
+and twice a day, and the launcher window and the tray menu then offer
+**Update to x.y.z**. That downloads it, checks it against the checksum GitHub
+publishes, installs it over the old one and starts it again on the same
+interface. Untick **Check for updates automatically** to stop the checks
+(**Check now** still works). Offline, it finds nothing and says so quietly.
+From a terminal: `webatem --update`. With pipx it's `pipx upgrade webatem`;
+with Docker, `docker compose pull && docker compose up -d`.
 
 **Updating keeps everything**: your interface and port, the connection
-history, start at login. Install the new version over the old one; don't
-uninstall first.
+history, start at login. Installing a new download over the old one does the
+same; don't uninstall first.
 
 **Uninstalling removes everything** WebATEM put on the machine: the program,
 your settings and connection history, start at login, and on a Mac the
