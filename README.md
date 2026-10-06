@@ -351,18 +351,35 @@ per-OS downloads are built by the **Desktop builds** workflow
 
 ## Removing it
 
-**Windows:** Settings → Installed apps → WebATEM → Uninstall. That takes
-everything with it: the program, your interface and port, the connection
-history and the start-at-login entry. **Updating keeps all of that**: run the
-new installer over the old one, don't uninstall first.
+**Updating keeps everything**: your interface and port, the connection
+history, start at login. Install the new version over the old one; don't
+uninstall first.
 
-**macOS:** drag `WebATEM.app` to the Trash, then, to remove what it
-remembered, `~/Library/Application Support/WebATEM` and (if you used Run at
-login) `~/Library/LaunchAgents/com.webatem.app.plist`.
+**Uninstalling removes everything** WebATEM put on the machine: the program,
+your settings and connection history, start at login, and on a Mac the
+launcher window's own data.
 
-**Linux / pipx / Docker:** the data lives in `$XDG_DATA_HOME/WebATEM`
-(usually `~/.local/share/WebATEM`), the container's `webatem-data` volume, or
-wherever `DATA_DIR` points.
+- **Any desktop install:** the launcher window's **Uninstall…** button, bottom
+  right. It lists exactly what will go before anything does, then WebATEM
+  closes and removes itself. On Windows it hands over to Windows' own
+  uninstaller.
+- **Windows:** or Settings → Installed apps → WebATEM → Uninstall, even while
+  WebATEM is running in the notification area.
+- **macOS, app already in the Trash:** the Terminal installer cleans up what
+  the Trash left behind:
+  ```sh
+  curl -fsSL https://github.com/lucas-romanenko/webatem/releases/latest/download/install-mac.sh | sh -s -- --uninstall
+  ```
+- **From a terminal:** `webatem --uninstall` (it asks first; `--yes` skips
+  the question). That's the Linux binary itself, or on a Mac
+  `/Applications/WebATEM.app/Contents/MacOS/webatem --uninstall`.
+- **pipx:** `webatem --uninstall` removes your data and start at login, then
+  `pipx uninstall webatem` removes the program.
+- **Docker:** `docker compose down -v`. The `-v` removes the `webatem-data`
+  volume, which holds the settings, history and key.
+
+If you point `DATA_DIR` somewhere of your own, uninstalling removes only the
+files WebATEM writes there, never the rest of that folder.
 
 
 ## License
