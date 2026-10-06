@@ -14,6 +14,8 @@ zeroconf==0.147.2
 ifaddr==0.2.0
 pystray==0.19.5
 pywebview==6.2.1
+truststore==0.10.4
+certifi==2026.7.22
 bmdwire==1.1.0
 pytest==9.1.1
 pytest-django==4.12.0

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "webatem"
-version = "1.7.0"
+version = "1.7.1"
 description = "Browser-based control for Blackmagic ATEM switchers: run it, open the browser, your switchers are there"
 readme = "README.md"
 license = { text = "MIT" }
@@ -41,6 +41,11 @@ dependencies = [
 desktop = [
     "pystray>=0.19,<1",
     "pywebview>=6,<7",
+    # The update check's HTTPS: the OS's own trust store (truststore), then
+    # Mozilla's list (certifi). A frozen Python on macOS has no CA store of
+    # its own (1.7.0: CERTIFICATE_VERIFY_FAILED on its first check).
+    "truststore>=0.10,<1",
+    "certifi>=2024.7",
 ]
 test = [
     "pytest>=9,<10",
