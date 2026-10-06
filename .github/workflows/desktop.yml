@@ -151,6 +151,19 @@ jobs:
           done
           echo "the binary, its data and its autostart entry are gone"
 
+      # 6d. Linux: a one-click update, end to end. A local feed serves this
+      #     very build as "v99.0.0"; the running copy must be stopped, the
+      #     binary replaced, and the new one back serving by itself.
+      - name: Update in place
+        if: runner.os == 'Linux'
+        timeout-minutes: 8
+        run: |
+          t="$RUNNER_TEMP/update"
+          mkdir -p "$t/bin"
+          cp dist/webatem "$t/bin/webatem"
+          cp dist/webatem "$t/webatem-linux-x64"           # the asset, under the name the release gives it
+          bash build/desktop/check-update.sh "$t/bin/webatem" "$t/webatem-linux-x64" "$t/data" 8897
+
       # 7. Package per-OS: macOS -> a signed .app in a drag-to-Applications
       #    .dmg, notarized and stapled when the Apple credentials are set
       #    (below), ad-hoc signed otherwise; Windows -> an Inno Setup
@@ -303,6 +316,17 @@ jobs:
           fi
           codesign --verify --deep --strict "$app" && echo "installed by script, unquarantined, signature intact"
 
+      # 7a''. macOS: a one-click update, end to end, on the copy 7a installed:
+      #      the bundle's own install-mac.sh replaces it from a local feed
+      #      serving this very .dmg as "v99.0.0", and it comes back serving.
+      - name: Update in place
+        if: runner.os == 'macOS'
+        timeout-minutes: 8
+        run: >-
+          bash build/desktop/check-update.sh
+          "$RUNNER_TEMP/Applications/WebATEM.app/Contents/MacOS/webatem"
+          "out/${{ matrix.asset }}" "$RUNNER_TEMP/update-data" 8897
+
       # 7a'. macOS: uninstalling takes everything a Trash drag leaves behind.
       #      First the app's own uninstall (what its window's button runs),
       #      on the copy 7a installed; then reinstall and use the Terminal
@@ -380,6 +404,13 @@ jobs:
           echo "--- installed app output ---"
           cat smoke2/stdout.txt 2>/dev/null || true
           cat smoke2/webatem.log 2>/dev/null || true
+          # A one-click update, end to end: the new installer over the
+          # installed copy, from a local feed serving this very installer
+          # as "v99.0.0"; the updated app must start again by itself. It is
+          # left running for the uninstall below.
+          taskkill /F /IM webatem.exe >/dev/null 2>&1 || true
+          sleep 2
+          bash build/desktop/check-update.sh "$APP" "out/${{ matrix.asset }}" "$(cygpath -m "$PWD/smoke3")" 8897 || exit 1
           # Uninstalling must take the user's data with it, and must work
           # while WebATEM is still RUNNING, the way a user meets it (in the
           # notification area). Until 1.6.0 this step killed the app first,
@@ -388,7 +419,7 @@ jobs:
           # folder the app would have written, leave the app up, uninstall,
           # then prove the app, its folder and the data are all gone.
           mkdir -p "$LOCALAPPDATA/WebATEM" && echo '{"host": "127.0.0.1"}' > "$LOCALAPPDATA/WebATEM/server.json"
-          kill -0 "$APP_PID" 2>/dev/null || { echo "::error::the installed app was not running when the uninstall began"; exit 1; }
+          tasklist /FI "IMAGENAME eq webatem.exe" | grep -qi webatem.exe || { echo "::error::the installed app was not running when the uninstall began"; exit 1; }
           timeout 120 "$LOCALAPPDATA/Programs/WebATEM/unins000.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART || true
           sleep 5
           if tasklist /FI "IMAGENAME eq webatem.exe" | grep -qi webatem.exe; then

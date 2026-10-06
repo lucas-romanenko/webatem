@@ -21,6 +21,12 @@
   .lw-check { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text); cursor: pointer; }
   .lw-actions { margin-top: auto; display: flex; gap: 8px; padding-top: 16px; border-top: 1px solid var(--border); }
   .lw-legal { font-size: 12px; color: var(--text-faint); line-height: 1.5; margin: 0; }
+  /* Updates: one line under the switches, the action at its right. */
+  .lw-update { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 14px; color: var(--text-muted); min-height: 32px; }
+  .lw-update .new { color: var(--text); }
+  .lw-update .faint { color: var(--text-faint); font-size: 13px; }
+  .lw-update code { font-family: var(--font-mono); font-size: 13px; color: var(--text); }
+  .lw-update-actions { display: flex; align-items: center; gap: 6px; flex: none; }
   .lw-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   /* Uninstall: a panel over the form, saying exactly what goes (the real
      paths, machine data in mono) before anything does. */
@@ -63,6 +69,14 @@
     <div class="flex flex-wrap gap-x-6 gap-y-2">
       <label class="lw-check"><input id="lwMinimized" type="checkbox" class="checkbox checkbox-sm">Start minimized</label>
       <label class="lw-check" id="lwAutoRow"><input id="lwAutostart" type="checkbox" class="checkbox checkbox-sm">Run at login</label>
+      <label class="lw-check" id="lwCheckRow" hidden><input id="lwCheckUpdates" type="checkbox" class="checkbox checkbox-sm">Check for updates automatically</label>
+    </div>
+    <div class="lw-update" id="lwUpdate" hidden>
+      <span id="lwUpdateText"></span>
+      <span class="lw-update-actions">
+        <button id="lwUpdateGo" class="btn btn-sm" hidden>Update</button>
+        <button id="lwUpdateCheck" class="btn btn-ghost btn-xs" hidden>Check now</button>
+      </span>
     </div>
     <p class="text-xs hidden" id="lwNote" style="color: var(--text-faint)"></p>
     <p class="text-sm hidden" id="lwStatus"></p>
@@ -136,6 +150,37 @@
     else if (d.startup_note) say(d.startup_note, d.running === false ? 'text-base-content/70' : 'text-warning');
     else status.classList.add('hidden');
     el('lwQuit').hidden = !(native || d.quit_available);
+    // Updates exist only under the launcher (d.update is null elsewhere).
+    el('lwCheckRow').hidden = !d.update;
+    el('lwCheckUpdates').checked = d.check_updates !== false;
+    el('lwUpdate').hidden = !d.update;
+    if (d.update) renderUpdate(d.update);
+  }
+
+  // The update line. Checking and installing go through the native
+  // window's bridge; in a plain browser the tray menu has the Update item.
+  var busy = { checking: 1, downloading: 1, installing: 1 };
+  function renderUpdate(u) {
+    var t = el('lwUpdateText'), go = el('lwUpdateGo'), chk = el('lwUpdateCheck');
+    t.textContent = ''; t.className = '';
+    var add = function (text) { t.appendChild(document.createTextNode(text)); };
+    var code = function (text) { var c = document.createElement('code'); c.textContent = text; t.appendChild(c); };
+    go.hidden = true; go.disabled = false;
+    chk.hidden = !native || !!busy[u.state];
+    if (u.state === 'checking') add('Checking for updates\u2026');
+    else if (u.state === 'downloading') add('Downloading ' + u.latest + '\u2026' + (u.progress != null ? ' ' + u.progress + '%' : ''));
+    else if (u.state === 'installing') add('Installing ' + u.latest + '. WebATEM starts again by itself.');
+    else if (u.state === 'available') {
+      t.className = 'new';
+      add('WebATEM ' + u.latest + ' is available.');
+      if (u.by === 'app') { if (native) go.hidden = false; else add(' Update from the tray menu.'); }
+      else if (u.by === 'package') { add(' Run '); code(u.command); add('.'); }
+      else add(' There is no download for this machine yet.');
+      if (u.error) { t.className = 'text-warning'; add(' ' + u.error); }
+    }
+    else if (u.state === 'current') add('Up to date (' + u.current + ').');
+    else if (u.state === 'error') { t.className = 'faint'; add('Could not check for updates: ' + u.error + '.'); }
+    if (busy[u.state]) schedule(700);
   }
 
   function load() {
@@ -163,6 +208,22 @@
   el('lwPortApply').addEventListener('click', apply);
   portInp.addEventListener('keydown', function (e) { if (e.key === 'Enter') apply(); });
   minim.addEventListener('change', function () { if (current) post({ host: current.host, port: current.port, start_minimized: minim.checked }, function () {}); });
+  el('lwCheckUpdates').addEventListener('change', function () {
+    if (current) post({ host: current.host, port: current.port, check_updates: el('lwCheckUpdates').checked }, function () {});
+  });
+  el('lwUpdateCheck').addEventListener('click', function () {
+    if (!native) return;
+    window.pywebview.api.check_updates();
+    el('lwUpdateText').textContent = 'Checking for updates\u2026';
+    el('lwUpdateCheck').hidden = true;
+    schedule(500);
+  });
+  el('lwUpdateGo').addEventListener('click', function () {
+    if (!native) return;
+    el('lwUpdateGo').disabled = true;
+    window.pywebview.api.update();
+    schedule(400);
+  });
   auto.addEventListener('change', function () { if (current) post({ host: current.host, port: current.port, autostart: auto.checked }, function (d) { if (d.autostart_error) say('Run at login could not be changed: ' + d.autostart_error, 'text-warning'); }); });
 
   // The three window buttons work through the desktop launcher's bridge;
