@@ -109,15 +109,20 @@
                                             onclick="ATEMControl.connect('{{ atem.ip_address }}', true);"
                                             class="hover:bg-base-200"
                                          >
+                                            {% comment %} The top line is what the viewer chose on the
+                                               Connect page (Name / IP, recent_label.js); the other one
+                                               sits under it. No name: the address, once. {% endcomment %}
                                             <div class="flex flex-col">
+                                                {% if atem.equipment_name %}
                                                 <span class="font-medium">
-                                                    {% if atem.equipment_name %}
-                                                        {{ atem.equipment_name }}
-                                                    {% else %}
-                                                        {{ atem.ip_address }}
-                                                    {% endif %}
+                                                    <span class="recent-by-name">{{ atem.equipment_name }}</span><span class="recent-by-ip brand-data">{{ atem.ip_address }}</span>
                                                 </span>
-                                                <span class="text-xs text-base-content/60">{{ atem.ip_address }}</span>
+                                                <span class="text-xs text-base-content/60">
+                                                    <span class="recent-by-name brand-data">{{ atem.ip_address }}</span><span class="recent-by-ip">{{ atem.equipment_name }}</span>
+                                                </span>
+                                                {% else %}
+                                                <span class="font-medium brand-data">{{ atem.ip_address }}</span>
+                                                {% endif %}
                                             </div>
                                         </a>
                                     </li>
