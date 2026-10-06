@@ -322,3 +322,56 @@ def test_window_lines_reach_the_updater():
     child._proc = Proc()
     child._listen(child._proc)
     assert got == ['check', 'update']
+
+
+def test_https_trusts_the_systems_store_then_mozillas_never_nothing(monkeypatch):
+    """1.7.0's Mac app could not verify GitHub (a frozen Python has no CA
+    store): the OS's own store first, then certifi, verification always on."""
+    import ssl
+    import types
+    made = []
+
+    class Store(ssl.SSLContext):
+        pass
+    monkeypatch.setitem(sys.modules, 'truststore', types.SimpleNamespace(
+        SSLContext=lambda proto: made.append(proto) or Store(proto)))
+    ctx = updates._tls()
+    assert isinstance(ctx, Store) and made == [ssl.PROTOCOL_TLS_CLIENT]
+    assert ctx.verify_mode == ssl.CERT_REQUIRED and ctx.check_hostname
+
+    def refuses(proto):
+        raise OSError('no backend here')
+    monkeypatch.setitem(sys.modules, 'truststore', types.SimpleNamespace(SSLContext=refuses))
+    cafiles = []
+    real = ssl.create_default_context
+    monkeypatch.setattr(ssl, 'create_default_context', lambda cafile=None: cafiles.append(cafile) or real())
+    monkeypatch.setitem(sys.modules, 'certifi', types.SimpleNamespace(where=lambda: '/bundle/cacert.pem'))
+    ctx = updates._tls()
+    assert cafiles == ['/bundle/cacert.pem'] and ctx.verify_mode == ssl.CERT_REQUIRED
+
+
+def test_the_check_and_the_download_both_use_it(monkeypatch):
+    seen = []
+
+    class Answer:
+        headers = {}
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self, n=-1): return b''
+    monkeypatch.setattr(updates, '_tls', lambda: 'the context')
+    monkeypatch.setattr(updates.urllib.request, 'urlopen',
+                        lambda req, timeout, context=None: seen.append(context) or Answer())
+    monkeypatch.setattr(updates.json, 'load', lambda r: {'tag_name': 'v1.0.0', 'assets': []})
+    updates.check()
+    assert seen == ['the context']
+
+
+def test_an_http_answer_from_github_is_not_a_tls_failure(home, monkeypatch, capsys):
+    import urllib.error
+
+    def limited():
+        raise urllib.error.HTTPError('u', 403, 'rate limit exceeded', {}, None)
+    monkeypatch.setattr(updates, 'check', limited)
+    assert updates.cli(['--update']) == 3 and 'HTTP 403' in capsys.readouterr().out
+    monkeypatch.setattr(updates, 'check', lambda: (_ for _ in ()).throw(OSError('CERTIFICATE_VERIFY_FAILED')))
+    assert updates.cli(['--update']) == 1

@@ -106,6 +106,31 @@ def how() -> dict:
     return {'by': 'package', 'command': 'pipx upgrade webatem' if pipx else 'pip install --upgrade webatem'}
 
 
+def _tls():
+    """The HTTPS context for GitHub. A frozen Python on macOS has no CA store
+    of its own (a python.org build looks for one beside its framework, which
+    is not in the app): 1.7.0's first check on a Mac said
+    CERTIFICATE_VERIFY_FAILED. So: the operating system's own trust store
+    first (truststore: the Keychain, Windows' store, the distro's bundle),
+    which also trusts a studio's own CA where IT runs one; then Mozilla's list
+    (certifi); then whatever this Python has. Verification is never off."""
+    import ssl
+    try:
+        import truststore
+        return truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    except Exception:  # noqa: BLE001 — not installed, or this OS's backend refused
+        pass
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:  # noqa: BLE001
+        return ssl.create_default_context()
+
+
+def _open(url, timeout):
+    return urllib.request.urlopen(_request(url), timeout=timeout, context=_tls())
+
+
 def _request(url):
     return urllib.request.Request(url, headers={'Accept': 'application/vnd.github+json',
                                                 'User-Agent': f'WebATEM/{current_version()}'})
@@ -113,7 +138,7 @@ def _request(url):
 
 def check(timeout: float = 10) -> dict:
     """Ask the feed. Raises on no answer (the caller says it quietly)."""
-    with urllib.request.urlopen(_request(feed_url()), timeout=timeout) as r:
+    with _open(feed_url(), timeout) as r:
         release = json.load(r)
     latest = str(release.get('tag_name') or '').lstrip('vV')
     name = asset_name()
@@ -145,7 +170,7 @@ def download(asset: dict, progress=None) -> Path:
     part = dest.with_name(dest.name + '.part')
     h = hashlib.sha256()
     done = 0
-    with urllib.request.urlopen(_request(asset['url']), timeout=30) as r, open(part, 'wb') as f:
+    with _open(asset['url'], 30) as r, open(part, 'wb') as f:
         total = int(r.headers.get('Content-Length') or asset.get('size') or 0)
         while True:
             chunk = r.read(1 << 16)
@@ -362,10 +387,18 @@ def _reason(e) -> str:
 def cli(argv) -> int:
     """``webatem --update [--yes]``: check, say, install. A copy that was
     running is stopped first and started again afterwards; one that was not
-    running is not started."""
+    running is not started. Exit: 0 up to date or installing, 1 could not
+    check (no network, TLS) or install, 2 an update waits for --yes or a
+    terminal, 3 GitHub answered with an HTTP error (HTTPS itself works)."""
     from webatem import uninstall
+    import urllib.error
     try:
         result = check()
+    except urllib.error.HTTPError as e:
+        # GitHub answered, so HTTPS itself works (a rate limit, say). Its own
+        # exit code: the build workflow tells this from a TLS failure (1).
+        print(f'Could not check for updates: GitHub answered HTTP {e.code} ({e.reason}).')
+        return 3
     except Exception as e:  # noqa: BLE001
         print(f'Could not check for updates: {_reason(e)}')
         return 1
