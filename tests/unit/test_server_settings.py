@@ -27,11 +27,11 @@ def data_dir(tmp_path, monkeypatch):
 
 
 def test_load_precedence_env_over_file_over_defaults(data_dir, monkeypatch):
-    assert srv.load() == {'host': '0.0.0.0', 'port': 8880, 'source': 'default', 'start_minimized': False}
+    assert srv.load() == {'host': '0.0.0.0', 'port': 8880, 'source': 'default', 'start_minimized': False, 'check_updates': True}
     srv.save('127.0.0.1', 9000)
-    assert srv.load() == {'host': '127.0.0.1', 'port': 9000, 'source': 'file', 'start_minimized': False}
+    assert srv.load() == {'host': '127.0.0.1', 'port': 9000, 'source': 'file', 'start_minimized': False, 'check_updates': True}
     monkeypatch.setenv('PORT', '9100')
-    assert srv.load() == {'host': '127.0.0.1', 'port': 9100, 'source': 'env', 'start_minimized': False}
+    assert srv.load() == {'host': '127.0.0.1', 'port': 9100, 'source': 'env', 'start_minimized': False, 'check_updates': True}
 
 
 def test_validate_rejects_bad_ports_and_unknown_hosts(data_dir):
@@ -181,7 +181,7 @@ def test_start_minimized_is_kept_beside_the_address(data_dir):
     srv.save('0.0.0.0', 8880, start_minimized=True)
     assert srv.load()['start_minimized'] is True
     srv.save('0.0.0.0', 8001)                      # an address change leaves the flag alone
-    assert srv.load() == {'host': '0.0.0.0', 'port': 8001, 'source': 'file', 'start_minimized': True}
+    assert srv.load() == {'host': '0.0.0.0', 'port': 8001, 'source': 'file', 'start_minimized': True, 'check_updates': True}
 
 
 def test_post_start_minimized(client, data_dir):

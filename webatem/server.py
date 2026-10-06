@@ -62,14 +62,18 @@ def load() -> dict:
             except ValueError:
                 pass
     return {'host': host, 'port': port, 'source': source,
-            'start_minimized': bool(saved.get('start_minimized', False))}
+            'start_minimized': bool(saved.get('start_minimized', False)),
+            # On unless turned off (Lucas, 2026-10-06): offline it finds nothing.
+            'check_updates': bool(saved.get('check_updates', True))}
 
 
-def save(host: str, port: int, start_minimized=None) -> None:
+def save(host: str, port: int, start_minimized=None, check_updates=None) -> None:
     saved = _saved()
     saved.update({'host': host, 'port': int(port)})
     if start_minimized is not None:
         saved['start_minimized'] = bool(start_minimized)
+    if check_updates is not None:
+        saved['check_updates'] = bool(check_updates)
     path = config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(saved, indent=1) + '\n')
@@ -181,6 +185,13 @@ class _Runtime:
     def set_autostart(self, enabled: bool) -> None:
         self.controller.set_autostart(bool(enabled))
 
+    def update_status(self):
+        """The launcher's update state (webatem.updates), or None outside it.
+        Status only: checking and installing are the window's bridge and the
+        tray, never this JSON, which answers the whole network."""
+        status = getattr(self.controller, 'update_status', None)
+        return status() if callable(status) else None
+
 
 runtime = _Runtime()
 
@@ -196,6 +207,8 @@ def describe() -> dict:
         'port': port,
         'source': cfg['source'],
         'start_minimized': cfg['start_minimized'],
+        'check_updates': cfg['check_updates'],
+        'update': runtime.update_status(),
         'url': f'http://{reach}:{port}/atem/' if chosen else None,        # what other devices open
         'local_url': f'http://127.0.0.1:{port}/atem/' if chosen else None,
         'interfaces': interfaces(),
