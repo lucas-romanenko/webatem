@@ -440,6 +440,24 @@ select option:disabled { color: oklch(var(--bc) / 0.4); }
     border-color: color-mix(in srgb, var(--pgm-red) 30%, transparent);
 }
 
+/* ---- Recent connections: by name or by IP ---------------------------
+   The viewer's choice, made with the Name / IP switch on the Connect page
+   and kept in this browser (js/recent_label.js puts it on <html> before
+   the list paints). A named entry carries both labels and shows one; an
+   entry with no saved name has only its address either way. No attribute
+   (the script missing, a host's own base.html) reads by name. */
+html[data-recent-label="ip"] .recent-by-name,
+html:not([data-recent-label="ip"]) .recent-by-ip { display: none; }
+.recent-label-switch { display: inline-flex; gap: 2px; }
+/* The chosen half is raised grey with the strong border, as any primary
+   action here; the other stays ghost. No fill: the brand has no accent. */
+.recent-label-switch .btn[aria-pressed="true"],
+.recent-label-switch .btn[aria-pressed="true"]:hover {
+    background-color: var(--surface-raised);
+    border-color: var(--border-strong);
+    color: var(--text);
+}
+
 /* `hidden` means hidden, and stays last in the last sheet. The attribute is
  * only a UA display:none, so ANY author rule that sets display beats it:
  * DaisyUI's .btn (inline-flex), .card (flex), .input, and Tailwind's own

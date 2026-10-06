@@ -6,6 +6,7 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{% static_v 'css/atem_connect.css' %}">
+<script src="{% static_v 'js/recent_label.js' %}"></script>
 {% endblock %}
 
 {% block content %}
@@ -43,16 +44,22 @@
                 {% if recent_atems %}
                 <!-- Recent ATEMs -->
                 <div class="form-control">
-                    <label class="label">
+                    {% comment %} A div, not a label: a label hands a click on its
+                       text to the first button inside it. {% endcomment %}
+                    <div class="label">
                         <span class="label-text text-sm text-base-content/70">Recent Connections</span>
-                    </label>
+                        <span class="recent-label-switch" role="group" aria-label="Show recent connections by">
+                            <button type="button" class="btn btn-xs btn-ghost" data-recent-label-set="name" aria-pressed="true">Name</button>
+                            <button type="button" class="btn btn-xs btn-ghost" data-recent-label-set="ip" aria-pressed="false">IP</button>
+                        </span>
+                    </div>
                     <div class="flex flex-wrap gap-2">
                         {% for atem in recent_atems %}
                         <button type="button" class="btn btn-sm btn-outline btn-primary"
                             onclick="setIP('{{ atem.ip_address }}')"
                             title="{% if atem.equipment_name %}{{ atem.equipment_name }} - {% endif %}{{ atem.ip_address }}">
                             {% if atem.equipment_name %}
-                            {{ atem.equipment_name }}
+                            <span class="recent-by-name">{{ atem.equipment_name }}</span><span class="recent-by-ip">{{ atem.ip_address }}</span>
                             {% else %}
                             {{ atem.ip_address }}
                             {% endif %}
