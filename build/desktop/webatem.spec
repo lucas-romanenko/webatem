@@ -90,7 +90,10 @@ for pkg in ('atem_control', 'webatem'):
 # Third-party packages that lean on dynamic imports / ship data. atemwire and
 # hyperdeckwire are the Blackmagic device libraries (PyPI); collect_all takes
 # atemwire's compiled mediaconvert extension along with the modules.
-for pkg in ('django', 'channels', 'whitenoise', 'uvicorn', 'zeroconf', 'PIL', 'atemwire', 'hyperdeckwire', 'pystray', 'webview', 'bottle', 'proxy_tools'):
+# truststore and certifi: the update check's HTTPS (webatem/updates.py,
+# _tls); certifi's CA bundle is a data file.
+for pkg in ('django', 'channels', 'whitenoise', 'uvicorn', 'zeroconf', 'PIL', 'atemwire', 'hyperdeckwire', 'pystray', 'webview', 'bottle', 'proxy_tools',
+            'truststore', 'certifi'):
     d, b, h = collect_all(pkg)
     datas += d
     binaries += b
