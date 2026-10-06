@@ -35,7 +35,8 @@ def server_settings(request):
             result['autostart'] = srv.runtime.autostart_enabled()
         except Exception as e:  # noqa: BLE001 — a login-entry failure is reported, not fatal
             result['autostart_error'] = str(e)
-    srv.save(host, port, body.get('start_minimized') if 'start_minimized' in body else None)
+    srv.save(host, port, body.get('start_minimized') if 'start_minimized' in body else None,
+             body.get('check_updates') if 'check_updates' in body else None)
 
     changed = (host, port) != before
     if changed and srv.runtime.restart_available():

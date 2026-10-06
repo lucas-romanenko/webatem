@@ -112,6 +112,11 @@ if IS_MAC:
         except Exception:
             pass
 
+# The macOS app carries its own Terminal installer: a one-click update runs
+# it on the downloaded .dmg (webatem/updates.py), the path CI already proves.
+if IS_MAC:
+    datas += [(rel('build', 'desktop', 'install-mac.sh'), 'desktop')]
+
 # The launcher window on Windows is WebView2 through pythonnet.
 if IS_WIN:
     hiddenimports += ['clr', 'clr_loader', 'webview.platforms.edgechromium', 'webview.platforms.winforms']

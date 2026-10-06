@@ -92,6 +92,11 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Start {#MyAppName}"; Flags: nowait postinstall skipifsilent
+; A one-click update runs this installer silently (webatem/updates.py) with
+; /relaunch=1: start WebATEM again, on the interface it was serving
+; (--resume). The entry above is the checkbox on an interactive install,
+; which a silent run skips.
+Filename: "{app}\{#MyAppExeName}"; Parameters: "--resume"; Flags: nowait; Check: RelaunchAfterUpdate
 
 [Registry]
 ; Start at login is written by the app itself (HKCU Run), so nothing else
@@ -107,6 +112,11 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: 
 Type: filesandordirs; Name: "{localappdata}\{#MyAppName}"
 
 [Code]
+function RelaunchAfterUpdate(): Boolean;
+begin
+  Result := ExpandConstant('{param:relaunch|0}') = '1';
+end;
+
 // Uninstalling while WebATEM runs in the notification area: Windows keeps a
 // running program's files in use, so the uninstaller could not remove the
 // folder and waited on it (CI only ever uninstalled a closed app). End it
