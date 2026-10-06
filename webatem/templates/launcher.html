@@ -113,7 +113,7 @@
   var hostSel = el('lwHost'), portInp = el('lwPort'), state = el('lwState'), addr = el('lwAddr'), dot = el('lwDot');
   var minim = el('lwMinimized'), auto = el('lwAutostart'), autoRow = el('lwAutoRow');
   var note = el('lwNote'), status = el('lwStatus');
-  var current = null, native = false, pollTimer = null;
+  var current = null, native = false, pollTimer = null, lastIfaces = '';
   function schedule(ms) { clearTimeout(pollTimer); pollTimer = setTimeout(load, ms); }
 
   function csrf() { var m = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/); return m ? m[1] : ''; }
@@ -127,18 +127,27 @@
     else { state.textContent = 'Running'; addr.textContent = d.url; }
     dot.classList.toggle('on', !d.restarting && d.running !== false);
     el('lwLaunch').disabled = !!d.restarting || d.running === false;
-    hostSel.innerHTML = '';
-    var ph = opt('', 'Change network interface…'); ph.disabled = true; hostSel.appendChild(ph);
-    hostSel.appendChild(opt('0.0.0.0', 'All interfaces'));
-    (d.interfaces || []).forEach(function (e) {
-      hostSel.appendChild(opt(e.ip, e.ip === '127.0.0.1' ? 'localhost: 127.0.0.1' : e.name + ': ' + e.ip));
-    });
-    // Nothing chosen yet, or the saved interface is not one of this
-    // machine's today: the placeholder, like Companion — and no server until
-    // the user picks one (the note below says so).
-    var known = d.host === '0.0.0.0' || (d.interfaces || []).some(function (e) { return e.ip === d.host; });
-    hostSel.value = (d.source === 'default' || !d.host || !known) ? '' : d.host;
-    portInp.value = d.port;
+    // The page lives as long as the launcher and is re-read every few
+    // seconds (below), so the interface list follows the machine: a VPN
+    // connected after launch appears (Lucas, 2026-10-06, a VPN missing from
+    // a list read at start). Rebuilt only when it changed, and never while
+    // the user is choosing from it.
+    var sig = JSON.stringify([d.interfaces || [], d.host, d.source]);
+    if (sig !== lastIfaces && document.activeElement !== hostSel) {
+      lastIfaces = sig;
+      hostSel.innerHTML = '';
+      var ph = opt('', 'Change network interface…'); ph.disabled = true; hostSel.appendChild(ph);
+      hostSel.appendChild(opt('0.0.0.0', 'All interfaces'));
+      (d.interfaces || []).forEach(function (e) {
+        hostSel.appendChild(opt(e.ip, e.ip === '127.0.0.1' ? 'localhost: 127.0.0.1' : e.name + ': ' + e.ip));
+      });
+      // Nothing chosen yet, or the saved interface is not one of this
+      // machine's today: the placeholder, like Companion — and no server
+      // until the user picks one (the note below says so).
+      var known = d.host === '0.0.0.0' || (d.interfaces || []).some(function (e) { return e.ip === d.host; });
+      hostSel.value = (d.source === 'default' || !d.host || !known) ? '' : d.host;
+    }
+    if (document.activeElement !== portInp) portInp.value = d.port;
     minim.checked = !!d.start_minimized;
     autoRow.hidden = !(d.autostart && d.autostart.available);
     auto.checked = !!(d.autostart && d.autostart.enabled);
@@ -288,6 +297,10 @@
   }
   window.addEventListener('pywebviewready', nativeReady);
   if (window.pywebview && window.pywebview.api) nativeReady();
+  // Show re-reads at once (the launcher calls this); otherwise every few
+  // seconds, which is a list of addresses and a status, nothing heavier.
+  window.webatemRefresh = load;
+  setInterval(load, 4000);
   load();
 })();
 </script>
