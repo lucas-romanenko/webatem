@@ -131,6 +131,26 @@ jobs:
           [ -n "$ok" ] || { echo "::error::the frozen build never served /atem/"; exit 1; }
           echo "the frozen build serves /atem/"
 
+      # 6c. Linux: the binary's own uninstall takes the binary, its data and
+      #     its autostart entry. On a COPY (the original is the release
+      #     asset), with throwaway XDG folders planted as a used install
+      #     leaves them.
+      - name: Uninstall from a terminal
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          t="$RUNNER_TEMP/uninstall"
+          mkdir -p "$t/bin" "$t/share/WebATEM/staticfiles" "$t/config/autostart"
+          cp dist/webatem "$t/bin/webatem"
+          echo '{"host": "127.0.0.1"}' > "$t/share/WebATEM/server.json"
+          echo x > "$t/share/WebATEM/db.sqlite3"
+          printf '[Desktop Entry]\nType=Application\nName=WebATEM\n' > "$t/config/autostart/webatem.desktop"
+          XDG_DATA_HOME="$t/share" XDG_CONFIG_HOME="$t/config" "$t/bin/webatem" --uninstall --yes
+          for left in "$t/bin/webatem" "$t/share/WebATEM" "$t/config/autostart/webatem.desktop"; do
+            [ ! -e "$left" ] || { echo "::error::--uninstall left $left behind"; exit 1; }
+          done
+          echo "the binary, its data and its autostart entry are gone"
+
       # 7. Package per-OS: macOS -> a signed .app in a drag-to-Applications
       #    .dmg, notarized and stapled when the Apple credentials are set
       #    (below), ad-hoc signed otherwise; Windows -> an Inno Setup
@@ -283,6 +303,41 @@ jobs:
           fi
           codesign --verify --deep --strict "$app" && echo "installed by script, unquarantined, signature intact"
 
+      # 7a'. macOS: uninstalling takes everything a Trash drag leaves behind.
+      #      First the app's own uninstall (what its window's button runs),
+      #      on the copy 7a installed; then reinstall and use the Terminal
+      #      script's --uninstall, the path for an app already in the Trash.
+      #      A throwaway HOME, planted with what a used install has there.
+      - name: Uninstall, the app's way and the Terminal way
+        if: runner.os == 'macOS'
+        env:
+          WEBATEM_DEST: ${{ runner.temp }}/Applications
+          WEBATEM_NO_OPEN: "1"
+        run: |
+          set -euo pipefail
+          H="$RUNNER_TEMP/home"
+          plant() {
+            mkdir -p "$H/Library/Application Support/WebATEM/staticfiles" "$H/Library/LaunchAgents" "$H/Library/WebKit/com.webatem.app"
+            echo '{"host": "127.0.0.1"}' > "$H/Library/Application Support/WebATEM/server.json"
+            echo x > "$H/Library/Application Support/WebATEM/db.sqlite3"
+            echo x > "$H/Library/LaunchAgents/com.webatem.app.plist"
+            echo x > "$H/Library/WebKit/com.webatem.app/data"
+          }
+          gone() {
+            for left in "$WEBATEM_DEST/WebATEM.app" "$H/Library/Application Support/WebATEM" \
+                        "$H/Library/LaunchAgents/com.webatem.app.plist" "$H/Library/WebKit/com.webatem.app"; do
+              [ ! -e "$left" ] || { echo "::error::$1 left $left behind"; exit 1; }
+            done
+            echo "$1: the app, its data, its login item and its WebKit data are gone"
+          }
+          plant
+          HOME="$H" "$WEBATEM_DEST/WebATEM.app/Contents/MacOS/webatem" --uninstall --yes
+          gone "webatem --uninstall"
+          WEBATEM_DMG="out/${{ matrix.asset }}" sh build/desktop/install-mac.sh
+          plant
+          HOME="$H" sh build/desktop/install-mac.sh --uninstall
+          gone "install-mac.sh --uninstall"
+
       # 7b. Windows: install what we just built and run THAT. The earlier
       #     smoke test proves the frozen folder works; this proves the thing
       #     the user actually receives does — silent per-user install, launch
@@ -325,20 +380,27 @@ jobs:
           echo "--- installed app output ---"
           cat smoke2/stdout.txt 2>/dev/null || true
           cat smoke2/webatem.log 2>/dev/null || true
-          # taskkill, not kill: a bash signal does not reliably end a native
-          # Windows process, and the uninstaller then waits on it.
-          # single slashes here too, for the same reason
-          taskkill /F /IM webatem.exe /T >/dev/null 2>&1 || true
-          sleep 2
-          # Uninstalling must take the user's data with it. Plant the data
-          # folder the app would have written, then prove it is gone.
+          # Uninstalling must take the user's data with it, and must work
+          # while WebATEM is still RUNNING, the way a user meets it (in the
+          # notification area). Until 1.6.0 this step killed the app first,
+          # because the uninstaller otherwise waited on its files forever;
+          # webatem.iss now ends it after the user confirms. Plant the data
+          # folder the app would have written, leave the app up, uninstall,
+          # then prove the app, its folder and the data are all gone.
           mkdir -p "$LOCALAPPDATA/WebATEM" && echo '{"host": "127.0.0.1"}' > "$LOCALAPPDATA/WebATEM/server.json"
+          kill -0 "$APP_PID" 2>/dev/null || { echo "::error::the installed app was not running when the uninstall began"; exit 1; }
           timeout 120 "$LOCALAPPDATA/Programs/WebATEM/unins000.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART || true
           sleep 5
+          if tasklist /FI "IMAGENAME eq webatem.exe" | grep -qi webatem.exe; then
+            echo "::error::the uninstaller left webatem.exe running"; tasklist /FI "IMAGENAME eq webatem.exe"; exit 1
+          fi
+          if [ -e "$LOCALAPPDATA/Programs/WebATEM/webatem.exe" ]; then
+            echo "::error::uninstalling a running WebATEM left the program behind"; ls -la "$LOCALAPPDATA/Programs/WebATEM"; exit 1
+          fi
           if [ -e "$LOCALAPPDATA/WebATEM" ]; then
             echo "::error::uninstalling left the data folder behind"; ls -la "$LOCALAPPDATA/WebATEM"; exit 1
           fi
-          echo "uninstall took the data folder with it"
+          echo "uninstalling the running app ended it and took the program and the data folder with it"
           [ -n "$ok" ] || { echo "::error::the INSTALLED app never served /atem/"; exit 1; }
           echo "installed, ran, served $(wc -c < smoke2/page.html) bytes of the connect page"
 

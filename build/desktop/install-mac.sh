@@ -12,13 +12,50 @@
 # The builds are ad-hoc signed and not notarized, which is a paid Apple
 # Developer membership WebATEM does not have.
 #
+# Uninstall, the same way:
+#
+#   curl -fsSL https://github.com/lucas-romanenko/webatem/releases/latest/download/install-mac.sh | sh -s -- --uninstall
+#
+# For when the app is already in the Trash (its own Uninstall button is the
+# usual way): removes WebATEM.app, the settings and connection history, the
+# login item and the launcher window's WebKit data. macOS has no uninstall
+# step, so a Trash drag leaves those behind, and the login item would try to
+# start a program that is gone at every login.
+#
 # For the build workflow's own test: WEBATEM_DMG=<path> installs a local
-# disk image instead of downloading, WEBATEM_DEST=<dir> installs somewhere
-# other than /Applications, WEBATEM_NO_OPEN=1 does not launch it.
+# disk image instead of downloading, WEBATEM_DEST=<dir> installs (and
+# uninstalls) somewhere other than /Applications, WEBATEM_NO_OPEN=1 does not
+# launch it.
 set -eu
 
 repo="lucas-romanenko/webatem"
+bundle_id="com.webatem.app"
 case "$(uname -s)" in Darwin) ;; *) echo "This installer is for macOS. Downloads for other systems: https://github.com/$repo/releases/latest" >&2; exit 1 ;; esac
+
+if [ "${1:-}" = "--uninstall" ]; then
+  # A running copy holds its files open; end it the way the installer does.
+  pkill -x webatem 2>/dev/null && sleep 1 || true
+  removed=0
+  for app in ${WEBATEM_DEST:+"$WEBATEM_DEST/WebATEM.app"} /Applications/WebATEM.app "$HOME/Applications/WebATEM.app"; do
+    [ -d "$app" ] || continue
+    # Only our own bundle, never a folder that happens to have the name.
+    [ "$(defaults read "$app/Contents/Info" CFBundleIdentifier 2>/dev/null || true)" = "$bundle_id" ] || continue
+    rm -rf "$app" && echo "Removed $app" && removed=1
+  done
+  for left in \
+    "$HOME/Library/Application Support/WebATEM" \
+    "$HOME/Library/LaunchAgents/$bundle_id.plist" \
+    "$HOME/Library/WebKit/$bundle_id" \
+    "$HOME/Library/Caches/$bundle_id" \
+    "$HOME/Library/HTTPStorages/$bundle_id" \
+    "$HOME/Library/HTTPStorages/$bundle_id.binarycookies" \
+    "$HOME/Library/Saved Application State/$bundle_id.savedState" \
+    "$HOME/Library/Preferences/$bundle_id.plist"; do
+    if [ -e "$left" ]; then rm -rf "$left" && echo "Removed $left" && removed=1; fi
+  done
+  [ "$removed" = 1 ] && echo "WebATEM is uninstalled." || echo "Nothing of WebATEM was left on this Mac."
+  exit 0
+fi
 case "$(uname -m)" in
   arm64)  asset="webatem-macos-arm64.dmg" ;;
   x86_64) asset="webatem-macos-intel.dmg" ;;

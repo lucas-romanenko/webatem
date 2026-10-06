@@ -105,3 +105,22 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: 
 ; UPDATING does not come through here — Inno installs over the existing
 ; copy and never runs the uninstaller — so an upgrade keeps everything.
 Type: filesandordirs; Name: "{localappdata}\{#MyAppName}"
+
+[Code]
+// Uninstalling while WebATEM runs in the notification area: Windows keeps a
+// running program's files in use, so the uninstaller could not remove the
+// folder and waited on it (CI only ever uninstalled a closed app). End it
+// first, after the user has confirmed (usUninstall, not
+// InitializeUninstall, so Cancel at "Are you sure?" leaves it running), and
+// without /T: the uninstaller may itself have been started by webatem.exe
+// (the window's Uninstall button), and a tree kill would take it too.
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  ResultCode: Integer;
+begin
+  if CurUninstallStep = usUninstall then
+  begin
+    Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM {#MyAppExeName}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Sleep(500);
+  end;
+end;
