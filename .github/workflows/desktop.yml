@@ -131,6 +131,30 @@ jobs:
           [ -n "$ok" ] || { echo "::error::the frozen build never served /atem/"; exit 1; }
           echo "the frozen build serves /atem/"
 
+      # 6b'. The frozen build reaches GitHub over HTTPS, as a user's would.
+      #      1.7.0's Mac app could not (CERTIFICATE_VERIFY_FAILED: a frozen
+      #      Python has no CA store of its own), and every update check here
+      #      used a local http:// feed, so nothing saw it. Exit 0 or 2 is a
+      #      real answer from api.github.com; 3 is GitHub answering with an
+      #      HTTP error (a rate limit), which still proves TLS; 1 fails.
+      - name: The frozen build checks GitHub over HTTPS
+        timeout-minutes: 3
+        run: |
+          set +e
+          case "$RUNNER_OS" in
+            Windows) APP="dist/WebATEM/webatem.exe" ;;
+            macOS)   APP="dist/WebATEM.app/Contents/MacOS/webatem" ;;
+            *)       APP="dist/webatem" ;;
+          esac
+          "$APP" --update < /dev/null > tls-check.txt 2>&1
+          code=$?
+          cat tls-check.txt
+          case $code in
+            0|2) echo "the frozen build reached GitHub over HTTPS" ;;
+            3)   echo "::warning::GitHub answered with an HTTP error; TLS itself worked" ;;
+            *)   echo "::error::the frozen build could not check GitHub over HTTPS (exit $code)"; exit 1 ;;
+          esac
+
       # 6c. Linux: the binary's own uninstall takes the binary, its data and
       #     its autostart entry. On a COPY (the original is the release
       #     asset), with throwaway XDG folders planted as a used install
