@@ -155,6 +155,23 @@ def test_the_mac_app_runs_its_own_installer_on_the_download(home, monkeypatch):
         (home / 'Applications').chmod(0o755)
 
 
+def test_the_new_app_does_not_take_itself_for_a_child_of_the_old(monkeypatch):
+    """The first CI run of 1.7.0: the relaunched Linux binary inherited the
+    bootloader's variables, looked for the old process's unpacked copy and
+    died ("Failed to load Python shared library")."""
+    monkeypatch.setattr(sys, 'frozen', True, raising=False)
+    monkeypatch.setenv('_PYI_APPLICATION_HOME_DIR', '/tmp/_MEI123')
+    monkeypatch.setenv('_PYI_PARENT_PROCESS_LEVEL', '1')
+    monkeypatch.setenv('_MEIPASS2', '/tmp/_MEI123')
+    monkeypatch.setenv('LD_LIBRARY_PATH', '/tmp/_MEI123:/opt/lib')
+    monkeypatch.setenv('LD_LIBRARY_PATH_ORIG', '/opt/lib')
+    monkeypatch.setenv('HOST', '127.0.0.1')
+    env = updates._fresh_env()
+    assert not [k for k in env if k.startswith(('_PYI_', '_MEIPASS'))]
+    assert env['LD_LIBRARY_PATH'] == '/opt/lib' and 'LD_LIBRARY_PATH_ORIG' not in env
+    assert env['PYINSTALLER_RESET_ENVIRONMENT'] == '1' and env['HOST'] == '127.0.0.1'   # the rest is kept
+
+
 def test_windows_runs_the_new_installer_over_the_old_one(home):
     args = updates.windows_installer_args('C:/dl/setup.exe', relaunch=True)
     assert args[:4] == ['C:/dl/setup.exe', '/SILENT', '/SUPPRESSMSGBOXES', '/NORESTART']

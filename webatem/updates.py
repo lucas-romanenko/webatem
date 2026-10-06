@@ -167,9 +167,27 @@ def download(asset: dict, progress=None) -> Path:
 _WAIT = 'while kill -0 "$0" 2>/dev/null; do sleep 0.2; done; '
 
 
+def _fresh_env() -> dict:
+    """This environment minus what the PyInstaller bootloader put in it.
+    Whatever this hands over to ends by starting the NEW app, which must not
+    take itself for a child of this one: on Linux (onefile) it then looks
+    for this process's unpacked copy, gone by then, and dies at once ("Failed
+    to load Python shared library", the first CI run of 1.7.0).
+    PYINSTALLER_RESET_ENVIRONMENT is the bootloader's own switch for that
+    (6.10+); the rest covers an older one."""
+    env = {k: v for k, v in os.environ.items() if not (k.startswith('_PYI_') or k.startswith('_MEIPASS'))}
+    for var in ('LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH', 'LIBPATH'):
+        if f'{var}_ORIG' in env:
+            env[var] = env.pop(f'{var}_ORIG')
+        elif getattr(sys, 'frozen', False):
+            env.pop(var, None)
+    env['PYINSTALLER_RESET_ENVIRONMENT'] = '1'
+    return env
+
+
 def _detached(args, log: Path) -> None:
     out = open(log, 'ab')
-    kw = {'stdin': subprocess.DEVNULL, 'stdout': out, 'stderr': out, 'close_fds': True}
+    kw = {'stdin': subprocess.DEVNULL, 'stdout': out, 'stderr': out, 'close_fds': True, 'env': _fresh_env()}
     if os.name == 'nt':
         kw['creationflags'] = getattr(subprocess, 'DETACHED_PROCESS', 0) | getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0)
     else:
