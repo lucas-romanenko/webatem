@@ -27,12 +27,27 @@ from atem_control.activity import ActivityLog, record_activity
 logger = logging.getLogger(__name__)
 
 
+def _recent_with_names(h, request):
+    """The recent list with each switcher's name as of NOW. The log keeps the
+    name as it was at connect time, and nothing at all when the lookup knew
+    none then (a connect before mDNS had heard the switcher, or a build that
+    never looked): those rows read as bare IPs for good while discovery shows
+    the same switcher named beside them. The live name wins, so a rename
+    follows too; the logged one stays the fallback for a switcher that is off."""
+    recent = h.recent_atems(request, limit=5)
+    for row in recent:
+        live = h.name_for_ip(row.get('ip_address'))
+        if live:
+            row['equipment_name'] = live
+    return recent
+
+
 def _page_context(request):
     """What both pages get from the host: the recent list, the switcher
     suggestions, deck names, whether discovery is on, anything extra."""
     h = hooks.get()
     return {
-        'recent_atems': h.recent_atems(request, limit=5),
+        'recent_atems': _recent_with_names(h, request),
         'atem_equipment': h.switchers(),
         'hyperdeck_names': h.hyperdeck_names(),
         'discovery_enabled': h.discovery_enabled(),
