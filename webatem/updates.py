@@ -188,6 +188,13 @@ def download(asset: dict, progress=None) -> Path:
     return dest
 
 
+# What WebATEM itself reads from its environment: carried into a macOS
+# relaunch, which `open` would otherwise start with the login session's
+# environment (the build workflow's update test runs the app on a port and
+# data folder of its own).
+_CARRIED = ('HOST', 'PORT', 'DATA_DIR', 'WEBATEM_DATA_DIR', 'WEBATEM_NO_TRAY', 'WEBATEM_NO_BROWSER',
+            'WEBATEM_NO_WINDOW', 'WEBATEM_UPDATE_FEED')
+
 # Waits for this process to exit, then runs the rest. $0 is the PID.
 _WAIT = 'while kill -0 "$0" 2>/dev/null; do sleep 0.2; done; '
 
@@ -237,7 +244,6 @@ def apply(path: Path, relaunch: bool = True) -> None:
     path = Path(path)
     updates_dir().mkdir(parents=True, exist_ok=True)
     log = updates_dir() / 'update.log'
-    resume = ['--resume'] if relaunch else []
     if os.name == 'nt':
         _detached(windows_installer_args(path, relaunch), log)
         return
@@ -254,9 +260,21 @@ def apply(path: Path, relaunch: bool = True) -> None:
         if not os.access(dest, os.W_OK):
             raise UpdateError(f'WebATEM cannot replace itself in {dest} (no permission); '
                               'install the update from the download page.')
+        # Start the new version the way Finder does, through LaunchServices
+        # (`open`). 1.7.2 exec'd the binary from this detached script, and
+        # that copy did not behave like the app: with a VPN connected, its
+        # page would not open on any interface, while the same build started
+        # from Finder worked (Lucas, 2026-10-06). `open` hands the app the
+        # login session's environment, not this one, so the few variables
+        # WebATEM reads go across explicitly; a user's install sets none.
+        carried = []
+        for name in _CARRIED:
+            if name in os.environ:
+                carried += ['--env', f'{name}={os.environ[name]}']
         run = (_WAIT + 'WEBATEM_DMG="$1" WEBATEM_DEST="$2" WEBATEM_NO_OPEN=1 sh "$3" || exit 1; '
-               + ('exec "$2/WebATEM.app/Contents/MacOS/webatem" --resume' if relaunch else 'exit 0'))
-        _detached(['/bin/sh', '-c', run, str(os.getpid()), str(path), str(dest), str(local)], log)
+               + ('app="$2/WebATEM.app"; shift 3; exec /usr/bin/open "$@" "$app" --args --resume'
+                  if relaunch else 'exit 0'))
+        _detached(['/bin/sh', '-c', run, str(os.getpid()), str(path), str(dest), str(local)] + carried, log)
         return
     binary = uninstall.linux_binary()
     if binary is None:

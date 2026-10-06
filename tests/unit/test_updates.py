@@ -139,12 +139,19 @@ def test_the_mac_app_runs_its_own_installer_on_the_download(home, monkeypatch):
     monkeypatch.setattr(sys, '_MEIPASS', str(meipass), raising=False)
     spawned = []
     monkeypatch.setattr(updates, '_detached', lambda args, log: spawned.append(args))
+    for name in updates._CARRIED:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv('PORT', '8897')
     dmg = home / 'webatem-macos-arm64.dmg'
     dmg.write_bytes(b'dmg')
     updates.apply(dmg)
     script = spawned[0][2]
-    assert 'WEBATEM_DMG="$1" WEBATEM_DEST="$2" WEBATEM_NO_OPEN=1 sh "$3"' in script and '--resume' in script
-    assert spawned[0][4:] == [str(dmg), str(app.resolve().parent), str(updates.updates_dir() / 'install-mac.sh')]
+    assert 'WEBATEM_DMG="$1" WEBATEM_DEST="$2" WEBATEM_NO_OPEN=1 sh "$3"' in script
+    # Started the way Finder starts it (LaunchServices), never exec'd from
+    # the script: that copy would not open its page with a VPN up (1.7.2).
+    assert 'exec /usr/bin/open "$@" "$app" --args --resume' in script and 'MacOS/webatem' not in script
+    assert spawned[0][4:7] == [str(dmg), str(app.resolve().parent), str(updates.updates_dir() / 'install-mac.sh')]
+    assert spawned[0][7:] == ['--env', 'PORT=8897']          # what WebATEM reads goes across; nothing else
     assert (updates.updates_dir() / 'install-mac.sh').is_file()      # copied out: the bundle is about to go
 
     (home / 'Applications').chmod(0o555)
