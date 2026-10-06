@@ -192,6 +192,43 @@ def test_recent_list_names_switchers_as_of_now(client, settings, monkeypatch):
 
 
 @pytest.mark.django_db
+def test_recent_list_reads_by_name_or_by_ip_as_the_viewer_chose(client, settings):
+    """Lucas, 2026-10-06: Recent shows name OR IP, the user's setting. A named
+    entry carries both labels and the CSS shows the chosen one; a nameless
+    entry is its address, once. The choice is on <html> before the list paints."""
+    import re
+    from pathlib import Path
+    settings.WEBATEM_HOOKS = None
+    hooks.reset()
+    log = hooks.get().record_connection
+    log(user=None, event_type='connection', ip='10.5.5.5', data={'ip_address': '10.5.5.5', 'equipment_name': 'Studio A'})
+    log(user=None, event_type='connection', ip='10.6.6.6', data={'ip_address': '10.6.6.6'})
+    named = re.compile(r'class="recent-by-name[^"]*">\s*(Studio A|10\.5\.5\.5)\s*</span>'
+                       r'<span class="recent-by-ip[^"]*">\s*(10\.5\.5\.5|Studio A)\s*</span>')
+
+    connect = client.get('/atem/').content.decode()
+    head = connect.split('</head>')[0]
+    assert 'js/recent_label.js' in head and 'defer' not in head.split('js/recent_label.js')[1].split('>')[0]
+    assert 'data-recent-label-set="name"' in connect and 'data-recent-label-set="ip"' in connect
+    recent = connect.split('Recent Connections')[1].split('discoverySection')[0]
+    assert named.findall(recent) == [('Studio A', '10.5.5.5')]
+    nameless = recent.split("setIP('10.6.6.6')")[1].split('</button>')[0]
+    assert 'recent-by' not in nameless and nameless.count('10.6.6.6') == 2              # the title and the label
+
+    control = client.get('/atem/control/').content.decode()
+    assert 'js/recent_label.js' in control.split('</head>')[0]
+    menu = {item.split("'")[1]: item.split('</li>')[0] for item in control.split('ATEMControl.connect(')[1:]}
+    assert set(menu) == {'10.5.5.5', '10.6.6.6'}
+    assert named.findall(menu['10.5.5.5']) == [('Studio A', '10.5.5.5'), ('10.5.5.5', 'Studio A')]   # top, then the other
+    assert 'recent-by' not in menu['10.6.6.6'] and menu['10.6.6.6'].count('10.6.6.6') == 2          # the onclick and the label, once
+
+    css = (Path(__file__).resolve().parents[2] / 'atem_control/static/brand/brand.css').read_text()
+    assert 'html[data-recent-label="ip"] .recent-by-name' in css
+    assert css.index('.recent-by-ip') < css.index('[hidden] { display: none !important; }')
+    hooks.reset()
+
+
+@pytest.mark.django_db
 def test_upload_hands_the_file_to_the_host(client, host_hooks, tmp_path, settings):
     from PIL import Image
     settings.DATA_DIR = tmp_path
