@@ -227,6 +227,23 @@ def test_connection_log_carries_the_switcher_name(host_hooks):
     assert ('connection', 'connection', '10.1.1.1', None) in host_hooks.calls
 
 
+def test_a_session_is_named_by_the_switcher_when_the_host_knows_none(settings, host_hooks):
+    """mDNS does not cross a router: from a laptop on another subnet the
+    lookup knows nothing, and every connect was logged nameless while the
+    header showed the name the switcher reported (WhoI). The host's name
+    still wins when it has one."""
+    from types import SimpleNamespace
+    from atem_control.control.consumer import ATEMConsumer
+    mx = {'device-identity': SimpleNamespace(name=b'BC 2.2 - TESTTt' + b'\x00' * 49)}
+    lookup = ATEMConsumer._lookup_equipment_name
+    assert lookup('10.1.1.1', mx) == 'Host Room 1'                  # the host's inventory first
+    assert lookup('10.9.9.9', mx) == 'BC 2.2 - TESTTt'              # then the switcher's own name
+    assert lookup('10.9.9.9', {}) is None                           # firmware without WhoI: nothing
+    settings.WEBATEM_HOOKS = None
+    hooks.reset()
+    assert lookup('192.168.81.86', mx) == 'BC 2.2 - TESTTt'         # standalone, no mDNS in reach
+
+
 def test_default_still_check_refuses_a_decompression_bomb(tmp_path):
     """"Any image at any size" is about the picture, not about what the process
     will decode. Pillow's ceiling stays at its default (it is NOT disabled), and
