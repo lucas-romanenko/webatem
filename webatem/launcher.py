@@ -53,18 +53,10 @@ BUNDLE_ID = 'com.webatem.app'
 def _data_dir() -> Path:
     """A per-user, writable location for the SQLite DB, generated secret,
     and upload scratch. The frozen bundle itself is read-only, so runtime
-    state must live outside it."""
-    env = os.environ.get('WEBATEM_DATA_DIR') or os.environ.get('DATA_DIR')
-    if env:
-        path = Path(env)
-    elif sys.platform == 'darwin':
-        path = Path.home() / 'Library' / 'Application Support' / APP_NAME
-    elif os.name == 'nt':
-        base = os.environ.get('LOCALAPPDATA') or str(Path.home())
-        path = Path(base) / APP_NAME
-    else:
-        xdg = os.environ.get('XDG_DATA_HOME') or str(Path.home() / '.local' / 'share')
-        path = Path(xdg) / APP_NAME
+    state must live outside it. Where that is: ``uninstall.data_dir`` (one
+    rule, so the uninstall removes the folder the app actually used)."""
+    from webatem import uninstall
+    path = uninstall.data_dir()
     path.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -599,6 +591,17 @@ def _window_process(url: str, hidden: bool = False) -> None:
             window.hide()
             tell('hidden')
 
+        # Uninstall lives on this bridge and nowhere else: the settings and
+        # Quit endpoints answer the whole network, and nobody on the LAN
+        # gets to remove the app from this machine. Only the window, which
+        # is this user at this machine, can ask the launcher for it.
+        def uninstall_plan(self):
+            from webatem import uninstall
+            return uninstall.plan()
+
+        def uninstall(self):
+            tell('uninstall')
+
     # Companion's launcher window is its own panel: no title bar, no
     # minimise / close buttons — it is shown and hidden from the menu bar
     # (tray) and its own Hide button, and dragged by its body.
@@ -660,6 +663,7 @@ class _WindowChild:
         self._s = supervisor
         self._proc = None
         self._shown = False
+        self.on_uninstall = None          # the tray sets it: quit, then remove (main)
 
     def _command(self, hidden: bool = False):
         url = self._s.launcher_url
@@ -697,6 +701,8 @@ class _WindowChild:
                     self._shown = False
                 elif word == 'shown':
                     self._shown = True
+                elif word == 'uninstall' and self.on_uninstall:
+                    self.on_uninstall()
         except Exception:  # noqa: BLE001
             pass
         if self._proc is proc:
@@ -807,8 +813,9 @@ def _mac_menu_bar_icon(icon) -> None:
         pass
 
 
-def _run_tray(supervisor, controller, window) -> None:
-    """Menu bar / system tray icon; returns when the user quits."""
+def _run_tray(supervisor, controller, window, uninstall_requested=None) -> None:
+    """Menu bar / system tray icon; returns when the user quits (or asked
+    the window to uninstall: ``uninstall_requested`` is set, main removes)."""
     import pystray
     from pystray import Menu, MenuItem
 
@@ -859,6 +866,11 @@ def _run_tray(supervisor, controller, window) -> None:
         _mac_menu_bar_icon(icon)
     supervisor.on_change = icon.update_menu
     controller.on_quit = lambda: quit_app(icon)
+    if window is not None and uninstall_requested is not None:
+        def uninstall_and_quit():
+            uninstall_requested.set()
+            quit_app(icon)
+        window.on_uninstall = uninstall_and_quit
 
     def after_start():
         # A real failure is worth a notification; "waiting for a choice" is
@@ -910,6 +922,11 @@ def main() -> None:
         _window_process(argv[i + 1] if i + 1 < len(argv) else 'http://127.0.0.1:8880/launcher/',
                         hidden='--hidden' in argv)
         return
+    if '--uninstall' in argv:
+        # Before anything is created: an uninstall must not first make the
+        # data folder it is about to remove.
+        from webatem import uninstall
+        sys.exit(uninstall.cli(argv))
     autostarted = '--autostart' in argv
     data_dir = _data_dir()
     # A windowed build has no console: send output to a log in the data dir
@@ -962,6 +979,9 @@ def main() -> None:
         supervisor.launcher_port = launcher_socket.getsockname()[1]
     controller = _Controller(supervisor)
     srv.runtime.register(controller)
+    from webatem import uninstall
+    uninstall.write_pid()                   # so `webatem --uninstall` can stop this copy first
+    uninstall_requested = threading.Event()
     window = _WindowChild(supervisor) if has_window else None
     if window is not None:
         window.start(hidden=bool(cfg.get('start_minimized')) or autostarted)
@@ -999,7 +1019,7 @@ def main() -> None:
 
     try:
         if want_tray:
-            _run_tray(supervisor, controller, window)
+            _run_tray(supervisor, controller, window, uninstall_requested)
         else:
             booter.join()
             while supervisor._thread is not None and supervisor._thread.is_alive():
@@ -1011,6 +1031,25 @@ def main() -> None:
             window.quit()
         supervisor.stop()
         supervisor.join(20)
+        uninstall.clear_pid()
+        if uninstall_requested.is_set():
+            _uninstall_after_quit()
+
+
+def _uninstall_after_quit() -> None:
+    """The window's Uninstall, once the server and the window have stopped.
+    Windows: its own uninstaller takes over (it ends anything of ours still
+    running before it removes files). Elsewhere: remove it all, then leave
+    at once: on macOS the bundle this process runs from is gone, so nothing
+    may import from it again."""
+    from webatem import uninstall
+    the_plan = uninstall.plan()
+    if the_plan['kind'] == 'windows-installer':
+        uninstall.start_windows_uninstaller(the_plan['uninstaller'])
+        return
+    for path, err in uninstall.run(the_plan):
+        print(f'uninstall: {path}: {err or "removed"}', flush=True)
+    os._exit(0)
 
 
 if __name__ == '__main__':

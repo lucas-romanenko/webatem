@@ -21,6 +21,17 @@
   .lw-check { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text); cursor: pointer; }
   .lw-actions { margin-top: auto; display: flex; gap: 8px; padding-top: 16px; border-top: 1px solid var(--border); }
   .lw-legal { font-size: 12px; color: var(--text-faint); line-height: 1.5; margin: 0; }
+  .lw-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  /* Uninstall: a panel over the form, saying exactly what goes (the real
+     paths, machine data in mono) before anything does. */
+  .lw-body { position: relative; }
+  .lw-un { position: absolute; inset: 0; background: var(--ink); padding: 22px 24px 20px; display: flex; flex-direction: column; gap: 14px; }
+  .lw-un h2 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.02em; color: var(--text); }
+  .lw-un p { margin: 0; font-size: 14px; color: var(--text-muted); line-height: 1.5; }
+  .lw-un ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; min-height: 0; }
+  .lw-un .what { font-size: 13px; color: var(--text-muted); }
+  .lw-un .where { font-family: var(--font-mono); font-size: 12px; color: var(--text); word-break: break-all; }
+  .lw-un code { font-family: var(--font-mono); font-size: 13px; color: var(--text); }
 </style>
 {% endblock %}
 {% block content %}
@@ -60,7 +71,20 @@
       <button id="lwHide" class="btn btn-ghost" hidden>Hide</button>
       <button id="lwQuit" class="btn btn-ghost" hidden>Quit</button>
     </div>
-    <p class="lw-legal">Made by Lucas Romanenko</p>
+    <div class="lw-foot">
+      <p class="lw-legal">Made by Lucas Romanenko</p>
+      <button id="lwUninstall" class="btn btn-ghost btn-xs" hidden>Uninstall…</button>
+    </div>
+    <div class="lw-un" id="lwUninstallPanel" hidden>
+      <h2>Uninstall WebATEM?</h2>
+      <p id="lwUninstallIntro"></p>
+      <ul id="lwUninstallList"></ul>
+      <p id="lwUninstallThen" hidden></p>
+      <div class="lw-actions">
+        <button id="lwUninstallGo" class="btn flex-1">Uninstall</button>
+        <button id="lwUninstallCancel" class="btn btn-ghost">Cancel</button>
+      </div>
+    </div>
   </div>
 </div>
 {% endblock %}
@@ -158,10 +182,51 @@
       .then(function (r) { if (!r.ok) { say('Could not stop the server (HTTP ' + r.status + ').', 'text-error'); return; } state.textContent = 'Stopped'; addr.textContent = ''; dot.classList.remove('on'); if (native) setTimeout(function () { window.pywebview.api.hide(); }, 300); })
       .catch(function () { say('Could not stop the server from here.', 'text-error'); });
   });
-  window.addEventListener('pywebviewready', function () {
-    native = true; el('lwHide').hidden = false; el('lwQuit').hidden = false;
+  // Uninstall: only in the native window, through its bridge (the
+  // launcher refuses it over HTTP: these endpoints answer the network).
+  // The panel lists what will go, read from this machine, before anything
+  // does.
+  var unPanel = el('lwUninstallPanel'), unList = el('lwUninstallList'), unIntro = el('lwUninstallIntro'), unThen = el('lwUninstallThen');
+  function showPlan(p) {
+    unList.innerHTML = '';
+    unThen.hidden = true;
+    if (p.kind === 'windows-installer') {
+      unIntro.textContent = 'WebATEM closes and Windows’ uninstaller removes it: the program, your settings and connection history, and start at login.';
+    } else {
+      unIntro.textContent = 'WebATEM closes, then removes all of this:';
+      (p.items || []).forEach(function (item) {
+        var li = document.createElement('li');
+        var what = document.createElement('div'); what.className = 'what'; what.textContent = item[0];
+        var where = document.createElement('div'); where.className = 'where'; where.textContent = item[1];
+        li.appendChild(what); li.appendChild(where); unList.appendChild(li);
+      });
+      if (p.then) {
+        unThen.textContent = 'The program itself stays installed. Afterwards, run ';
+        var code = document.createElement('code'); code.textContent = p.then; unThen.appendChild(code);
+        unThen.hidden = false;
+      }
+    }
+    el('lwUninstallGo').disabled = false;
+    el('lwUninstallGo').textContent = 'Uninstall';
+    unPanel.hidden = false;
+  }
+  el('lwUninstall').addEventListener('click', function () {
+    if (!native) return;
+    window.pywebview.api.uninstall_plan().then(showPlan)
+      .catch(function (e) { say('Could not prepare the uninstall: ' + e, 'text-error'); });
   });
-  if (window.pywebview && window.pywebview.api) { native = true; el('lwHide').hidden = false; el('lwQuit').hidden = false; }
+  el('lwUninstallCancel').addEventListener('click', function () { unPanel.hidden = true; });
+  el('lwUninstallGo').addEventListener('click', function () {
+    el('lwUninstallGo').disabled = true;
+    el('lwUninstallGo').textContent = 'Uninstalling…';
+    window.pywebview.api.uninstall();
+  });
+
+  function nativeReady() {
+    native = true; el('lwHide').hidden = false; el('lwQuit').hidden = false; el('lwUninstall').hidden = false;
+  }
+  window.addEventListener('pywebviewready', nativeReady);
+  if (window.pywebview && window.pywebview.api) nativeReady();
   load();
 })();
 </script>
