@@ -393,3 +393,78 @@ def test_describe_has_no_address_before_a_choice(client, data_dir):
     srv.runtime.register(ctl)
     d = client.get('/server/settings/').json()
     assert d['host'] is None and d['url'] is None and d['local_url'] is None and d['running'] is False
+
+
+class _FakeWindow:
+    def __init__(self, destroy_fails=False):
+        self.calls = []
+        self._destroy_fails = destroy_fails
+
+    def show(self):
+        self.calls.append('show')
+
+    def hide(self):
+        self.calls.append('hide')
+
+    def evaluate_js(self, js):
+        self.calls.append(('js', js))
+
+    def destroy(self):
+        self.calls.append('destroy')
+        if self._destroy_fails:
+            raise RuntimeError('no window')
+
+
+def test_the_window_process_always_leaves(monkeypatch):
+    """Lucas, 2026-10-06: after Quit, WebATEM would not open again at all. A
+    `--window` process had outlived the launcher, and macOS then brings that
+    invisible process forward instead of starting the app. quit (or the
+    launcher vanishing: EOF) closes the window and ends the process for
+    certain; Show re-reads the page (a VPN connected since launch)."""
+    import io
+    from webatem import launcher
+    exits = []
+    monkeypatch.setattr(launcher.os, '_exit', lambda code: exits.append(code))
+    told = []
+    w = _FakeWindow()
+    launcher._window_commands(io.StringIO('show\nhide\nquit\nshow\n'), w, told.append, exit_after=0.05)
+    assert w.calls == ['show', ('js', 'window.webatemRefresh && window.webatemRefresh()'), 'hide', 'destroy']
+    assert told == ['shown', 'hidden']
+    time.sleep(0.2)
+    assert exits == [0]                                  # left even though Cocoa never ended the app
+
+    exits.clear()
+    w = _FakeWindow()
+    launcher._window_commands(io.StringIO(''), w, told.append, exit_after=0.05)   # the launcher is gone
+    time.sleep(0.2)
+    assert w.calls == ['destroy'] and exits == [0]
+
+    exits.clear()
+    launcher._window_commands(io.StringIO('quit\n'), _FakeWindow(destroy_fails=True), told.append, exit_after=5)
+    assert exits == [0]                                  # no window to close: straight out
+
+
+def test_quit_waits_until_the_window_process_is_gone():
+    """The reaping used to be a daemon thread that died with the launcher."""
+    import subprocess
+    import sys as _sys
+    from webatem import launcher
+    stubborn = 'import sys, time\nfor line in sys.stdin:\n    pass\ntime.sleep(60)\n'
+    child = launcher._WindowChild(supervisor=None)
+    child._proc = subprocess.Popen([_sys.executable, '-c', stubborn], stdin=subprocess.PIPE, text=True)
+    proc = child._proc
+    started = time.time()
+    child.quit(wait=0.5)
+    assert proc.poll() is not None and time.time() - started < 5      # ignored quit and EOF: terminated
+    obedient = 'import sys\nfor line in sys.stdin:\n    if line.strip() == "quit":\n        break\n'
+    child._proc = subprocess.Popen([_sys.executable, '-c', obedient], stdin=subprocess.PIPE, text=True)
+    proc = child._proc
+    started = time.time()
+    child.quit(wait=3)
+    assert proc.returncode == 0 and time.time() - started < 2         # went by itself, nothing forced
+
+
+def test_the_launcher_page_keeps_its_interface_list_current(client, data_dir):
+    page = client.get('/launcher/').content.decode()
+    assert 'window.webatemRefresh = load' in page and 'setInterval(load, 4000)' in page
+    assert 'document.activeElement !== hostSel' in page and 'document.activeElement !== portInp' in page

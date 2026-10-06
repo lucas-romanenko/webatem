@@ -632,21 +632,7 @@ def _window_process(url: str, hidden: bool = False) -> None:
         window.events.before_show += no_taskbar
 
     def commands():
-        # The parent's lines; EOF = the parent is gone, so is this window.
-        try:
-            for line in sys.stdin:
-                cmd = line.strip()
-                if cmd == 'show':
-                    window.show()
-                    tell('shown')
-                elif cmd == 'hide':
-                    window.hide()
-                    tell('hidden')
-                elif cmd == 'quit':
-                    break
-        except Exception:  # noqa: BLE001
-            pass
-        window.destroy()
+        _window_commands(sys.stdin, window, tell)
 
     def follow():
         import urllib.request
@@ -663,6 +649,48 @@ def _window_process(url: str, hidden: bool = False) -> None:
         window.load_url(url)
 
     webview.start(follow)
+
+
+# How long the window process gets to close its window before it leaves
+# anyway. Cocoa does not always end the app when its (hidden) window is
+# destroyed, and a window process left running is fatal on macOS: Finder,
+# Spotlight and `open` then just bring that invisible process forward
+# instead of starting WebATEM, so it will not open at all (Lucas,
+# 2026-10-06: "not opening, not showing in the menu", a `--window` process
+# from the copy he had quit).
+WINDOW_EXIT_AFTER = 2.0
+
+
+def _window_commands(stream, window, tell, exit_after: float = WINDOW_EXIT_AFTER) -> None:
+    """The window process's side of the pipe: ``show`` / ``hide`` / ``quit``
+    lines from the launcher. ``quit``, or EOF (the launcher is gone, however
+    it went), closes the window and then ends this process for certain."""
+    try:
+        for line in stream:
+            cmd = line.strip()
+            if cmd == 'show':
+                window.show()
+                # The page has been open since launch: re-read the address,
+                # the interfaces (a VPN connected since), the update state.
+                try:
+                    window.evaluate_js('window.webatemRefresh && window.webatemRefresh()')
+                except Exception:  # noqa: BLE001 — the page may still be loading
+                    pass
+                tell('shown')
+            elif cmd == 'hide':
+                window.hide()
+                tell('hidden')
+            elif cmd == 'quit':
+                break
+    except Exception:  # noqa: BLE001
+        pass
+    leave = threading.Timer(exit_after, os._exit, args=(0,))
+    leave.daemon = True
+    leave.start()
+    try:
+        window.destroy()
+    except Exception:  # noqa: BLE001
+        os._exit(0)
 
 
 class _WindowChild:
@@ -748,26 +776,32 @@ class _WindowChild:
     def toggle(self) -> None:
         self.hide() if self.visible() else self.show()
 
-    def quit(self) -> None:
+    def quit(self, wait: float = 3.0) -> None:
+        """End the window process and make sure it is gone before the
+        launcher exits. The reaping used to run in a daemon thread, which
+        died with the launcher whenever the server stopped faster than the
+        window closed, leaving the window process behind (see
+        WINDOW_EXIT_AFTER for what that does on macOS)."""
         proc, self._proc = self._proc, None
         if proc is None or proc.poll() is not None:
             return
         try:
             proc.stdin.write('quit\n')
             proc.stdin.flush()
+            proc.stdin.close()
         except Exception:  # noqa: BLE001
             pass
-
-        def reap():
-            try:
-                proc.wait(3)
-            except Exception:  # noqa: BLE001
-                proc.terminate()
+        for stop in (None, proc.terminate, proc.kill):
+            if stop is not None:
                 try:
-                    proc.wait(3)
-                except Exception:  # noqa: BLE001
-                    proc.kill()
-        threading.Thread(target=reap, daemon=True).start()
+                    stop()
+                except Exception:  # noqa: BLE001 — already gone
+                    pass
+            try:
+                proc.wait(wait)
+                return
+            except Exception:  # noqa: BLE001 — still there: the next, firmer way
+                continue
 
 
 # ---------------------------------------------------------------------------
