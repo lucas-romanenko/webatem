@@ -17,6 +17,7 @@ from asgiref.sync import sync_to_async
 from atem_control.media_pool import watcher as media_pool_service
 from atemwire.state import ATEMStateMixin
 from atemwire.messages.fairlight import enable_fairlight_levels
+from atemwire.messages.system_info import device_name
 from atemwire.pool import ATEMInstanceManager
 from atem_control.control.commands import dispatch as dispatch_command
 from atem_control.control.logging import ATEMConnectionLoggingMixin
@@ -406,9 +407,18 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
         ))
 
     @staticmethod
-    def _lookup_equipment_name(ip_address):
-        # The host's name for the switcher (an inventory, or discovery).
-        return hooks.get().name_for_ip(ip_address)
+    def _lookup_equipment_name(ip_address, mixerstate=None):
+        """The host's name for the switcher (an inventory, or discovery),
+        else the name the switcher just reported itself (WhoI, the ATEM Setup
+        name). mDNS does not cross a router, so from another subnet (a laptop
+        on the Wi-Fi) the lookup knows nothing, and every connect was logged
+        nameless while the header showed the switcher's own name."""
+        name = hooks.get().name_for_ip(ip_address)
+        if name:
+            return name
+        if mixerstate is not None:
+            return device_name(mixerstate) or None
+        return None
 
     # (build_full_state itself carries atem_name since the WhoI reader was
     # upstreamed — the old _state_with_name wrapper is gone.)
@@ -497,7 +507,8 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
             # The host's name for the switcher first (one lookup per
             # connect): the connection log and every activity row carry it.
             self.current_atem_name = await sync_to_async(
-                self._lookup_equipment_name)(ip_address)
+                self._lookup_equipment_name)(
+                    ip_address, getattr(self.connection, 'mixerstate', None))
 
             if not is_test_connection:
                 await self._log_connect(ip_address)
