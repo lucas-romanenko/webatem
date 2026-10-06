@@ -170,6 +170,28 @@ def test_default_connection_log_and_recent_list(settings):
 
 
 @pytest.mark.django_db
+def test_recent_list_names_switchers_as_of_now(client, settings, monkeypatch):
+    """A connection logged with no name (mDNS had not heard the switcher yet,
+    or a build that never looked) read as a bare IP forever, while discovery
+    showed the same switcher named beside it. The page asks for the name live."""
+    settings.WEBATEM_HOOKS = None
+    hooks.reset()
+    from atem_control import discovery
+    log = hooks.get().record_connection
+    log(user=None, event_type='connection', ip='10.2.2.2', data={'ip_address': '10.2.2.2'})
+    log(user=None, event_type='connection', ip='10.3.3.3', data={'ip_address': '10.3.3.3', 'equipment_name': 'Old Name'})
+    log(user=None, event_type='connection', ip='10.4.4.4', data={'ip_address': '10.4.4.4', 'equipment_name': 'Switched Off'})
+    monkeypatch.setitem(discovery._registry, 'uid-a', {'ip': '10.2.2.2', 'name': 'Studio B', 'model': ''})
+    monkeypatch.setitem(discovery._registry, 'uid-b', {'ip': '10.3.3.3', 'name': 'New Name', 'model': ''})
+    for page in ('/atem/', '/atem/control/'):
+        html = client.get(page).content.decode()
+        assert 'Studio B' in html, page                                     # nameless row, named now
+        assert 'New Name' in html and 'Old Name' not in html, page          # a rename follows
+        assert 'Switched Off' in html, page                                 # off the network: the logged name
+    hooks.reset()
+
+
+@pytest.mark.django_db
 def test_upload_hands_the_file_to_the_host(client, host_hooks, tmp_path, settings):
     from PIL import Image
     settings.DATA_DIR = tmp_path
