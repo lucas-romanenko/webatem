@@ -20,6 +20,8 @@
 set -u
 
 APP=$1 ASSET=$2 DATA=$3 PORT=$4
+# $PY may be a command with arguments (the Intel macOS job runs Python under
+# Rosetta: "arch -x86_64 …/python3"), so it is used unquoted, as in the workflow.
 PY=${PY:-python3}
 NAME=$(basename "$ASSET")
 FEED_PORT=8790
@@ -47,7 +49,7 @@ identity() {     # what changes when the app on disk is replaced
 
 mkdir -p "$DATA" "$feed"
 cp "$ASSET" "$feed/$NAME"
-"$PY" - "$feed" "$NAME" "$FEED_PORT" <<'EOF'
+$PY - "$feed" "$NAME" "$FEED_PORT" <<'EOF'
 import hashlib, json, os, sys
 feed, name, port = sys.argv[1:]
 path = os.path.join(feed, name)
@@ -57,16 +59,16 @@ json.dump({'tag_name': 'v99.0.0', 'html_url': 'https://example.invalid/release',
                        'digest': 'sha256:' + sha, 'size': os.path.getsize(path)}]},
           open(os.path.join(feed, 'latest.json'), 'w'))
 EOF
-"$PY" -m http.server "$FEED_PORT" --bind 127.0.0.1 --directory "$feed" >/dev/null 2>&1 &
+$PY -m http.server "$FEED_PORT" --bind 127.0.0.1 --directory "$feed" >/dev/null 2>&1 &
 FEED_PID=$!
 trap 'kill $FEED_PID 2>/dev/null' EXIT
 for i in $(seq 1 20); do curl -fsS -o "$DATA/feed.json" "http://127.0.0.1:$FEED_PORT/latest.json" 2>/dev/null && break; sleep 0.5; done
 [ -s "$DATA/feed.json" ] || fail "the local release feed never answered on 127.0.0.1:$FEED_PORT"
-# Python's urllib follows the system's proxy settings (on macOS, the network
-# preferences), curl does not: the first macOS run timed out on this feed
-# while curl reached it. Say what this machine sets, then keep loopback
-# direct, as any proxy configuration should.
-"$PY" -c "import urllib.request; print('proxies this machine sets:', urllib.request.getproxies() or 'none')"
+# The first macOS run's `webatem --update` timed out on this feed; waiting
+# until it answers (above) is what changed that. urllib follows the system's
+# proxy settings and curl does not, so say what this machine sets (none, on
+# the runners so far) and keep loopback direct regardless.
+$PY -c "import urllib.request; print('proxies this machine sets:', urllib.request.getproxies() or 'none')"
 export NO_PROXY=127.0.0.1,localhost no_proxy=127.0.0.1,localhost
 
 export WEBATEM_NO_TRAY=1 WEBATEM_NO_BROWSER=1 HOST=127.0.0.1 PORT DATA_DIR="$DATA" \
