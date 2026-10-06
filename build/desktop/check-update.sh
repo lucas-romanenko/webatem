@@ -60,6 +60,14 @@ EOF
 "$PY" -m http.server "$FEED_PORT" --bind 127.0.0.1 --directory "$feed" >/dev/null 2>&1 &
 FEED_PID=$!
 trap 'kill $FEED_PID 2>/dev/null' EXIT
+for i in $(seq 1 20); do curl -fsS -o "$DATA/feed.json" "http://127.0.0.1:$FEED_PORT/latest.json" 2>/dev/null && break; sleep 0.5; done
+[ -s "$DATA/feed.json" ] || fail "the local release feed never answered on 127.0.0.1:$FEED_PORT"
+# Python's urllib follows the system's proxy settings (on macOS, the network
+# preferences), curl does not: the first macOS run timed out on this feed
+# while curl reached it. Say what this machine sets, then keep loopback
+# direct, as any proxy configuration should.
+"$PY" -c "import urllib.request; print('proxies this machine sets:', urllib.request.getproxies() or 'none')"
+export NO_PROXY=127.0.0.1,localhost no_proxy=127.0.0.1,localhost
 
 export WEBATEM_NO_TRAY=1 WEBATEM_NO_BROWSER=1 HOST=127.0.0.1 PORT DATA_DIR="$DATA" \
        WEBATEM_UPDATE_FEED="http://127.0.0.1:$FEED_PORT/latest.json"
