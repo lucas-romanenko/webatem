@@ -27,6 +27,7 @@
   .lw-update .faint { color: var(--text-faint); font-size: 13px; }
   .lw-update code { font-family: var(--font-mono); font-size: 13px; color: var(--text); }
   .lw-update-actions { display: flex; align-items: center; gap: 6px; flex: none; }
+  .lw-foot-actions { display: flex; gap: 2px; }
   .lw-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   /* Uninstall: a panel over the form, saying exactly what goes (the real
      paths, machine data in mono) before anything does. */
@@ -87,7 +88,10 @@
     </div>
     <div class="lw-foot">
       <p class="lw-legal">Made by Lucas Romanenko</p>
-      <button id="lwUninstall" class="btn btn-ghost btn-xs" hidden>Uninstall…</button>
+      <span class="lw-foot-actions">
+        <button id="lwShowLog" class="btn btn-ghost btn-xs" hidden>Show log</button>
+        <button id="lwUninstall" class="btn btn-ghost btn-xs" hidden>Uninstall…</button>
+      </span>
     </div>
     <div class="lw-un" id="lwUninstallPanel" hidden>
       <h2>Uninstall WebATEM?</h2>
@@ -304,8 +308,12 @@
     window.pywebview.api.uninstall();
   });
 
+  // Show log: webatem.log in Finder / Explorer, to read or send.
+  el('lwShowLog').addEventListener('click', function () { if (native) window.pywebview.api.show_log(); });
+
   function nativeReady() {
     native = true; el('lwHide').hidden = false; el('lwQuit').hidden = false; el('lwUninstall').hidden = false;
+    el('lwShowLog').hidden = false;
   }
   window.addEventListener('pywebviewready', nativeReady);
   if (window.pywebview && window.pywebview.api) nativeReady();

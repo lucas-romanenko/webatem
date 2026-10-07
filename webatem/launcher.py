@@ -627,7 +627,7 @@ def _window_process(url: str, hidden: bool = False) -> None:
             import AppKit
             AppKit.NSApplication.sharedApplication().setActivationPolicy_(AppKit.NSApplicationActivationPolicyAccessory)
         except Exception as e:  # noqa: BLE001
-            print(f'could not hide the Dock icon: {e}', flush=True)
+            print(f'could not hide the Dock icon: {e}', file=sys.stderr, flush=True)
 
     def tell(what: str) -> None:
         try:
@@ -660,6 +660,10 @@ def _window_process(url: str, hidden: bool = False) -> None:
         def check_updates(self):
             tell('check')
 
+        def show_log(self):
+            from webatem import applog, uninstall
+            applog.reveal(uninstall.data_dir() / applog.LOG_NAME)
+
         def update(self):
             tell('update')
 
@@ -677,7 +681,7 @@ def _window_process(url: str, hidden: bool = False) -> None:
                 from webview.platforms import winforms
                 winforms.BrowserView.instances[window.uid].ShowInTaskbar = False
             except Exception as e:  # noqa: BLE001
-                print(f'could not hide the taskbar button: {e}', flush=True)
+                print(f'could not hide the taskbar button: {e}', file=sys.stderr, flush=True)
         window.events.before_show += no_taskbar
 
     def commands():
@@ -776,13 +780,17 @@ class _WindowChild:
         import subprocess
         try:
             self._proc = subprocess.Popen(self._command(hidden), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                          stderr=subprocess.DEVNULL, text=True, bufsize=1)
+                                          stderr=subprocess.PIPE, text=True, bufsize=1)
         except Exception as e:  # noqa: BLE001
             print(f'The launcher window could not open: {e}', flush=True)
             self._proc = None
             return
         self._shown = not hidden
         threading.Thread(target=self._listen, args=(self._proc,), name='webatem-window-listen', daemon=True).start()
+        # The window's own errors (pywebview, WebKit, a page that failed)
+        # used to go to /dev/null; they belong in the log.
+        from webatem import applog
+        applog.relay(self._proc.stderr, '[window]')
 
     def _listen(self, proc) -> None:
         try:
@@ -1057,11 +1065,11 @@ def main() -> None:
     # user chose, window shown, as if it had never stopped.
     resumed = '--resume' in argv
     data_dir = _data_dir()
-    # A windowed build has no console: send output to a log in the data dir
-    # so a failure is diagnosable instead of silent.
-    if sys.stdout is None or sys.stderr is None:
-        log = open(data_dir / 'webatem.log', 'a', buffering=1)
-        sys.stdout = sys.stderr = log
+    # Every launcher install keeps webatem.log in the data dir (applog: the
+    # console keeps its output, the file gets a timestamped copy). It used to
+    # exist only when there was no stdout at all, a Windows windowed build.
+    from webatem import applog
+    applog.start(data_dir)
 
     # settings.py reads DATA_DIR at import time — set it before django.setup().
     os.environ['DATA_DIR'] = str(data_dir)
