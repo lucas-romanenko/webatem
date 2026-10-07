@@ -36,6 +36,18 @@ BACKUPS = 3
 _STAMPED = re.compile(r'^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}')
 
 
+class DropClientGone(logging.Filter):
+    """Drop asyncio's "CancelledError exception in shielded future". It is
+    logged when a client hangs up while a view is still running (a browser
+    tab closed, a poll that gave up), and never means a failure; with it the
+    log read like a crash (Lucas's first 1.7.6 log, 2026-10-07). Every other
+    asyncio record passes."""
+
+    def filter(self, record):
+        return not (record.name == 'asyncio'
+                    and record.getMessage().startswith('CancelledError exception in shielded future'))
+
+
 class _Tee:
     """A text stream: writes go to the console as before (when there is
     one) and, a whole line at a time, into the rotating log file."""
