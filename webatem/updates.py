@@ -365,8 +365,11 @@ class Updater:
             result = check()
         except Exception as e:  # noqa: BLE001 — offline is ordinary here
             self._set(state='error', error=_reason(e))
+            print(f'update check: could not check: {self.error}', flush=True)
             return
         self._set(result=result, state='available' if result['available'] else 'current')
+        print(f'update check: this is {result["current"]}, latest is {result["latest"]}'
+              + (' (available)' if result['available'] else ''), flush=True)
 
     def install(self, quit_app) -> None:
         """Download, verify, hand over, quit. In a thread: the tray and the
@@ -376,13 +379,17 @@ class Updater:
 
         def run():
             asset = (self.result or {}).get('asset')
+            latest = (self.result or {}).get('latest')
             try:
+                print(f'update: downloading {latest} ({(asset or {}).get("name")})', flush=True)
                 self._set(state='downloading', progress=0, error=None)
                 path = download(asset, progress=lambda done, total: self._progress(done, total))
+                print(f'update: {path.name} matches its checksum; installing {latest}', flush=True)
                 self._set(state='installing', progress=None)
                 apply(path)
             except Exception as e:  # noqa: BLE001
                 self._set(state='available', error=_reason(e), progress=None)
+                print(f'update: not installed: {self.error}', flush=True)
                 return
             time.sleep(0.5)                # the window shows "Installing" before it goes
             quit_app()
