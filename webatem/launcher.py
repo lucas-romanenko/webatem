@@ -232,6 +232,49 @@ def _bind(host: str, port: int) -> socket.socket:
     return s
 
 
+def _port_taken(host: str, port: int):
+    """Who already listens on ``port``, or None when nobody does.
+
+    Asked BEFORE binding, by connecting: on macOS a bind to one address
+    succeeds while another program listens on the same port on every
+    address, and the two then share it. Lucas, 2026-10-07: WebATEM came up
+    on 8000 beside the program already there (8000 is Bitfocus Companion's),
+    and it could not reach a switcher until he moved it to 8080. Loopback
+    on both families covers a wildcard listener, the address itself covers
+    a specific one. Called only when WebATEM's own server is down (startup,
+    and a restart shuts the old one first), so it never finds itself."""
+    targets = [('127.0.0.1', socket.AF_INET), ('::1', socket.AF_INET6)]
+    if host not in ('0.0.0.0', '', '127.0.0.1', 'localhost'):
+        targets.append((host, socket.AF_INET))
+    for addr, family in targets:
+        s = socket.socket(family, socket.SOCK_STREAM)
+        s.settimeout(0.3)
+        try:
+            if s.connect_ex((addr, port)) == 0:
+                return _listener_name(port) or 'another program'
+        except OSError:
+            pass                     # no IPv6 loopback here, or the address is gone: not taken
+        finally:
+            s.close()
+    return None
+
+
+def _listener_name(port: int):
+    """The listening program's name, where lsof can say (macOS, Linux)."""
+    import shutil
+    import subprocess
+    lsof = shutil.which('lsof') or ('/usr/sbin/lsof' if os.path.exists('/usr/sbin/lsof') else None)
+    if not lsof:
+        return None
+    try:
+        out = subprocess.run([lsof, '+c', '0', '-nP', f'-iTCP:{port}', '-sTCP:LISTEN', '-Fc'],
+                             capture_output=True, text=True, timeout=3).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    names = sorted({line[1:] for line in out.splitlines() if line.startswith('c') and line[1:]})
+    return ', '.join(names) or None
+
+
 def _close_all(sockets) -> None:
     for s in sockets:
         try:
@@ -308,6 +351,9 @@ class _Supervisor:
             self._thread.join(timeout)
 
     def _listen(self, host: str, port: int):
+        taken_by = _port_taken(host, port)
+        if taken_by is not None:
+            raise OSError(errno.EADDRINUSE, f'port {port} is in use by {taken_by}')
         sockets = [_bind(host, port)]
         if host not in self.ANY:
             try:
@@ -394,7 +440,7 @@ class _Supervisor:
         #    off today) -> the same, naming it; a taken port (Companion, an
         #    earlier WebATEM) -> the next free one, with a note.
         host, wanted = self.host, self.port
-        port, tries, notes = wanted, 0, []
+        port, tries, notes, first_reason = wanted, 0, [], None
         current = (None, None, [])
         while host is not None:
             try:
@@ -407,6 +453,7 @@ class _Supervisor:
                     self.host = host = None
                     break
                 tries += 1
+                first_reason = first_reason or self._reason(e)
                 if tries > self.PORT_TRIES:
                     self.last_error = f'could not listen on {host}:{port} ({self._reason(e)})'
                     break
@@ -416,7 +463,9 @@ class _Supervisor:
                 break
         if current[0] is not None:
             if port != wanted:
-                notes.append(f'Port {wanted} was in use, so WebATEM is on port {port} this time.')
+                who = first_reason.split('in use by ', 1)[1] if first_reason and 'in use by ' in first_reason else None
+                notes.append(f'Port {wanted} is in use by {who}, so WebATEM is on port {port} this time.' if who
+                             else f'Port {wanted} was in use, so WebATEM is on port {port} this time.')
             self.host, self.port = host, port
             print(f'{APP_NAME} listening on {host}:{port}' + (' (and on 127.0.0.1)' if host not in self.ANY else ''), flush=True)
             self.startup_note = ' '.join(notes) or None

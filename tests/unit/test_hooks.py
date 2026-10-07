@@ -357,3 +357,25 @@ def test_no_idle_disconnect_by_default():
         def idle_disconnect_seconds(self):
             return 42
     assert Impatient().idle_disconnect_seconds() == 42
+
+
+@pytest.mark.django_db
+def test_on_your_network_is_the_network_the_page_came_in_on(client, settings, monkeypatch):
+    """Lucas, 2026-10-07: "On your network (10.20.21.0/24)" with
+    192.168.81.54 chosen. The label was the route to the internet (the
+    Wi-Fi); it is now the network of the address the page was opened
+    through, when that is one of this machine's."""
+    from types import SimpleNamespace
+    import ifaddr
+    from atem_control import discovery
+    settings.WEBATEM_HOOKS = None
+    hooks.reset()
+    adapters = [SimpleNamespace(nice_name='en0', ips=[SimpleNamespace(ip='10.20.21.7', network_prefix=24)]),
+                SimpleNamespace(nice_name='en11', ips=[SimpleNamespace(ip='192.168.81.54', network_prefix=21)])]
+    monkeypatch.setattr(ifaddr, 'get_adapters', lambda: adapters)
+    monkeypatch.setattr(discovery, '_primary_ipv4', lambda: '10.20.21.7')
+    monkeypatch.setattr(discovery, 'ensure_mdns_started', lambda: True)
+    assert client.get('/atem/api/discovered/', SERVER_NAME='192.168.81.54').json()['subnet'] == '192.168.80.0/21'
+    assert client.get('/atem/api/discovered/', SERVER_NAME='127.0.0.1').json()['subnet'] == '10.20.21.0/24'
+    assert client.get('/atem/api/discovered/', SERVER_NAME='203.0.113.9').json()['subnet'] == '10.20.21.0/24'  # not ours
+    hooks.reset()

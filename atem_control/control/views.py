@@ -174,7 +174,9 @@ def atem_discovered(request):
         # This host's own /24 — the page auto-sweeps it (plus any subnet
         # mDNS spots an ATEM on) so discovery works even where multicast
         # is blocked.
-        'subnet': discovery.local_subnet(),
+        # The network of the address this page came in on (the launcher's
+        # chosen interface), not the machine's route to the internet.
+        'subnet': discovery.local_subnet(prefer=request.META.get('SERVER_NAME')),
     })
 
 
