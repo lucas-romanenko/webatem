@@ -7,6 +7,7 @@ reads and writes it; with a controller the change restarts the server on
 the new address, without one it is saved with a note. The supervisor test
 runs a real uvicorn on loopback and moves it to another port.
 """
+import errno
 import json
 import socket
 import threading
@@ -471,3 +472,43 @@ def test_the_launcher_page_keeps_its_interface_list_current(client, data_dir):
     # <select> after the pick and froze the list overnight (1.7.2/1.7.3)
     assert '!using(hostSel, hostTouched)' in page and '!using(portInp, portTouched)' in page and 'TOUCH_MS = 10000' in page
     assert "hostSel.blur()" in page and "window.addEventListener('focus', load)" in page
+
+
+def test_a_port_someone_listens_on_is_taken_whatever_address_they_bound(monkeypatch):
+    """Lucas, 2026-10-07: on macOS WebATEM bound 192.168.81.54:8000 while
+    another program listened on 8000 for every address (the OS allows that
+    pairing), and it could not reach a switcher until moved to 8080. The
+    port is now asked before it is bound."""
+    from webatem import launcher
+    other = socket.socket()
+    other.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    other.bind(('127.0.0.1', 0)); other.listen(64)          # never accepts: room for every probe
+    taken = other.getsockname()[1]
+    try:
+        monkeypatch.setattr(launcher, '_listener_name', lambda port: 'Companion' if port == taken else None)
+        assert launcher._port_taken('192.168.81.54', taken) == 'Companion'
+        assert launcher._port_taken('0.0.0.0', taken) == 'Companion'
+        assert launcher._port_taken('0.0.0.0', _free_port()) is None
+        bound = []
+        monkeypatch.setattr(launcher, '_bind', lambda host, port: bound.append((host, port)))
+        with pytest.raises(OSError) as refused:
+            launcher._Supervisor(_tiny_app, '192.168.81.54', taken)._listen('192.168.81.54', taken)
+        assert refused.value.errno == errno.EADDRINUSE and 'in use by Companion' in str(refused.value)
+        assert bound == []                                   # never bound beside it
+    finally:
+        other.close()
+
+
+def test_the_startup_note_names_who_has_the_port(monkeypatch):
+    from webatem import launcher
+    wanted = _free_port()
+    monkeypatch.setattr(launcher, '_port_taken', lambda host, port: 'Companion' if port == wanted else None)
+    sup = launcher._Supervisor(_tiny_app, '127.0.0.1', wanted)
+    sup.start()
+    try:
+        assert sup.ready.wait(30)
+        assert sup.port == wanted + 1 and _answers(sup.port)
+        assert sup.startup_note == f'Port {wanted} is in use by Companion, so WebATEM is on port {wanted + 1} this time.'
+    finally:
+        sup.stop()
+        sup.join(20)

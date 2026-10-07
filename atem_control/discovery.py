@@ -217,15 +217,42 @@ def _iface_netmask(ifname: str) -> str | None:
         s.close()
 
 
-def local_network():
+def _own_prefix(ip):
+    """The network prefix of ``ip`` if it is one of this machine's IPv4
+    addresses (ifaddr: every OS), else None."""
+    try:
+        import ifaddr
+        for adapter in ifaddr.get_adapters():
+            for a in adapter.ips:
+                if a.ip == ip:
+                    return a.network_prefix
+    except Exception:  # noqa: BLE001 — no ifaddr, or the OS refused
+        pass
+    return None
+
+
+def local_network(prefer=None):
     """The host's own IPv4 network as an ``ipaddress.IPv4Network`` using
     the interface's REAL prefix (a /22 studio VLAN is one network, not
     four /24s). Falls back to the /24 of the primary IP if the mask can't
-    be read. None if no address is found."""
+    be read. None if no address is found.
+
+    ``prefer``: the address the Connect page was opened through, when it is
+    one of this machine's. With an interface chosen in the launcher that is
+    the AV network, while the primary IP (the route to the internet) is
+    often the Wi-Fi: Lucas, 2026-10-07, "On your network (10.20.21.0/24)"
+    with 192.168.81.54 chosen."""
     import ipaddress
+    if prefer and not str(prefer).startswith('127.'):
+        prefix = _own_prefix(prefer)
+        if prefix:
+            return ipaddress.IPv4Network(f'{prefer}/{prefix}', strict=False)
     ip = _primary_ipv4()
     if not ip:
         return None
+    prefix = _own_prefix(ip)
+    if prefix:
+        return ipaddress.IPv4Network(f'{ip}/{prefix}', strict=False)
     # Find the interface that carries this address and read its mask.
     try:
         for _idx, name in socket.if_nameindex():
@@ -248,10 +275,11 @@ def local_network():
     return ipaddress.IPv4Network(f'{ip}/24', strict=False)
 
 
-def local_subnet() -> str | None:
+def local_subnet(prefer=None) -> str | None:
     """Display label for the host's own subnet, e.g. ``'192.168.0.0/22'``
-    (or the /24 prefix string on fallback). Used by the Connect page."""
-    net = local_network()
+    (or the /24 prefix string on fallback). Used by the Connect page; see
+    ``local_network`` for ``prefer``."""
+    net = local_network(prefer)
     return str(net) if net else None
 
 
