@@ -6,6 +6,7 @@ needs no .env file. See .env.example for the knobs.
 import mimetypes
 import os
 import secrets
+import warnings
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -140,14 +141,24 @@ TIME_FORMAT_24HR = _env_bool('TIME_FORMAT_24HR', True)
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# WhiteNoise hands Django a synchronous file iterator, which Django's ASGI
+# handler then reads in a thread, and it says so once per process with a
+# Warning. Harmless for static files this size (the CSS, fonts and scripts
+# all answer 200); silenced by its exact text so the log shows what matters.
+warnings.filterwarnings('ignore', message='StreamingHttpResponse must consume synchronous iterators')
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
     'formatters': {
         'default': {'format': '{asctime} {levelname} {name}: {message}', 'style': '{'},
     },
+    # A client that hung up mid-request is not an error (webatem.applog).
+    'filters': {
+        'client_gone': {'()': 'webatem.applog.DropClientGone'},
+    },
     'handlers': {
-        'console': {'class': 'logging.StreamHandler', 'formatter': 'default'},
+        'console': {'class': 'logging.StreamHandler', 'formatter': 'default', 'filters': ['client_gone']},
     },
     'root': {'handlers': ['console'], 'level': os.getenv('LOG_LEVEL', 'INFO')},
 }

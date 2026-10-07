@@ -693,8 +693,12 @@ def _window_process(url: str, hidden: bool = False) -> None:
         deadline = time.time() + 300
         while time.time() < deadline:
             try:
-                with urllib.request.urlopen(url, timeout=1) as r:
+                # Wait for the whole answer: the first render after a start
+                # can take longer than a second on a Mac, and hanging up on
+                # it made Django cancel the request and log a traceback.
+                with urllib.request.urlopen(url, timeout=10) as r:
                     if r.status == 200:
+                        r.read()
                         break
             except Exception:  # noqa: BLE001 — not up yet
                 pass
