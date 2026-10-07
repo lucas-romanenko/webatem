@@ -142,3 +142,18 @@ def test_the_settings_wire_the_quieting_in(tmp_path):
 def test_the_window_waits_for_its_page_instead_of_hanging_up():
     src = (ROOT / 'webatem/launcher.py').read_text()
     assert 'urlopen(url, timeout=10)' in src and 'r.read()' in src and 'urlopen(url, timeout=1)' not in src
+
+
+def test_the_windows_status_refresh_does_not_fill_the_log():
+    """Lucas's 1.7.7 log: a "GET /server/settings/" line every 4-5 s from the
+    launcher window's refresh. Only that line is dropped."""
+    f = applog.DropStatusPolls()
+
+    def access(method, path, status):
+        return logging.LogRecord('uvicorn.access', logging.INFO, __file__, 1, '%s - "%s %s HTTP/%s" %d',
+                                 ('127.0.0.1:55310', method, path, '1.1', status), None)
+    assert f.filter(access('GET', '/server/settings/', 200)) is False
+    assert f.filter(access('POST', '/server/settings/', 200)) is True       # a change the user made
+    assert f.filter(access('GET', '/server/settings/', 500)) is True        # a failure
+    assert f.filter(access('GET', '/atem/', 200)) is True                   # a browser on WebATEM
+    assert f.filter(logging.LogRecord('uvicorn.access', logging.INFO, __file__, 1, 'plain', None, None)) is True
