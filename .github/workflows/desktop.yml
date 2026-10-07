@@ -116,7 +116,9 @@ jobs:
             macOS)   APP="dist/WebATEM.app/Contents/MacOS/webatem" ;;
             *)       APP="dist/webatem" ;;
           esac
-          DATA_DIR="$PWD/smoke" WEBATEM_NO_TRAY=1 WEBATEM_NO_BROWSER=1 HOST=127.0.0.1 PORT=8899 \
+          # Windows: the app gets a Windows-form path, or it would log elsewhere.
+          SMOKE_DATA="$(cygpath -m "$PWD/smoke" 2>/dev/null || echo "$PWD/smoke")"
+          DATA_DIR="$SMOKE_DATA" WEBATEM_NO_TRAY=1 WEBATEM_NO_BROWSER=1 HOST=127.0.0.1 PORT=8899 \
             "$APP" > smoke/stdout.txt 2>&1 &
           APP_PID=$!
           ok=
@@ -130,6 +132,12 @@ jobs:
           kill "$APP_PID" 2>/dev/null || true
           [ -n "$ok" ] || { echo "::error::the frozen build never served /atem/"; exit 1; }
           echo "the frozen build serves /atem/"
+          # Every build keeps webatem.log in its data folder (1.7.6; before,
+          # only a Windows build with no stdout did, so this always said
+          # "(none)"). With the page served, the log has said so.
+          grep -q "WebATEM listening on 127.0.0.1:8899" smoke/webatem.log 2>/dev/null \
+            || { echo "::error::the frozen build wrote no webatem.log in its data folder"; exit 1; }
+          echo "and it logs to webatem.log"
 
       # 6b'. The frozen build reaches GitHub over HTTPS, as a user's would.
       #      1.7.0's Mac app could not (CERTIFICATE_VERIFY_FAILED: a frozen
