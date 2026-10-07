@@ -271,14 +271,14 @@ def test_a_session_is_named_by_the_switcher_when_the_host_knows_none(settings, h
     still wins when it has one."""
     from types import SimpleNamespace
     from atem_control.control.consumer import ATEMConsumer
-    mx = {'device-identity': SimpleNamespace(name=b'BC 2.2 - TESTTt' + b'\x00' * 49)}
+    mx = {'device-identity': SimpleNamespace(name=b'Studio B' + b'\x00' * 49)}
     lookup = ATEMConsumer._lookup_equipment_name
     assert lookup('10.1.1.1', mx) == 'Host Room 1'                  # the host's inventory first
-    assert lookup('10.9.9.9', mx) == 'BC 2.2 - TESTTt'              # then the switcher's own name
+    assert lookup('10.9.9.9', mx) == 'Studio B'              # then the switcher's own name
     assert lookup('10.9.9.9', {}) is None                           # firmware without WhoI: nothing
     settings.WEBATEM_HOOKS = None
     hooks.reset()
-    assert lookup('192.168.81.86', mx) == 'BC 2.2 - TESTTt'         # standalone, no mDNS in reach
+    assert lookup('192.168.1.242', mx) == 'Studio B'         # standalone, no mDNS in reach
 
 
 def test_default_still_check_refuses_a_decompression_bomb(tmp_path):
@@ -361,8 +361,8 @@ def test_no_idle_disconnect_by_default():
 
 @pytest.mark.django_db
 def test_on_your_network_is_the_network_the_page_came_in_on(client, settings, monkeypatch):
-    """Lucas, 2026-10-07: "On your network (10.20.21.0/24)" with
-    192.168.81.54 chosen. The label was the route to the internet (the
+    """Lucas, 2026-10-07: "On your network" named the Wi-Fi with an
+    AV-network interface chosen. The label was the route to the internet (the
     Wi-Fi); it is now the network of the address the page was opened
     through, when that is one of this machine's."""
     from types import SimpleNamespace
@@ -370,12 +370,12 @@ def test_on_your_network_is_the_network_the_page_came_in_on(client, settings, mo
     from atem_control import discovery
     settings.WEBATEM_HOOKS = None
     hooks.reset()
-    adapters = [SimpleNamespace(nice_name='en0', ips=[SimpleNamespace(ip='10.20.21.7', network_prefix=24)]),
-                SimpleNamespace(nice_name='en11', ips=[SimpleNamespace(ip='192.168.81.54', network_prefix=21)])]
+    adapters = [SimpleNamespace(nice_name='en0', ips=[SimpleNamespace(ip='10.0.0.7', network_prefix=24)]),
+                SimpleNamespace(nice_name='en11', ips=[SimpleNamespace(ip='192.168.1.20', network_prefix=21)])]
     monkeypatch.setattr(ifaddr, 'get_adapters', lambda: adapters)
-    monkeypatch.setattr(discovery, '_primary_ipv4', lambda: '10.20.21.7')
+    monkeypatch.setattr(discovery, '_primary_ipv4', lambda: '10.0.0.7')
     monkeypatch.setattr(discovery, 'ensure_mdns_started', lambda: True)
-    assert client.get('/atem/api/discovered/', SERVER_NAME='192.168.81.54').json()['subnet'] == '192.168.80.0/21'
-    assert client.get('/atem/api/discovered/', SERVER_NAME='127.0.0.1').json()['subnet'] == '10.20.21.0/24'
-    assert client.get('/atem/api/discovered/', SERVER_NAME='203.0.113.9').json()['subnet'] == '10.20.21.0/24'  # not ours
+    assert client.get('/atem/api/discovered/', SERVER_NAME='192.168.1.20').json()['subnet'] == '192.168.0.0/21'
+    assert client.get('/atem/api/discovered/', SERVER_NAME='127.0.0.1').json()['subnet'] == '10.0.0.0/24'
+    assert client.get('/atem/api/discovered/', SERVER_NAME='203.0.113.9').json()['subnet'] == '10.0.0.0/24'  # not ours
     hooks.reset()
