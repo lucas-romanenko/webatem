@@ -105,3 +105,40 @@ def test_the_window_shows_the_log_and_uninstall_takes_every_copy(client, tmp_pat
     src = (ROOT / 'webatem/launcher.py').read_text()
     assert 'applog.start(data_dir)' in src and 'sys.stdout is None or sys.stderr is None' not in src
     assert "stderr=subprocess.PIPE" in src and "applog.relay(self._proc.stderr, '[window]')" in src
+
+
+def test_a_client_that_hung_up_is_not_logged_as_a_crash():
+    """Lucas's first 1.7.6 log opened with a CancelledError traceback: asyncio
+    reporting that a client went away mid-request. Dropped; every other
+    asyncio record still logs."""
+    f = applog.DropClientGone()
+
+    def record(name, msg):
+        return logging.LogRecord(name, logging.ERROR, __file__, 1, msg, None, None)
+    assert f.filter(record('asyncio', 'CancelledError exception in shielded future')) is False
+    assert f.filter(record('asyncio', 'Task exception was never retrieved')) is True     # a real one
+    assert f.filter(record('django.request', 'CancelledError exception in shielded future')) is True
+
+
+def test_the_settings_wire_the_quieting_in(tmp_path):
+    """In a process of its own, as the app runs: pytest manages warning
+    filters itself during a test, so the settings' filter is checked where
+    it actually applies."""
+    import os
+    import subprocess
+    from django.conf import settings
+    assert settings.LOGGING['filters']['client_gone']['()'] == 'webatem.applog.DropClientGone'
+    assert 'client_gone' in settings.LOGGING['handlers']['console']['filters']
+    probe = ("import os, warnings, django; os.environ['DJANGO_SETTINGS_MODULE'] = 'webatem.settings'; "
+             "django.setup(); warnings.warn('StreamingHttpResponse must consume synchronous iterators in "
+             "order to serve them asynchronously. Use an asynchronous iterator instead.', Warning); "
+             "warnings.warn('some other warning', Warning)")
+    env = dict(os.environ, DATA_DIR=str(tmp_path))
+    out = subprocess.run([sys.executable, '-c', probe], capture_output=True, text=True, env=env, cwd=str(ROOT))
+    assert 'StreamingHttpResponse' not in out.stderr          # silenced, by its exact text
+    assert 'some other warning' in out.stderr                 # and nothing else
+
+
+def test_the_window_waits_for_its_page_instead_of_hanging_up():
+    src = (ROOT / 'webatem/launcher.py').read_text()
+    assert 'urlopen(url, timeout=10)' in src and 'r.read()' in src and 'urlopen(url, timeout=1)' not in src
