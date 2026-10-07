@@ -215,7 +215,7 @@ Keep it up with a systemd unit, `tmux` or `nohup`.
 ### Option C. pipx  *(you already have Python 3.10+)*
 
 ```bash
-pipx install "webatem[desktop]"      # or: uvx --from "webatem[desktop]" webatem, with no install at all
+pipx install "webatem[desktop]"      # or, with uv: uvx --from "webatem[desktop]" webatem
 webatem
 ```
 
