@@ -48,6 +48,24 @@ class DropClientGone(logging.Filter):
                     and record.getMessage().startswith('CancelledError exception in shielded future'))
 
 
+class DropStatusPolls(logging.Filter):
+    """Drop uvicorn's request line for a successful ``GET /server/settings/``:
+    the launcher window re-reads it every few seconds to keep its address,
+    interfaces and update line current, and those lines (one every 4-5 s)
+    filled webatem.log and pushed out everything else (Lucas's 1.7.7 log,
+    2026-10-07). On the logger, not a server: uvicorn's servers in one
+    process share it, so a per-server switch cannot exist. A change (POST),
+    a failure and every other request still log."""
+
+    def filter(self, record):
+        args = record.args if isinstance(record.args, tuple) else ()
+        if len(args) == 5:
+            _client, method, path, _version, status = args
+            if method == 'GET' and str(path).startswith('/server/settings/') and status == 200:
+                return False
+        return True
+
+
 class _Tee:
     """A text stream: writes go to the console as before (when there is
     one) and, a whole line at a time, into the rotating log file."""
@@ -120,6 +138,9 @@ def start(data_dir) -> Path:
     lock = threading.Lock()
     sys.stdout = _Tee(sys.stdout, handler, lock)
     sys.stderr = _Tee(sys.stderr, handler, lock)
+    # On the logger itself: uvicorn reconfigures its handlers at every server
+    # start, and a logger's filters survive that.
+    logging.getLogger('uvicorn.access').addFilter(DropStatusPolls())
     try:
         import faulthandler
         faulthandler.enable(file=open(data_dir / CRASH_NAME, 'a'), all_threads=True)
