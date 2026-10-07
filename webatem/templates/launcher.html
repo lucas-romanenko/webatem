@@ -114,6 +114,12 @@
   var minim = el('lwMinimized'), auto = el('lwAutostart'), autoRow = el('lwAutoRow');
   var note = el('lwNote'), status = el('lwStatus');
   var current = null, native = false, pollTimer = null, lastIfaces = '';
+  // "The user is choosing" is focus PLUS a touch in the last 10 s. Focus
+  // alone stays on a <select> after the pick, for hours: 1.7.2's guard read
+  // that as choosing and froze the list (Lucas, 2026-10-07: home last
+  // night, at work this morning, and no work interfaces until a restart).
+  var hostTouched = 0, portTouched = 0, TOUCH_MS = 10000;
+  function using(field, touched) { return document.activeElement === field && Date.now() - touched < TOUCH_MS; }
   function schedule(ms) { clearTimeout(pollTimer); pollTimer = setTimeout(load, ms); }
 
   function csrf() { var m = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/); return m ? m[1] : ''; }
@@ -133,7 +139,7 @@
     // a list read at start). Rebuilt only when it changed, and never while
     // the user is choosing from it.
     var sig = JSON.stringify([d.interfaces || [], d.host, d.source]);
-    if (sig !== lastIfaces && document.activeElement !== hostSel) {
+    if (sig !== lastIfaces && !using(hostSel, hostTouched)) {
       lastIfaces = sig;
       hostSel.innerHTML = '';
       var ph = opt('', 'Change network interface…'); ph.disabled = true; hostSel.appendChild(ph);
@@ -147,7 +153,7 @@
       var known = d.host === '0.0.0.0' || (d.interfaces || []).some(function (e) { return e.ip === d.host; });
       hostSel.value = (d.source === 'default' || !d.host || !known) ? '' : d.host;
     }
-    if (document.activeElement !== portInp) portInp.value = d.port;
+    if (!using(portInp, portTouched)) portInp.value = d.port;
     minim.checked = !!d.start_minimized;
     autoRow.hidden = !(d.autostart && d.autostart.available);
     auto.checked = !!(d.autostart && d.autostart.enabled);
@@ -213,7 +219,13 @@
     if (!current) return;
     post({ host: hostSel.value || current.host, port: parseInt(portInp.value, 10) });
   }
-  hostSel.addEventListener('change', apply);
+  ['mousedown', 'keydown', 'focus'].forEach(function (ev) {
+    hostSel.addEventListener(ev, function () { hostTouched = Date.now(); });
+  });
+  ['keydown', 'input', 'focus'].forEach(function (ev) {
+    portInp.addEventListener(ev, function () { portTouched = Date.now(); });
+  });
+  hostSel.addEventListener('change', function () { hostSel.blur(); hostTouched = 0; apply(); });
   el('lwPortApply').addEventListener('click', apply);
   portInp.addEventListener('keydown', function (e) { if (e.key === 'Enter') apply(); });
   minim.addEventListener('change', function () { if (current) post({ host: current.host, port: current.port, start_minimized: minim.checked }, function () {}); });
@@ -301,6 +313,10 @@
   // seconds, which is a list of addresses and a status, nothing heavier.
   window.webatemRefresh = load;
   setInterval(load, 4000);
+  // A hidden window's timers can be paused (overnight, asleep): read again
+  // the moment it is in front of the user.
+  window.addEventListener('focus', load);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) load(); });
   load();
 })();
 </script>
