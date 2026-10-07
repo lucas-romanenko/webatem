@@ -467,4 +467,7 @@ def test_quit_waits_until_the_window_process_is_gone():
 def test_the_launcher_page_keeps_its_interface_list_current(client, data_dir):
     page = client.get('/launcher/').content.decode()
     assert 'window.webatemRefresh = load' in page and 'setInterval(load, 4000)' in page
-    assert 'document.activeElement !== hostSel' in page and 'document.activeElement !== portInp' in page
+    # choosing = focus AND a touch in the last 10 s; focus alone stays on a
+    # <select> after the pick and froze the list overnight (1.7.2/1.7.3)
+    assert '!using(hostSel, hostTouched)' in page and '!using(portInp, portTouched)' in page and 'TOUCH_MS = 10000' in page
+    assert "hostSel.blur()" in page and "window.addEventListener('focus', load)" in page
