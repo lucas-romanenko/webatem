@@ -285,6 +285,11 @@ Linux box in the rack room, a phone at the camera position.
 - It talks raw UDP to switchers on port 9910 (the ATEM protocol has no
   authentication, which is the hardware and not this app), so it needs to be on a
   network that can reach them.
+- **Logs.** The desktop app and pipx write `webatem.log` in their data folder
+  (macOS `~/Library/Application Support/WebATEM`, Windows
+  `%LOCALAPPDATA%\WebATEM`, Linux `~/.local/share/WebATEM`). The launcher
+  window's **Show log** button opens it. It rotates at 2 MB and keeps three
+  old copies. With Docker: `docker compose logs webatem`.
 - **Single instance, by design.** The switcher connection pool, media-pool
   watcher, and channel layer are process-local; one instance handles many
   switchers and operators. Don’t run several against the same switchers.

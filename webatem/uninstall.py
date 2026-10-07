@@ -42,7 +42,8 @@ BUNDLE_ID = 'com.webatem.app'
 # files), the generated key, the listen address, the windowed build's log,
 # the collected static files, upload scratch, the running launcher's PID.
 DATA_ENTRIES = ('db.sqlite3', 'db.sqlite3-journal', 'db.sqlite3-wal', 'db.sqlite3-shm', '.secret_key',
-                'server.json', 'webatem.log', 'webatem.pid', 'staticfiles', 'uploads', 'updates')
+                'server.json', 'webatem.log', 'webatem.log.1', 'webatem.log.2', 'webatem.log.3',
+                'webatem-crash.log', 'webatem.pid', 'staticfiles', 'uploads', 'updates')
 
 # WebKit keeps the macOS launcher window's website data under the bundle id
 # (pywebview uses the default data store, private mode only clears it).
