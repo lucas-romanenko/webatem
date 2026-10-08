@@ -475,7 +475,7 @@ def test_the_launcher_page_keeps_its_interface_list_current(client, data_dir):
 
 
 def test_a_port_someone_listens_on_is_taken_whatever_address_they_bound(monkeypatch):
-    """Lucas, 2026-10-07: on macOS WebATEM bound 192.168.81.54:8000 while
+    """Lucas, 2026-10-07: on macOS WebATEM bound 192.168.1.20:8000 while
     another program listened on 8000 for every address (the OS allows that
     pairing), and it could not reach a switcher until moved to 8080. The
     port is now asked before it is bound."""
@@ -486,13 +486,13 @@ def test_a_port_someone_listens_on_is_taken_whatever_address_they_bound(monkeypa
     taken = other.getsockname()[1]
     try:
         monkeypatch.setattr(launcher, '_listener_name', lambda port: 'Companion' if port == taken else None)
-        assert launcher._port_taken('192.168.81.54', taken) == 'Companion'
+        assert launcher._port_taken('192.168.1.20', taken) == 'Companion'
         assert launcher._port_taken('0.0.0.0', taken) == 'Companion'
         assert launcher._port_taken('0.0.0.0', _free_port()) is None
         bound = []
         monkeypatch.setattr(launcher, '_bind', lambda host, port: bound.append((host, port)))
         with pytest.raises(OSError) as refused:
-            launcher._Supervisor(_tiny_app, '192.168.81.54', taken)._listen('192.168.81.54', taken)
+            launcher._Supervisor(_tiny_app, '192.168.1.20', taken)._listen('192.168.1.20', taken)
         assert refused.value.errno == errno.EADDRINUSE and 'in use by Companion' in str(refused.value)
         assert bound == []                                   # never bound beside it
     finally:

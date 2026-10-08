@@ -32,17 +32,17 @@ def _start(tmp_path, monkeypatch):
 
 def test_every_line_reaches_the_console_and_the_file(tmp_path, monkeypatch):
     path, console, armed = _start(tmp_path, monkeypatch)
-    print('WebATEM listening on 192.168.81.54:8000', flush=True)
+    print('WebATEM listening on 192.168.1.20:8000', flush=True)
     sys.stderr.write('partial ')
     sys.stderr.write('line\n')
     logging.getLogger('atemwire.pool').handlers = []
     sys.stderr.write('2026-10-07 14:03:12,345 INFO atemwire.pool: connected\n')
     sys.stdout.flush()
     text = path.read_text()
-    assert 'WebATEM listening on 192.168.81.54:8000' in console.getvalue()           # the console as before
+    assert 'WebATEM listening on 192.168.1.20:8000' in console.getvalue()           # the console as before
     lines = text.splitlines()
     assert lines[0].split(' ', 2)[2].startswith('--- WebATEM ') and 'data ' in lines[0]   # what started, where
-    assert any(l.endswith('WebATEM listening on 192.168.81.54:8000') and l[:4].isdigit() for l in lines)
+    assert any(l.endswith('WebATEM listening on 192.168.1.20:8000') and l[:4].isdigit() for l in lines)
     assert any(l.endswith(' partial line') for l in lines)                          # whole lines only
     assert '2026-10-07 14:03:12,345 INFO atemwire.pool: connected' in lines           # not stamped twice
     assert armed and armed[0]['file'].name.endswith(applog.CRASH_NAME)              # the crash log is armed
