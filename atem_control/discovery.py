@@ -240,8 +240,8 @@ def local_network(prefer=None):
     ``prefer``: the address the Connect page was opened through, when it is
     one of this machine's. With an interface chosen in the launcher that is
     the AV network, while the primary IP (the route to the internet) is
-    often the Wi-Fi: Lucas, 2026-10-07, "On your network (10.20.21.0/24)"
-    with 192.168.81.54 chosen."""
+    often the Wi-Fi: the Connect page named the Wi-Fi's network while an
+    AV-network interface was chosen (2026-10-07)."""
     import ipaddress
     if prefer and not str(prefer).startswith('127.'):
         prefix = _own_prefix(prefer)

@@ -31,7 +31,8 @@ Three ways to run it, all simple:
   login* switch), opens your browser, and your switchers appear. Like ATEM
   Software Control, but in your browser, and on every device on the network.
 - **Your whole team, always on** → **host it** on a Linux box, VM or Raspberry
-  Pi with one Docker command; everyone opens a URL. No installs, no accounts.
+  Pi with one Docker command; everyone on the network opens one address, from
+  any device. No accounts.
 - **Already have Python?** → `pipx install "webatem[desktop]"`, then `webatem`.
 
 Every way of running it **auto-discovers the ATEMs on your network**
@@ -57,8 +58,8 @@ Open the page and they are already there:
 - **Fairlight audio.** Per-strip faders, EQ, dynamics, master bus, and live
   audio meters streamed over WebSocket (tab-gated so idle pages cost nothing).
 - **Media pool.** Live thumbnails of every still slot, and drag-and-drop
-  image upload straight onto a slot (validated and resized to 1080p
-  server-side).
+  image upload straight onto a slot: any image, fitted to the switcher's own
+  video mode server-side.
 - **Macros.** Browse and run switcher macros.
 - **Save and restore switcher state.** Full switcher profile export/import as
   XML, compatible with ATEM Software Control’s “Save Switcher State”,
@@ -110,9 +111,9 @@ minute and needs no code. If you go further and fix what you found, a patch
 for a switcher I do not own is welcome on your word plus a green test suite:
 see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-One known limit while you are here: still upload and capture assume a 1080p
-switcher. Other video modes connect and control fine, but the media features
-are untested there.
+One known limit while you are here: still upload and capture follow the
+switcher's own video mode, but only 1080p switchers have been tested. If yours
+runs another mode, that report is especially welcome.
 
 ---
 
@@ -214,7 +215,7 @@ Keep it up with a systemd unit, `tmux` or `nohup`.
 ### Option C. pipx  *(you already have Python 3.10+)*
 
 ```bash
-pipx install "webatem[desktop]"      # or: uvx --from "webatem[desktop]" webatem, with no install at all
+pipx install "webatem[desktop]"      # or, with uv: uvx --from "webatem[desktop]" webatem
 webatem
 ```
 
@@ -293,8 +294,8 @@ Linux box in the rack room, a phone at the camera position.
 - **Single instance, by design.** The switcher connection pool, media-pool
   watcher, and channel layer are process-local; one instance handles many
   switchers and operators. Don’t run several against the same switchers.
-- Stills upload/capture assume **1080p** switchers (all production use so far).
-  Non-1080p ATEMs connect and control fine; media features are untested there.
+- Still upload and capture follow the switcher's own video mode; only **1080p**
+  has been tested (all production use so far).
 
 ## Architecture
 
