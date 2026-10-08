@@ -2459,13 +2459,6 @@
       _userInitiatedDisconnect: false,
       currentIP: "---.---.---.---",
       currentName: "",
-      // Live program-monitor (see atem_pgm_monitor.js). pgmStreamUrl is the
-      // room's program stream, resolved from the IP via the lookup-name
-      // API; null when this ATEM has no stream mapping (the Live PGM button
-      // hides). pgmMonitorOpen mirrors the floating panel's open state so
-      // the header button can show an active style.
-      pgmStreamUrl: null,
-      pgmMonitorOpen: false,
       statusText: "",
       // empty so the loading overlay shows
       // "Connecting…" instead of "Disconnected"
