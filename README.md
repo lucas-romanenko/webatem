@@ -85,6 +85,13 @@ behind each strip:
 <p align="center">
   <img src="docs/screenshot-audio.png" alt="WebATEM Fairlight audio mixer: 14 strips with input, EQ, dynamics, faders, pan and meters" width="900">
 </p>
+
+The **media pool**: live thumbnails of every still slot and what each media
+player is holding, with drag-and-drop upload straight onto a slot:
+
+<p align="center">
+  <img src="docs/screenshot-media-pool.png" alt="WebATEM media pool: two media players, MP1 on air with colour bars, and twenty still slots, five holding stills (bars, a lower third, a Starting soon card, a logo bug, a Back in five card)" width="900">
+</p>
 ---
 
 ## Which switchers has it run on?
