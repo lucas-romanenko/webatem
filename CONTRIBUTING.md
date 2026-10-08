@@ -54,6 +54,36 @@ push and pull request, so a red run is a real signal.
 The stylesheet is compiled: `npm run build:css` after adding a utility class,
 or it silently does not exist.
 
+## Versioning
+
+Version numbers are MAJOR.MINOR.PATCH, for example 2.1.3, and say what an
+update asks of you:
+
+- **PATCH** (2.0.1): fixes only. Nothing new to learn; safe to install any
+  time.
+- **MINOR** (2.1.0): something new, such as a setting, a button or a supported
+  platform, and nothing removed or changed in a way you would notice.
+- **MAJOR** (3.0.0): you may have to act. Something was removed, a default
+  changed (the port, say), settings or history an older version cannot read,
+  a platform dropped, or a breaking change to the hooks API
+  (`atem_control/hooks.py`) that projects hosting WebATEM build on. Within one
+  major version a host's hooks keep working.
+
+2.0.0 is the exception that starts the rules: it marks the public release,
+not a breaking change, so a host can raise its range to `<3` safely.
+
+How releases are made:
+
+- **One number is one release everywhere.** The desktop apps, the Docker image
+  and PyPI are all built from the same tag on `main`, and the number lives in
+  one place, `pyproject.toml`.
+- **A number is never reused or moved.** A release that turns out broken is
+  fixed by the next patch number, never by re-tagging.
+- **No beta tags.** Changes are proven on branch builds of all four desktop
+  platforms before they are merged and tagged.
+- **Every release has notes** written for the people installing it: what
+  changed for them, not how it was built.
+
 ## Licensing
 
 WebATEM is MIT. By opening a pull request you agree your contribution is
