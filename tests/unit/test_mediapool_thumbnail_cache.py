@@ -289,6 +289,25 @@ def test_do_download_dead_connection_requeues_without_wire():
     assert _downloads(w._work_queue) == [(W._TASK_DOWNLOAD, 0, hash_hex, 2)]
 
 
+def test_do_download_reconnect_gap_requeues_without_wire():
+    """During a transport re-handshake the worker is alive (is_connected)
+    but the state is empty (is_ready False, bmdwire >= 1.3). A download
+    sent then waits out its timeout and reads as a foreign lock-holder;
+    re-queue without touching the wire instead."""
+    w = W.MediaPoolWatcher('10.0.0.28')
+    h = b'\x7a' * 16
+    hash_hex = W.md5_hex(h)
+    w._slots[0] = {'index': 0, 'isUsed': True, 'hash': hash_hex,
+                   'fileName': 'x', 'thumb': None}
+    w._conn = _fake_conn(connected=True)
+    w._conn.is_ready = False                                 # mid re-handshake
+
+    w._do_download(0, hash_hex)
+
+    assert w._conn._calls == []
+    assert _downloads(w._work_queue) == [(W._TASK_DOWNLOAD, 0, hash_hex, 2)]
+
+
 def test_do_download_never_gives_up_while_needed(monkeypatch):
     """There is NO terminal attempt (changed 2026-07-03): while the slot
     still needs its thumb the task re-queues forever — a foreign client

@@ -1099,7 +1099,9 @@ class MediaPoolWatcher:
         raw_ycbcr = None
         failure: Optional[str] = None
         download_started = time.monotonic()
-        if conn is None or not conn.is_connected:
+        # is_ready (bmdwire >= 1.3) is also False through a transport
+        # re-handshake, when is_connected stays True over an empty state.
+        if conn is None or not getattr(conn, 'is_ready', conn.is_connected):
             failure = 'pooled connection not ready'
         else:
             try:
