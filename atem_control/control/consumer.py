@@ -134,10 +134,12 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
         # is sent to the ATEM exactly on the 0↔1 transitions.
         self._audio_subscribed = False
         self._meter_handler_ids: list = []
-        # The AtemProtocol object the meter handlers were registered on —
-        # a pooled re-handshake builds a NEW protocol (and a NEW ATEM
-        # session that never got SFLN), so identity change means the
-        # meters must re-arm.
+        # The AtemProtocol object the meter handlers were registered on.
+        # A transport re-handshake keeps it (and starts a new switcher
+        # session that has not had SFLN): the 'connected' handler re-arms
+        # for that. Only a fresh connect() on this connection, after its
+        # worker died, builds a new protocol; the poll loop's identity
+        # check re-registers the handlers on it.
         self._meter_protocol = None
         self._meter_loop = None
         self._meter_batch_strips: dict = {}  # strip_id → latest payload this tick
@@ -649,8 +651,10 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
             # SYN handshakes after a cable yank, so ``is_connected`` stays
             # True for a while even with no live ATEM). The real signal is
             # ``build_full_state`` returning ``is_connected: False``, which
-            # fires when atemwire's protocol layer cleared mixerstate after
-            # giving up on the failed reconnects.
+            # fires when atemwire's protocol layer clears mixerstate: 5 s
+            # after the switcher's last packet, when the transport starts
+            # re-handshaking (and keeps at it). Since bmdwire 1.4.0 that
+            # holds even while this side keeps sending (bmdwire#11).
             #
             # Starts at ``None`` (unknown). The first observation seeds it
             # without firing a notification — otherwise the first poll
@@ -674,9 +678,11 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
                         await self._auto_disconnect_inactive()
                         break
 
-                # Meters must survive a pooled in-place reconnect
-                # (new protocol object + new ATEM session) — cheap
-                # identity check, no-op when nothing changed.
+                # Meters must survive a connection that built a new
+                # protocol object (a fresh connect() after the worker
+                # died). Cheap identity check, a no-op when nothing
+                # changed. A transport re-handshake keeps the protocol
+                # and is re-armed by the 'connected' handler instead.
                 self._rearm_audio_meters_if_reconnected()
 
                 # Get current state
@@ -685,8 +691,8 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
                 t_build = time.monotonic() - t0
 
                 # ATEM-side reachability transition: atemwire's protocol clears
-                # mixerstate when it gives up on reconnects, which makes
-                # build_full_state return ``{'is_connected': False}``.
+                # mixerstate when the transport starts re-handshaking, which
+                # makes build_full_state return ``{'is_connected': False}``.
                 # Treat that as "ATEM dropped mid-session" and notify the
                 # frontend so the disconnect banner
                 # appears. Without this, the worker keeps retrying SYN
@@ -982,6 +988,13 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
                           self._on_master_meter)
         self._meter_handler_ids.append(('change:fairlight-master-levels', mid))
 
+        # A new switcher session (the transport re-handshaking after a
+        # silence) has not had SFLN, so it streams no meters until it
+        # gets one. It keeps this protocol object, so the identity check
+        # can't see it: re-arm on the session's 'connected' event.
+        cid = protocol.on('connected', self._on_session_connected)
+        self._meter_handler_ids.append(('connected', cid))
+
         # Per-IP subscriber refcount. First subscriber tells the ATEM to
         # start streaming meters — without SFLN(True) the ATEM emits zero
         # FMLv/FDLv packets even with handlers registered.
@@ -999,14 +1012,17 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
         self._meter_protocol = protocol
 
     def _rearm_audio_meters_if_reconnected(self):
-        """A pooled re-handshake builds a NEW AtemProtocol and a NEW
-        ATEM session — the meter handlers were registered on the old
-        object and the new session never received SFLN(enable), so the
-        meters froze at the old levels (looking live) until every
-        subscriber unsubscribed. Detect the protocol identity change from
-        the poll loop and re-arm: re-register the handlers on the new
-        protocol and re-send the enable (idempotent on the ATEM; the
-        per-IP refcount is untouched — this consumer never unsubscribed)."""
+        """Re-arm the meters on a NEW AtemProtocol. A transport
+        re-handshake does not build one: it keeps the protocol and is
+        re-armed by ``_on_session_connected``. Only a fresh ``connect()``
+        on this connection after its worker died does, and then the meter
+        handlers are still on the old object and the new session never
+        received SFLN(enable), so the meters would freeze at the old
+        levels (looking live) until every subscriber unsubscribed. Detect
+        the protocol identity change from the poll loop and re-arm:
+        re-register the handlers on the new protocol and re-send the
+        enable (idempotent on the ATEM; the per-IP refcount is untouched,
+        since this consumer never unsubscribed)."""
         if not self._audio_subscribed:
             return
         protocol = getattr(self.connection, 'protocol', None) if self.connection else None
@@ -1019,11 +1035,30 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
         self._meter_handler_ids.append(('change:fairlight-meter-levels', sid))
         mid = protocol.on('change:fairlight-master-levels', self._on_master_meter)
         self._meter_handler_ids.append(('change:fairlight-master-levels', mid))
+        cid = protocol.on('connected', self._on_session_connected)
+        self._meter_handler_ids.append(('connected', cid))
         self._meter_protocol = protocol
         try:
             enable_fairlight_levels(self.connection, enable=True)
         except Exception as e:
             logger.warning(f"SFLN re-arm failed: {e}")
+
+    def _on_session_connected(self):
+        """Handler for the protocol's 'connected' event, which fires when
+        a new switcher session's state dump is complete: after a transport
+        re-handshake on the same protocol object (webatem#38). That session
+        has not had SFLN, so re-send it. Runs on the connection's worker
+        thread; ``ATEMConnection.send`` is thread-safe. Every subscribed
+        consumer sends one, which is idempotent on the switcher; the
+        per-IP refcount only gates the 0→1 send at subscribe time, so with
+        two tabs open a re-subscribe alone would send nothing."""
+        if not self._audio_subscribed or self.connection is None:
+            return
+        logger.info(f"Re-arming audio meters for the new switcher session ({self.current_ip})")
+        try:
+            enable_fairlight_levels(self.connection, enable=True)
+        except Exception as e:
+            logger.warning(f"SFLN re-arm after reconnect failed: {e}")
 
     def _unsubscribe_audio_meters(self):
         """Idempotent. Unregister per-consumer meter listeners and
