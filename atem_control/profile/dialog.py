@@ -259,8 +259,9 @@ def describe_save_sections(atem) -> dict:
         {'id': 'media_pool', 'label': 'Media Pool',
          'group': 'media',
          'supported': True, 'checked': True,
-         'reason': ('Slot listing + the used slots’ images '
-                    '(capturing takes ~5–10 s per image).')},
+         'reason': ('Slot listing + the used slots’ images (a still '
+                    'the media pool has shown is already here; any '
+                    'other takes about 2 s to download).')},
         {'id': 'media_players', 'label': 'Media Players (1-2)',
          'group': 'media',
          'supported': True, 'checked': True},

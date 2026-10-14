@@ -91,6 +91,9 @@ def test_defaults_are_standalone(settings):
     assert h.switchers() == [] and h.hyperdeck_names() == {} and h.discovery_enabled() is True
     assert h.record_video_mode('1.2.3.4', '1080p25') is None and h.hyperdeck_binding_diff(None, '1.2.3.4') is None
     assert h.time_format_24h() is True and h.template_context(None) == {}
+    from atem_control import storage
+    assert h.still_cache_dir() == storage.STILL_CACHE_DIR                # data folder/still-cache
+    assert h.still_cache_max_bytes() == 1 << 30 and h.still_cache_max_age_days() == 7
     hooks.reset()
 
 
