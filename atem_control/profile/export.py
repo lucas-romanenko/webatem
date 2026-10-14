@@ -31,6 +31,7 @@ from atemwire import ATEM, Profile
 from atemwire.profile import SaveOptions, download_media_pool_images
 from atemwire.messages.media import mediaplayer_slot_info
 
+from atem_control.media_pool import still_cache
 from atem_control.media_pool import watcher as _media_pool_service
 from atem_control.profile.dialog import (
     me_options_from_sections, section_value,
@@ -232,14 +233,15 @@ def export_profile_zip(
     All other exceptions propagate uncaught (HTTP 500 territory).
     """
 
-    # Per-request hash dedupe (see ``_cache_get`` / ``_cache_put`` below).
-    # ATEMs frequently end up with multiple slots holding identical content
-    # (e.g. operator drag-dropped the same image to slots 1-20). Without
-    # this, ``download_media_pool_images`` would do 20 round-trips for
-    # 20 slots even though their MPfe hashes match. With it, the second
-    # through twentieth slots hit ``_cache_get`` and reuse the bytes
-    # from the first download — turning ~60 s into ~6 s for the
-    # 20-slot-2-unique case.
+    # Stills by content hash, two deep (see ``_cache_get`` / ``_cache_put``
+    # below). First the still cache on disk (media_pool/still_cache.py):
+    # the watcher keeps every still it downloads there, an upload seeds the
+    # picture it sent, and an earlier save leaves what it fetched, so a
+    # still any of them has seen is no download here at all, ATEM Software
+    # Control's way (it saves the stills it downloaded on connecting). Then
+    # this request's own dedupe: slots holding the same picture share one
+    # download and one bytes object, which the ZIP below dedupes on. Each
+    # fresh download costs ~1.8 s on the wire (the switcher's pace).
     _hash_dedupe: dict[str, bytes] = {}
 
     # Sidechannel: ``download_media_pool_images``'s ``progress_callback``
@@ -252,12 +254,17 @@ def export_profile_zip(
 
     def _cache_get(slot: int, hash_hex: str):
         val = _hash_dedupe.get(hash_hex)
+        if val is None:
+            val = still_cache.get(hash_hex)
+            if val is not None:
+                _hash_dedupe[hash_hex] = val
         _last_from_cache['value'] = val is not None
         return val
 
     def _cache_put(slot: int, hash_hex: str, png_bytes: bytes) -> None:
         _last_from_cache['value'] = False
         _hash_dedupe[hash_hex] = png_bytes
+        still_cache.put(hash_hex, png_bytes)
 
     # Watcher quiet-down for the ENTIRE save. The MediaPoolWatcher's
     # thumbnail downloads compete with our file-transfer activity at the
@@ -291,12 +298,12 @@ def export_profile_zip(
             atem_name = atem.product_name or 'ATEM'
 
             if save_opts.media_pool_images and not legacy_get:
-                # Captures all used slots via native interleaved
-                # transfers on the pooled connection — ~2 s per fresh
+                # Captures all used slots: a still the still cache keeps
+                # is read from disk; the rest come by native interleaved
+                # transfers on the pooled connection — ~1.8 s per fresh
                 # slot, and operators sharing the connection stay live
                 # throughout (no exclusive_access freeze; ASC-style
-                # step 3). Cache hits via the per-request hash dedupe
-                # are sub-millisecond. Progress fans out via
+                # step 3). Progress fans out via
                 # ``progress_callback``; cancel is checked at every
                 # slot boundary inside ``download_media_pool_images``.
                 #
@@ -307,7 +314,7 @@ def export_profile_zip(
                 # Emit an initial 0/N progress so the bar appears at 0%
                 # the moment the busy state shows in the dialog. Without
                 # this the bar is hidden until the first slot finishes
-                # (~5–10 s later) — confusing because the cancel button
+                # (seconds later) — confusing because the cancel button
                 # and "capturing" status both appear immediately and
                 # the missing bar reads like "is it actually working?".
                 files = mx.get('mediaplayer-file-info', {}) or {}

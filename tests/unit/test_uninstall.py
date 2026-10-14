@@ -38,6 +38,8 @@ def _used(data: Path):
         (data / name).write_text('x')
     (data / 'staticfiles').mkdir()
     (data / 'staticfiles' / 'app.css').write_text('x')
+    (data / 'still-cache').mkdir()
+    (data / 'still-cache' / f"{'ab' * 16}.png").write_text('x')
 
 
 def _mac_bundle(at: Path, bundle_id=uninstall.BUNDLE_ID) -> Path:

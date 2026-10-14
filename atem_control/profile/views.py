@@ -141,8 +141,10 @@ def profile_save(request):
                                      single transport). Otherwise returns
                                      the XML inline.
 
-                                     During media-pool capture (5–10 s per
-                                     slot), per-slot progress is fanned
+                                     During media-pool capture (a still the
+                                     still cache keeps is read from disk,
+                                     any other ~1.8 s to download), per-slot
+                                     progress is fanned
                                      out over the per-IP Channels group as
                                      ``profile.capture_progress`` so the
                                      save dialog can render a progress bar
