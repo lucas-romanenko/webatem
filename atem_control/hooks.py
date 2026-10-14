@@ -179,6 +179,29 @@ class Hooks:
         media_pool_views.start_in_process_upload(ip, slot, file_path, job_dir)
         return True, None
 
+    # ---- the media pool's stills -----------------------------------------
+    def still_cache_dir(self):
+        """Where the media pool's stills are kept at full size, one PNG per
+        picture, named by the MD5 the switcher reports for it
+        (``media_pool.still_cache``). A profile save takes a still from here
+        instead of downloading it again, and a slot's preview is made from it
+        without a transfer. A ``pathlib.Path`` (created when first needed),
+        or None to keep nothing. Default: ``still-cache`` in the data
+        folder."""
+        from atem_control.storage import STILL_CACHE_DIR
+        return STILL_CACHE_DIR
+
+    def still_cache_max_bytes(self) -> int:
+        """The most the still cache holds; past it, the least recently used
+        stills go first. Default: 1 GiB, about 300 1080p stills."""
+        return 1 << 30
+
+    def still_cache_max_age_days(self):
+        """A still that no switcher has shown and no save has used for this
+        many days is deleted; None keeps stills until the size cap needs the
+        room. Default: 7."""
+        return 7
+
     # ---- presentation ---------------------------------------------------
     def time_format_24h(self) -> bool:
         return True
