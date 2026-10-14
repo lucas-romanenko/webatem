@@ -14,6 +14,7 @@ responses.
 import json
 import logging
 import os
+import shutil
 import tempfile
 
 from asgiref.sync import async_to_sync
@@ -41,6 +42,23 @@ from atem_control.hooks import access_required
 from atem_control.netutil import is_valid_ip
 
 logger = logging.getLogger(__name__)
+
+
+def _slot_image_path(tmpdir: str, wanted: dict, filename: str) -> str:
+    """Where a slot's picture is written for the uploader: a folder of the
+    slot's own, the file named after the slot's name in the XML. The
+    uploader names a slot after its file, so a picture the save had to file
+    as ``Background_2.png`` (another picture had the name) comes back named
+    ``Background``, and slots sharing one file each get their own copy. The
+    name comes from the uploaded XML: path separators and NULs are taken
+    out, so it can't leave the slot's folder."""
+    ext = os.path.splitext(filename)[1] or '.png'
+    stem = (wanted.get('name') or '').strip() or os.path.splitext(filename)[0]
+    stem = ''.join('_' if c in '/\\\0' else c for c in stem) or f"Slot{wanted['slot']}"
+    folder = os.path.join(tmpdir, str(int(wanted['slot'])))
+    os.makedirs(folder, exist_ok=True)
+    return os.path.join(folder, stem + ext)
+
 
 # A profile XML is small (images are separate uploads); cap the read so a huge
 # upload can't be slurped whole into memory and OOM the single ASGI worker.
@@ -380,24 +398,28 @@ def profile_load(request):
         if wanted:
             tmpdir = tempfile.mkdtemp(prefix='atem-profile-load-')
             items = []
+            used = set()
             try:
                 for w in wanted:
                     fn = (w.get('filename') or '').strip()
                     if not fn:
                         continue
-                    fobj = uploaded.pop(fn.lower(), None)
+                    # Several slots may name one file (the same picture
+                    # under the same name): each gets it.
+                    fobj = uploaded.get(fn.lower())
                     if fobj is None:
                         image_report['missing'].append(fn)
                         continue
-                    path = os.path.join(tmpdir, fn)
+                    used.add(fn.lower())
+                    path = _slot_image_path(tmpdir, w, fn)
                     with open(path, 'wb') as fp:
-                        for chunk in fobj.chunks():
+                        for chunk in fobj.chunks():   # seeks to 0 each time
                             fp.write(chunk)
                     items.append((ip, w['slot'], path))
 
-                # Anything left in `uploaded` was extra (operator picked
-                # files not referenced by the XML). Reported but harmless.
-                image_report['extra'] = list(uploaded.keys())
+                # Files no slot names were extra (the operator picked files
+                # the XML doesn't reference). Reported but harmless.
+                image_report['extra'] = [k for k in uploaded if k not in used]
 
                 if items:
                     try:
@@ -420,13 +442,8 @@ def profile_load(request):
                         image_report['upload_errors'].append(
                             f"{type(exc).__name__}: {exc}")
             finally:
-                # Clean up temp files
-                try:
-                    for f in os.listdir(tmpdir):
-                        os.unlink(os.path.join(tmpdir, f))
-                    os.rmdir(tmpdir)
-                except Exception:  # noqa: BLE001
-                    pass
+                # Clean up the temp files (a folder per slot).
+                shutil.rmtree(tmpdir, ignore_errors=True)
 
     record_activity(
         feature=ActivityLog.FEATURE_ATEM_CONTROL, device=ActivityLog.DEVICE_ATEM,
