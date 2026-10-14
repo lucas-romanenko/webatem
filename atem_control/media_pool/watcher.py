@@ -15,6 +15,13 @@ dedicated-socket + exclusive_access design existed purely to isolate
 raw downloads that DID freeze whoever shared the socket), and each ATEM
 carries one server session instead of two.
 
+Every still the watcher downloads is also kept at full size on disk, by
+content hash (``still_cache``, bounded by size and age through the hooks).
+A profile save then writes it with no download, as ATEM Software Control
+does with the stills it fetched on connecting, and a later preview of the
+same picture (this switcher or another, before or after a restart) is made
+from the kept file instead of a transfer.
+
 Watchers are module-level and ref-counted. Many subscribers watching the
 same ATEM share one watcher + one cache. The watcher holds one pool
 reference for its lifetime and releases it (identity-guarded) after a
@@ -77,6 +84,8 @@ from PIL import Image
 from atemwire.imaging import atem_to_rgb
 from atemwire.pool import ATEMInstanceManager
 from atemwire.state import decode_name, md5_hex
+
+from atem_control.media_pool import still_cache
 
 
 logger = logging.getLogger(__name__)
@@ -194,6 +203,20 @@ def _encode_thumbnail_from_rgba(rgba_bytes: bytes, width: int, height: int) -> b
     buf = io.BytesIO()
     img.save(buf, format='JPEG', quality=JPEG_QUALITY, optimize=False)
     return buf.getvalue()
+
+
+def _thumb_from_png(png: bytes) -> Optional[str]:
+    """A slot's preview (the JPEG data-URL) made from the full still the
+    still cache keeps: the same pixels a download would give, so the same
+    preview. None if the file can't be read."""
+    try:
+        img = Image.open(io.BytesIO(png))
+        img = img.convert('RGBA')
+        thumb_bytes = _encode_thumbnail_from_rgba(img.tobytes(), img.width, img.height)
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"still cache: a kept still could not be read: {e}")
+        return None
+    return 'data:image/jpeg;base64,' + base64.b64encode(thumb_bytes).decode('ascii')
 
 
 def _empty_slot(idx: int) -> dict:
@@ -898,6 +921,11 @@ class MediaPoolWatcher:
         elif slot_payload is not None:
             self._enqueue_broadcast('slot_updated', {'slot': slot_payload})
 
+        # A still a switcher shows is in use: keep its full copy from
+        # expiring (a stat call; the cache ignores an empty or zero hash).
+        if is_used:
+            still_cache.touch(hash_hex)
+
         if should_download:
             self._queue_download(idx, hash_hex)
 
@@ -1069,6 +1097,22 @@ class MediaPoolWatcher:
             self._apply_thumb(slot_idx, expected_hash, cached)
             return False
 
+        # The full still may be kept on disk already: downloaded for this
+        # switcher or another with the same picture, before a restart, by a
+        # profile save, or seeded by the upload that put it there. Its
+        # preview is then a decode and a resize, not an ~8MB transfer.
+        png = still_cache.get(expected_hash)
+        if png is not None:
+            thumb_b64 = _thumb_from_png(png)
+            if thumb_b64 is not None:
+                logger.info(
+                    f"MediaPool[{self.ip_address}] slot {slot_idx} from the "
+                    f"still cache — skipping download"
+                )
+                _thumb_cache_put(self.ip_address, expected_hash, thumb_b64)
+                self._apply_thumb(slot_idx, expected_hash, thumb_b64)
+                return False
+
         conn = self._conn
         w, h = 1920, 1080
         try:
@@ -1166,6 +1210,12 @@ class MediaPoolWatcher:
         # live apply if the slot's hash moved on) — the bytes are valid for
         # this hash regardless of where the slot is now.
         _thumb_cache_put(self.ip_address, expected_hash, thumb_b64)
+
+        # Keep the full still as well, for a profile save (which then needs
+        # no download) and for this picture's next preview anywhere. Written
+        # on the cache's own thread, so this worker goes on to the next
+        # download while the PNG is encoded.
+        still_cache.put_frame_later(expected_hash, rgba_bytes, w, h)
 
         self._apply_thumb(slot_idx, expected_hash, thumb_b64)
 

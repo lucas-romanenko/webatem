@@ -46,7 +46,7 @@ from typing import Callable, List, Optional
 from PIL import Image, UnidentifiedImageError
 from PIL.Image import DecompressionBombError
 from atemwire.protocol import AtemProtocol
-from atemwire.imaging import rgb_to_atem
+from atemwire.imaging import atem_to_rgb, rgb_to_atem
 from atemwire.ready import wait_ready
 
 logger = logging.getLogger(__name__)
@@ -397,6 +397,22 @@ def _slot_hash(protocol, slot: int) -> Optional[bytes]:
     return getattr(entry, 'hash', None) if entry else None
 
 
+def _seed_still_cache(atem_data: bytes, content_hash: bytes, width: int, height: int):
+    """The switcher has confirmed it holds exactly these pixels under this
+    hash, so keep them in the still cache: a profile save or a preview of
+    this still then never downloads the picture we just sent. The PNG is
+    written on the cache's own thread; a failure only costs that later
+    download."""
+    try:
+        from atem_control.media_pool import still_cache
+        if still_cache.contains(content_hash.hex()):
+            return
+        rgba = atem_to_rgb(atem_data, width, height)
+        still_cache.put_frame_later(content_hash.hex(), rgba, width, height)
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"still cache: could not seed {content_hash.hex()}: {e}")
+
+
 def _upload_one(protocol, slot: int, image_path: str, width: int, height: int,
                 canceller: _Canceller, log_append: Callable[[str], None],
                 skip_tally: bool) -> ItemResult:
@@ -545,6 +561,7 @@ def _upload_one(protocol, slot: int, image_path: str, width: int, height: int,
         settle = time.time() - settle_start
         log_append(f"slot {slot_user}: PASS upload={upload_duration:.2f}s "
                    f"settle={settle:.2f}s (pre==expected)")
+        _seed_still_cache(atem_data, expected_hash, width, height)
         return ItemResult(slot=slot, image_path=image_path, success=True,
                           upload_seconds=upload_duration, settle_seconds=settle,
                           content_hash=expected_hash.hex())
@@ -580,6 +597,7 @@ def _upload_one(protocol, slot: int, image_path: str, width: int, height: int,
 
     log_append(f"slot {slot_user}: PASS upload={upload_duration:.2f}s "
                f"settle={settle:.2f}s")
+    _seed_still_cache(atem_data, expected_hash, width, height)
     return ItemResult(slot=slot, image_path=image_path, success=True,
                       upload_seconds=upload_duration, settle_seconds=settle,
                       content_hash=expected_hash.hex())
