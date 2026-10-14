@@ -17,6 +17,7 @@ inside ``Profile.from_atem`` uses the same ATEM file-transfer mechanism
 the watcher's thumbnail downloads contend on.
 """
 
+import hashlib
 import io
 import logging
 import threading
@@ -186,6 +187,50 @@ def _resolve_atem_db_name(ip: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Media pool file names
+# ---------------------------------------------------------------------------
+
+MEDIA_POOL_FOLDER = 'ATEM Media Pool'
+
+
+def _media_pool_files(captured: list) -> dict:
+    """slot → its PNG's path in the ZIP, the one place the ZIP and the XML
+    take it from: a restore (ours, ATEM Software Control's) finds a slot's
+    picture where the XML's ``<Still path>`` says, so the two must agree.
+
+    A path is ``ATEM Media Pool/<slot name>.png``, as the XML has it, with
+    ``Slot<n>`` for a slot that has no name (the XML gave it no path, so its
+    picture could never come back). Slots with the same name and the same
+    picture share one file. A different picture under a name already taken
+    gets ``<name>_2.png`` (``_3`` …): before, the XML sent both slots to the
+    first file and the second restored with the wrong picture. Names are
+    compared ignoring case, as the restore matches them and as a Mac or
+    Windows folder would extract them. The same picture under two names is
+    written under each, so every slot's path holds a file."""
+    taken: dict = {}          # lower-cased path → picture digest
+    files: dict = {}
+    for entry in captured:
+        base = entry.get('name') or f"Slot{entry['slot']}"
+        digest = hashlib.sha1(entry['png_bytes']).digest()
+        path = f'{MEDIA_POOL_FOLDER}/{base}.png'
+        n = 2
+        while taken.get(path.lower(), digest) != digest:
+            path = f'{MEDIA_POOL_FOLDER}/{base}_{n}.png'
+            n += 1
+        taken[path.lower()] = digest
+        files[entry['slot']] = path
+    return files
+
+
+def _point_stills_at(profile: Profile, files: dict) -> None:
+    """Set each captured slot's ``<Still path>`` to the file it is in."""
+    for still in profile.root.findall('./MediaPool/Stills/Still'):
+        index = still.get('index', '')
+        if index.isdigit() and int(index) in files:
+            still.set('path', files[int(index)])
+
+
+# ---------------------------------------------------------------------------
 # Main export
 # ---------------------------------------------------------------------------
 
@@ -280,7 +325,7 @@ def export_profile_zip(
     watcher_quiesced = False
     captured: list = []
     atem_name = 'ATEM'
-    xml = ''
+    profile = None
     try:
         if not legacy_get:
             # Quiesce = the watcher defers its own downloads while this
@@ -294,7 +339,6 @@ def export_profile_zip(
                 raise ATEMConnectError(f'failed to connect to ATEM at {ip}')
 
             profile = Profile.from_atem(atem, save_opts)
-            xml = profile.to_xml()
             atem_name = atem.product_name or 'ATEM'
 
             if save_opts.media_pool_images and not legacy_get:
@@ -355,6 +399,12 @@ def export_profile_zip(
         # later save (and so the registry doesn't accumulate).
         _clear_capture_cancel(cancel_session)
 
+    # Each captured still's file, the same in the XML and the ZIP (see
+    # _media_pool_files); the XML is written once the paths are set.
+    files = _media_pool_files(captured)
+    _point_stills_at(profile, files)
+    xml = profile.to_xml()
+
     # Filename name component: prefer the application's database name for
     # the ATEM (matches what operators see in the equipment list); fall
     # back to the device's self-reported model when the equipment row
@@ -372,12 +422,8 @@ def export_profile_zip(
         # internally) but the XML compresses well. No compression for
         # the PNG entries to skip the wasted CPU.
         #
-        # Dedupe entries by arcname AND content. The capture-side hash
-        # dedupe means slots with identical content share the same
-        # bytes object — an ``is`` identity check is enough to spot
-        # them. Slots with the same display name but different bytes
-        # (rare but possible) get a numeric suffix so neither slot's
-        # data is silently dropped.
+        # One entry per file _media_pool_files assigned: slots that share
+        # a name and a picture share it, so it is written once.
         # Every entry is stamped with the studio-local save time, matching
         # ATEM Software Control's zips. A bare ZipInfo(arcname) defaults to
         # the ZIP epoch (files dated Jan 1 1980 on extract), and writestr's
@@ -389,21 +435,12 @@ def export_profile_zip(
                 xml,
                 compress_type=zipfile.ZIP_DEFLATED,
             )
-            written: dict = {}  # arcname → png_bytes (identity-checked)
+            written: set = set()
             for entry in captured:
-                base = entry["name"]
-                arcname = f'ATEM Media Pool/{base}.png'
-                # Skip if we've already written this exact bytes object
-                # under any name (true content duplicate, e.g. all 20
-                # slots with the same image).
-                if any(v is entry['png_bytes'] for v in written.values()):
+                arcname = files[entry['slot']]
+                if arcname.lower() in written:
                     continue
-                # Otherwise resolve filename collisions by suffixing.
-                counter = 2
-                while arcname in written:
-                    arcname = f'ATEM Media Pool/{base}_{counter}.png'
-                    counter += 1
-                written[arcname] = entry['png_bytes']
+                written.add(arcname.lower())
                 zf.writestr(
                     zipfile.ZipInfo(arcname, date_time=save_time),
                     entry['png_bytes'],

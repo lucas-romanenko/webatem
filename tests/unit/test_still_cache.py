@@ -251,9 +251,12 @@ def test_a_save_writes_kept_stills_and_downloads_only_the_rest(monkeypatch):
         def __exit__(self, *a):
             return False
 
-    class _Profile:
-        def to_xml(self):
-            return '<Profile/>'
+    def _profile():
+        from atemwire import Profile
+        stills = ''.join(f'<Still index="{s}" name="{i.name.decode()}" path="ATEM Media Pool/{i.name.decode()}.png"/>'
+                         for s, i in sorted(files.items()))
+        return Profile.from_xml(f'<Profile majorVersion="1" minorVersion="5" product="ATEM Test">'
+                                f'<MediaPool><Stills>{stills}</Stills></MediaPool></Profile>')
 
     downloads = []
 
@@ -272,7 +275,7 @@ def test_a_save_writes_kept_stills_and_downloads_only_the_rest(monkeypatch):
         return out
 
     monkeypatch.setattr(export, 'ATEM', lambda ip: _Atem())
-    monkeypatch.setattr(export.Profile, 'from_atem', staticmethod(lambda atem, opts: _Profile()))
+    monkeypatch.setattr(export.Profile, 'from_atem', staticmethod(lambda atem, opts: _profile()))
     monkeypatch.setattr(export, 'download_media_pool_images', fake_download_media_pool_images)
     still_cache.put(A, _png(colour=(9, 9, 9, 255)))
 
