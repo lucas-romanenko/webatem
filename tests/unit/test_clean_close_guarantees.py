@@ -206,8 +206,11 @@ def _bare_protocol():
 
 def test_ftde_fatal_status_pops_task_and_advances():
     """Per-frame lock discipline (2026-07-07): the fatal FTDE pops the
-    corpse and RELEASES the lock; the next task starts when the unlock's
-    LKST echo arrives (the pounce), not synchronously."""
+    corpse and RELEASES the lock. Since bmdwire 1.5.0 the release and the
+    next task's lock request go in one packet, as ATEM Software Control
+    sends them; the switcher grants it at once (or queues it behind a
+    client that asked first), and the release's LKST echo comes a frame
+    later."""
     from atemwire.protocol import TransferTask
     from atemwire.messages.lock import LockCommand
 
@@ -225,24 +228,24 @@ def test_ftde_fatal_status_pops_task_and_advances():
         p.save_field_data(b'FTDE', (41).to_bytes(2, 'big') + bytes([2, 0]))
 
         assert p.transfer_queue[0] == [t2]      # corpse popped
-        assert p.transfer is None               # cleared for the echo window
+        assert p.transfer is None
         assert p.locks.get(0) is False          # lock released per-frame
-        unlocks = [c for batch in sent for c in batch
-                   if isinstance(c, LockCommand)]
-        assert len(unlocks) == 1
-
-        # The unlock's LKST echo arrives -> pounce -> next task requests
-        # the lock again (PLCK goes out; LKOB would then start FTSU).
-        p.save_field_data(b'LKST', bytes([0, 0, 0, 0x13]))
         from atemwire.messages.lock import PartialLockCommand
-        plcks = [c for batch in sent for c in batch
-                 if isinstance(c, PartialLockCommand)]
-        assert len(plcks) == 1                  # re-requested for t2
+        # One packet: the release, then t2's request.
+        assert [type(c) for c in sent[-1]] == [LockCommand, PartialLockCommand]
+        assert sent[-1][1].slot == 7
 
         # LKOB grant -> FTSU for t2 goes out
         p.save_field_data(b'LKOB', bytes([0, 0, 0, 0]))
         assert p.transfer is t2
         assert p.transfer_requested is True
+
+        # The release's LKST, a frame late: t2's lock stays ours.
+        p.save_field_data(b'LKST', bytes([0, 0, 0, 0x13]))
+        assert p.locks.get(0) is True
+        plcks = [c for batch in sent for c in batch
+                 if isinstance(c, PartialLockCommand)]
+        assert len(plcks) == 1                  # no request from the holder
     finally:
         try:
             p.transport.sock.close()
@@ -375,23 +378,23 @@ def test_ftdc_releases_lock_per_frame_and_echo_continues_queue():
         assert done == [(0, 3)]                 # frame delivered
         assert p.transfer_queue[0] == [t2]
         assert p.locks.get(0) is False          # released after ONE frame
-        assert p.transfer is None               # echo window is corpse-free
-        unlocks = [c for batch in sent for c in batch
-                   if isinstance(c, LockCommand)]
-        assert len(unlocks) == 1
-
-        # ...and t2 does NOT start until the echo (another client could win
-        # the lock here — that's the whole point).
-        assert p.transfer_requested is False
-
-        p.save_field_data(b'LKST', _lkst_unlocked())
-        plcks = [c for batch in sent for c in batch
-                 if isinstance(c, PartialLockCommand)]
-        assert len(plcks) == 1                  # pounce: re-request for t2
+        assert p.transfer is None
+        # The release and t2's request in one packet (bmdwire 1.5.0, as
+        # ATEM Software Control sends them). Another client that asked
+        # first still gets the lock first: the switcher queues requests.
+        assert [type(c) for c in sent[-1]] == [LockCommand, PartialLockCommand]
+        assert p.transfer_requested is False    # t2 waits for its grant
 
         p.save_field_data(b'LKOB', bytes([0, 0, 0, 0]))
         assert p.transfer is t2                 # queue continues
         assert p.transfer_requested is True
+
+        # The release's LKST, a frame late, changes nothing.
+        p.save_field_data(b'LKST', _lkst_unlocked())
+        assert p.locks.get(0) is True
+        plcks = [c for batch in sent for c in batch
+                 if isinstance(c, PartialLockCommand)]
+        assert len(plcks) == 1
     finally:
         try:
             p.transport.sock.close()
@@ -449,12 +452,16 @@ def test_lkst_release_with_empty_queue_is_calm():
             pass
 
 
-def test_request_deferred_while_own_unlock_in_flight():
-    """Back-to-back downloads (2026-07-07 live): a request that reaches the
-    switcher while our own unlock is still in flight is silently eaten —
-    and with the lock then free, no LKST ever arrives to pounce on: dead
-    air until the caller's 20s timeout. The trigger must DEFER the request
-    until the release echo, then send exactly one."""
+def test_request_right_after_our_own_unlock_goes_at_once():
+    """Back-to-back transfers, as ATEM Software Control does them (bmdwire
+    1.5.0, from a capture of its restore): the next lock request goes as
+    soon as our release has, without waiting for the release's LKST echo,
+    and the switcher grants it at once. The echo comes a frame later,
+    after the grant, and must not cost us the new lock. (bmdwire 1.4.0
+    and before held the request back until the echo: up to 6.6 s a
+    transfer.)"""
+    import struct
+
     from atemwire.protocol import TransferTask
     from atemwire.messages.lock import PartialLockCommand
 
@@ -468,22 +475,23 @@ def test_request_deferred_while_own_unlock_in_flight():
         p.locks[0] = True
         p.transfer_buffer = [b'']
 
-        # FTDC completes t1 -> per-frame unlock goes out, release pending
+        # FTDC completes t1 -> the per-frame unlock goes out
         p.save_field_data(b'FTDC', (61).to_bytes(2, 'big') + bytes([1, 2]))
-        assert 0 in p._lock_release_pending
+        assert p.locks.get(0) is False
 
-        # caller immediately queues the next download (the race)
+        # the caller queues the next download at once: its PLCK goes now
         p.download(0, 5)
         plcks = [c for batch in sent for c in batch
                  if isinstance(c, PartialLockCommand)]
-        assert plcks == []                      # DEFERRED, not eaten
+        assert len(plcks) == 1
 
-        # the release echo lands -> pending cleared -> pounce sends ONE PLCK
+        # granted; then the first frame's release, announced late
+        p.save_field_data(b'LKOB', struct.pack('>Hxx', 0))
         p.save_field_data(b'LKST', _lkst_unlocked())
-        assert 0 not in p._lock_release_pending
+        assert p.locks.get(0) is True           # still ours
         plcks = [c for batch in sent for c in batch
                  if isinstance(c, PartialLockCommand)]
-        assert len(plcks) == 1
+        assert len(plcks) == 1                  # no request from the holder
     finally:
         try:
             p.transport.sock.close()
@@ -491,12 +499,12 @@ def test_request_deferred_while_own_unlock_in_flight():
             pass
 
 
-def test_abort_clears_release_pending():
+def test_abort_clears_the_lock_request():
     p, sent = _bare_protocol()
     try:
-        p._lock_release_pending.add(0)
+        p._lock_requested[0] = 123.0
         p.abort_transfers()
-        assert p._lock_release_pending == set()
+        assert p._lock_requested == {}
     finally:
         try:
             p.transport.sock.close()

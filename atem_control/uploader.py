@@ -4,10 +4,10 @@ atemwire-based media pool upload service.
 Used by the application's uploader worker (``run_uploader`` management
 command) and one-off callers (downtime-overlay button uploads, profile-
 load image upload) to push stills into an ATEM media pool in-process.
-Opens one short-lived AtemProtocol per unique IP, uses the transport's
-aggressive-drain mode for bulk-upload throughput (~3 s per 1080p still
-vs. ~25 s with ACK-paced sends), and verifies each upload via MPfe
-hash equality.
+Opens one short-lived AtemProtocol per unique IP and verifies each upload
+via MPfe hash equality. Since bmdwire 1.5.0 an upload goes as ATEM
+Software Control sends it, each budget whole (about 0.6 s per 1080p
+still, against ~3 s with the old aggressive drain and ~25 s ACK-paced).
 
 Lives in the app rather than in atemwire because tally cycle-wait,
 PIL image prep, progress callbacks, and hash-verify policy are feature
@@ -16,8 +16,10 @@ everything around it is policy.
 
 Validated tuning + gotchas:
 
-- ``aggressive_drain=True`` on the transport — replaces the old
-  ``_install_fast_send`` monkeypatch with a proper constructor flag.
+- ``aggressive_drain=True`` on the transport — replaced the old
+  ``_install_fast_send`` monkeypatch. bmdwire 1.5.0 sends each budget whole
+  whatever the flag, so it changes nothing there; still passed for a host
+  whose bmdwire is older.
 - One AtemProtocol connection reused across all items for a single IP.
 - Verify success via MPfe hash equality (NOT "hash changed" — a re-upload
   of identical content won't change the hash).
@@ -734,9 +736,8 @@ def _run_for_single_ip(ip_address: str,
     protocol = None
     t_connect = time.time()
     for attempt in range(1, CONNECT_ATTEMPTS + 1):
-        # aggressive_drain=True replaces the old _install_fast_send
-        # monkeypatch — bulk-upload throughput via whole-queue drain per
-        # queue_trigger.
+        # aggressive_drain=True: whole-queue drain per queue_trigger on a
+        # bmdwire before 1.5.0; from 1.5.0 every budget goes whole anyway.
         candidate = AtemProtocol(ip=ip_address, aggressive_drain=True)
         log_append(f"connecting to {ip_address} (attempt {attempt}/{CONNECT_ATTEMPTS})")
         candidate.connect()
