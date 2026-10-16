@@ -1335,7 +1335,6 @@
       if (alpineInstance.mediaPool.forIP !== ipAddress) {
         alpineInstance.mediaPool.slots.splice(0);
         alpineInstance.mediaPool.players.splice(0);
-        alpineInstance.mediaPool.locked = false;
         alpineInstance.mediaPool.forIP = ipAddress;
         if (window.AtemHyperdeck) window.AtemHyperdeck.close();
         alpineInstance.hyperdeck.deckIp = null;
@@ -1504,13 +1503,6 @@
           if (Array.isArray(payload.players)) {
             alpineInstance._reconcileMediaPoolPlayers(mp.players, payload.players);
           }
-          if ("poolLocked" in payload) {
-            mp.locked = !!payload.poolLocked;
-          }
-          break;
-        }
-        case "media_pool_lock": {
-          alpineInstance.mediaPool.locked = !!(data.data && data.data.locked);
           break;
         }
         case "media_pool_slot_updated": {
@@ -2111,11 +2103,6 @@
     mediaPool: {
       slots: [],
       players: [],
-      // True while the ATEM refuses to grant the media store lock
-      // (another client — automation software, a stuck session —
-      // holds it). Drives the modal's honest banner instead of
-      // anonymous forever-spinners.
-      locked: false,
       // Which ATEM the slots/players below belong to. The store
       // survives in-page ATEM switches (recent dropdown / quick
       // connect); connect() resets the pool when this doesn't match

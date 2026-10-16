@@ -128,6 +128,12 @@ DOWNLOAD_TIMEOUT = 15.0
 # freed. The per-task recheck (hash changed / thumb arrived / slot cleared)
 # retires stale tasks, so patience costs one ~15s probe per cycle, not
 # redundant downloads.
+#
+# A download that timed out with the lock never granted was only waiting
+# its turn (ATEM Software Control loading its thumbnails, another app at
+# work): it goes again at once, no backoff. bmdwire (>= 1.5.5) keeps the
+# other client's turn across the timeout, so the retry asks nothing until
+# the store is free, and the thumb arrives as soon as it is.
 DOWNLOAD_RETRY_BACKOFF = 2.0
 DOWNLOAD_RETRY_BACKOFF_MAX = 30.0
 # Log the first few failures per slot at WARNING, then only every Nth —
@@ -262,16 +268,6 @@ class MediaPoolWatcher:
         # retry path keeps its claim across attempts; the claim is released
         # when the task retires (guarded under _state_lock).
         self._pending_downloads: Dict[int, str] = {}
-
-        # True while downloads are starving because the ATEM refuses to
-        # grant the media store lock (another client — automation software,
-        # a stuck session — is holding it). Broadcast to the UI so the
-        # modal shows an honest banner instead of anonymous spinners.
-        # Verified live 2026-07-02: while ANY client holds the lock, no
-        # other client can download (not even ASC) — there is no denial
-        # message and no queue-jump; the only signal is our own timeout
-        # with the lock never granted.
-        self._pool_lock_starved = False
 
         # The SHARED pooled connection this watcher rides (binder-owned).
         # _pool_instance is the pool entry dict, kept for the identity-
@@ -502,27 +498,6 @@ class MediaPoolWatcher:
         """Return the current cached state (safe to call from any thread)."""
         with self._state_lock:
             return self._build_snapshot_locked()
-
-    def _set_pool_lock_starved(self, value: bool):
-        """Track + broadcast the 'media lock held by another client' state.
-        Set when a download times out with the store lock never granted;
-        cleared when a wire download succeeds (proof the lock is grantable
-        again). Broadcasts only on change."""
-        with self._state_lock:
-            if self._pool_lock_starved == value:
-                return
-            self._pool_lock_starved = value
-        if value:
-            logger.warning(
-                f"MediaPool[{self.ip_address}] media store lock is held by "
-                f"another client — previews can't be fetched until it releases"
-            )
-        else:
-            logger.info(
-                f"MediaPool[{self.ip_address}] media store lock released — "
-                f"downloads flowing again"
-            )
-        self._enqueue_broadcast('pool_lock', {'locked': value})
 
     # ---------- Upload lockout helpers ----------
 
@@ -984,7 +959,6 @@ class MediaPoolWatcher:
         return {
             'slots': [dict(self._slots[i]) for i in slot_indices],
             'players': [dict(self._players[i]) for i in player_indices],
-            'poolLocked': self._pool_lock_starved,
         }
 
     # ---------- Worker thread ----------
@@ -1020,10 +994,13 @@ class MediaPoolWatcher:
                         self._do_decode(slot_idx, raw, expected_hash, w, h)
                     elif kind == _TASK_DOWNLOAD:
                         # Producers enqueue 3-tuples (attempt defaults to 1);
-                        # only the retry path re-queues with an explicit count.
+                        # only the retry path re-queues with an explicit
+                        # count, and whether it only waited its turn.
                         _, slot_idx, expected_hash = item[:3]
                         attempt = item[3] if len(item) > 3 else 1
-                        self._do_download(slot_idx, expected_hash, attempt)
+                        waited = item[4] if len(item) > 4 else False
+                        self._do_download(slot_idx, expected_hash, attempt,
+                                          waited)
                 except Exception as e:
                     logger.exception(
                         f"MediaPool[{self.ip_address}] worker task {kind} failed: {e}"
@@ -1031,14 +1008,16 @@ class MediaPoolWatcher:
         finally:
             logger.info(f"MediaPool[{self.ip_address}] worker thread exited")
 
-    def _do_download(self, slot_idx: int, expected_hash: str, attempt: int = 1):
+    def _do_download(self, slot_idx: int, expected_hash: str, attempt: int = 1,
+                     waited: bool = False):
         """Worker-thread task wrapper: run the download, then release the
         slot's pending-download claim unless the task re-queued itself
         (defer/retry keep their claim so producers can't stack duplicate
         tasks for the slot behind a slow transfer)."""
         requeued = False
         try:
-            requeued = self._download_task(slot_idx, expected_hash, attempt)
+            requeued = self._download_task(slot_idx, expected_hash, attempt,
+                                           waited)
         finally:
             if not requeued:
                 with self._state_lock:
@@ -1046,7 +1025,7 @@ class MediaPoolWatcher:
                         del self._pending_downloads[slot_idx]
 
     def _download_task(self, slot_idx: int, expected_hash: str,
-                       attempt: int) -> bool:
+                       attempt: int, waited: bool = False) -> bool:
         """Re-check the task is still needed, then download via the pooled
         connection's native interleaved transfer (``download_still``) and
         decode inline. Blocks only this worker thread — the pooled
@@ -1123,13 +1102,13 @@ class MediaPoolWatcher:
         except Exception:
             pass
 
-        # A retry attempt means the previous one just failed against a busy,
-        # recovering, or lock-held ATEM — give it breathing room before
-        # probing again, settling at the max backoff for the long patient
-        # phase. (Blocks only this single worker; downloads are sequential
-        # by design anyway, and the recheck above retires the task the
-        # moment it stops being needed.)
-        if attempt > 1:
+        # A retry attempt means the previous one just failed against a busy
+        # or recovering ATEM — give it breathing room before probing again,
+        # settling at the max backoff for the long patient phase. (Blocks
+        # only this single worker; downloads are sequential by design
+        # anyway, and the recheck above retires the task the moment it
+        # stops being needed.) One that only waited its turn goes at once.
+        if attempt > 1 and not waited:
             if self._stop_event.wait(min(DOWNLOAD_RETRY_BACKOFF * (attempt - 1),
                                          DOWNLOAD_RETRY_BACKOFF_MAX)):
                 return False
@@ -1156,19 +1135,27 @@ class MediaPoolWatcher:
         if raw_ycbcr is None:
             if failure is not None and not self._stop_event.is_set():
                 # 'lock never granted' is atemwire's timeout enrichment when
-                # the PLCK went unanswered — the foreign-lock-holder
-                # signature. Any other failure shape leaves the flag alone.
-                if 'lock never granted' in failure:
-                    self._set_pool_lock_starved(True)
+                # the lock was never ours: another client's turn (ATEM
+                # Software Control loading thumbnails, automation at work).
+                # The tile keeps its spinner and the download goes again.
+                turn = 'lock never granted' in failure
                 if attempt <= 3 or attempt % DOWNLOAD_FAILURE_LOG_EVERY == 0:
-                    logger.warning(
-                        f"MediaPool[{self.ip_address}] download slot "
-                        f"{slot_idx} failed (attempt {attempt}): {failure} — "
-                        f"will keep retrying while the slot needs it"
-                    )
+                    if turn:
+                        logger.info(
+                            f"MediaPool[{self.ip_address}] slot {slot_idx} "
+                            f"waiting for its turn: another client is using "
+                            f"the media pool (attempt {attempt})"
+                        )
+                    else:
+                        logger.warning(
+                            f"MediaPool[{self.ip_address}] download slot "
+                            f"{slot_idx} failed (attempt {attempt}): {failure} "
+                            f"— will keep retrying while the slot needs it"
+                        )
                 try:
                     self._work_queue.put_nowait(
-                        (_TASK_DOWNLOAD, slot_idx, expected_hash, attempt + 1)
+                        (_TASK_DOWNLOAD, slot_idx, expected_hash, attempt + 1,
+                         turn)
                     )
                 except Exception as e:
                     logger.warning(
@@ -1184,7 +1171,6 @@ class MediaPoolWatcher:
             f"MediaPool[{self.ip_address}] slot {slot_idx} downloaded "
             f"({len(raw_ycbcr)} bytes in {download_ms}ms)"
         )
-        self._set_pool_lock_starved(False)   # lock demonstrably grantable
 
         self._do_decode(slot_idx, raw_ycbcr, expected_hash, w, h)
         return False
