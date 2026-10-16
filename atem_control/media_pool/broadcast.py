@@ -70,6 +70,7 @@ def install_broadcasters(watcher: MediaPoolWatcher, ip_address: str) -> None:
     watcher.on('snapshot', _make_handler('mediapool.snapshot'))
     watcher.on('slot_updated', _make_handler('mediapool.slot_updated'))
     watcher.on('player_updated', _make_handler('mediapool.player_updated'))
+    watcher.on('preview_wait', _make_handler('mediapool.preview_wait'))
     logger.info(f"media_pool_broadcast[{ip_address}] handlers installed")
 
 

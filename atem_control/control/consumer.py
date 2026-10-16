@@ -1282,6 +1282,15 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
             'data': event.get('payload', {}),
         })
 
+    async def mediapool_preview_wait(self, event):
+        # Previews have waited long enough for another client's turn (ATEM
+        # Software Control loading thumbnails, another app) to say so, or
+        # have stopped waiting: drives the media pool's waiting notice.
+        await self._safe_send_json({
+            'type': 'media_pool_preview_wait',
+            'data': event.get('payload', {}),
+        })
+
     async def mediapool_pool_lock(self, event):
         # The media pool's lock banner is gone (2.1.6): a download waiting
         # for another client's turn keeps its spinner and goes again. An
