@@ -532,6 +532,7 @@ window.ATEMControl = {
         if (alpineInstance.mediaPool.forIP !== ipAddress) {
             alpineInstance.mediaPool.slots.splice(0);
             alpineInstance.mediaPool.players.splice(0);
+            alpineInstance.mediaPool.waiting = false;
             alpineInstance.mediaPool.forIP = ipAddress;
 
             // SH-13: the HyperDeck transport modal (and its poll timers)
@@ -813,6 +814,13 @@ window.ATEMControl = {
                 if (Array.isArray(payload.players)) {
                     alpineInstance._reconcileMediaPoolPlayers(mp.players, payload.players);
                 }
+                if ('previewWaiting' in payload) {
+                    mp.waiting = !!payload.previewWaiting;
+                }
+                break;
+            }
+            case 'media_pool_preview_wait': {
+                alpineInstance.mediaPool.waiting = !!(data.data && data.data.waiting);
                 break;
             }
             case 'media_pool_slot_updated': {

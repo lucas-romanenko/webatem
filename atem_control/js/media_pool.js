@@ -21,6 +21,10 @@ export const mediaPoolStore = {
     mediaPool: {
         slots: [],
         players: [],
+        // True once previews have waited a while for another app's turn
+        // at the switcher's media pool (ATEM Software Control loading its
+        // thumbnails, say). Drives the waiting notice; never "locked".
+        waiting: false,
         // Which ATEM the slots/players below belong to. The store
         // survives in-page ATEM switches (recent dropdown / quick
         // connect); connect() resets the pool when this doesn't match
@@ -234,7 +238,8 @@ export const mediaPoolStore = {
             || a.isUsed !== b.isUsed
             || a.hash !== b.hash
             || a.fileName !== b.fileName
-            || a.thumb !== b.thumb;
+            || a.thumb !== b.thumb
+            || !!a.previewFailed !== !!b.previewFailed;
     },
 
     _playersDiffer(a, b) {
