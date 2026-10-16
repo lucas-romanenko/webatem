@@ -532,7 +532,7 @@ window.ATEMControl = {
         if (alpineInstance.mediaPool.forIP !== ipAddress) {
             alpineInstance.mediaPool.slots.splice(0);
             alpineInstance.mediaPool.players.splice(0);
-            alpineInstance.mediaPool.locked = false;
+            alpineInstance.mediaPool.waiting = false;
             alpineInstance.mediaPool.forIP = ipAddress;
 
             // SH-13: the HyperDeck transport modal (and its poll timers)
@@ -814,15 +814,13 @@ window.ATEMControl = {
                 if (Array.isArray(payload.players)) {
                     alpineInstance._reconcileMediaPoolPlayers(mp.players, payload.players);
                 }
-                if ('poolLocked' in payload) {
-                    mp.locked = !!payload.poolLocked;
+                if ('previewWaiting' in payload) {
+                    mp.waiting = !!payload.previewWaiting;
                 }
                 break;
             }
-            case 'media_pool_lock': {
-                // Watcher-detected foreign holder of the ATEM's media store
-                // lock (or its release) — drives the modal banner.
-                alpineInstance.mediaPool.locked = !!(data.data && data.data.locked);
+            case 'media_pool_preview_wait': {
+                alpineInstance.mediaPool.waiting = !!(data.data && data.data.waiting);
                 break;
             }
             case 'media_pool_slot_updated': {

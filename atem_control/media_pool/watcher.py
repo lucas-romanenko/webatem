@@ -128,8 +128,23 @@ DOWNLOAD_TIMEOUT = 15.0
 # freed. The per-task recheck (hash changed / thumb arrived / slot cleared)
 # retires stale tasks, so patience costs one ~15s probe per cycle, not
 # redundant downloads.
+#
+# A download that timed out with the lock never granted was only waiting
+# its turn (ATEM Software Control loading its thumbnails, another app at
+# work): it goes again at once, no backoff. bmdwire (>= 1.5.5) keeps the
+# other client's turn across the timeout, so the retry asks nothing until
+# the store is free, and the thumb arrives as soon as it is.
 DOWNLOAD_RETRY_BACKOFF = 2.0
 DOWNLOAD_RETRY_BACKOFF_MAX = 30.0
+# What the operator is told. Previews that have waited this long for
+# another client's turn show the media pool's waiting notice (ATEM Software
+# Control loading its thumbnails takes ~40 s for 20 stills, so a normal turn
+# may show it briefly; it says waiting, never locked). A preview that has
+# failed for any other reason this long marks its tile "Preview unavailable
+# — retrying"; it keeps retrying underneath and the picture replaces it.
+PREVIEW_WAIT_NOTICE_AFTER = 30.0
+PREVIEW_FAILED_AFTER = 120.0
+
 # Log the first few failures per slot at WARNING, then only every Nth —
 # an hour behind a held lock is ~120 probes and must not fill the log.
 DOWNLOAD_FAILURE_LOG_EVERY = 10
@@ -220,7 +235,8 @@ def _thumb_from_png(png: bytes) -> Optional[str]:
 
 
 def _empty_slot(idx: int) -> dict:
-    return {'index': idx, 'isUsed': False, 'hash': '', 'fileName': '', 'thumb': None}
+    return {'index': idx, 'isUsed': False, 'hash': '', 'fileName': '', 'thumb': None,
+            'previewFailed': False}
 
 
 class MediaPoolWatcher:
@@ -263,15 +279,12 @@ class MediaPoolWatcher:
         # when the task retires (guarded under _state_lock).
         self._pending_downloads: Dict[int, str] = {}
 
-        # True while downloads are starving because the ATEM refuses to
-        # grant the media store lock (another client — automation software,
-        # a stuck session — is holding it). Broadcast to the UI so the
-        # modal shows an honest banner instead of anonymous spinners.
-        # Verified live 2026-07-02: while ANY client holds the lock, no
-        # other client can download (not even ASC) — there is no denial
-        # message and no queue-jump; the only signal is our own timeout
-        # with the lock never granted.
-        self._pool_lock_starved = False
+        # Since when previews have waited for another client's turn (None:
+        # not waiting), and whether the waiting notice is up; per slot,
+        # since when its preview has failed for any other reason.
+        self._waiting_since: Optional[float] = None
+        self._preview_waiting = False
+        self._failing_since: Dict[int, float] = {}
 
         # The SHARED pooled connection this watcher rides (binder-owned).
         # _pool_instance is the pool entry dict, kept for the identity-
@@ -503,26 +516,57 @@ class MediaPoolWatcher:
         with self._state_lock:
             return self._build_snapshot_locked()
 
-    def _set_pool_lock_starved(self, value: bool):
-        """Track + broadcast the 'media lock held by another client' state.
-        Set when a download times out with the store lock never granted;
-        cleared when a wire download succeeds (proof the lock is grantable
-        again). Broadcasts only on change."""
+    # ---------- What the operator is told ----------
+
+    def _note_turn_wait(self, started: float):
+        """A download timed out only waiting for another client's turn. Once
+        previews have waited PREVIEW_WAIT_NOTICE_AFTER, say so."""
+        now = time.monotonic()
         with self._state_lock:
-            if self._pool_lock_starved == value:
+            if self._waiting_since is None:
+                self._waiting_since = started
+            long_wait = now - self._waiting_since >= PREVIEW_WAIT_NOTICE_AFTER
+        if long_wait:
+            self._set_preview_waiting(True)
+
+    def _end_turn_wait(self):
+        with self._state_lock:
+            self._waiting_since = None
+        self._set_preview_waiting(False)
+
+    def _set_preview_waiting(self, value: bool):
+        """Track + broadcast the waiting notice. Broadcasts only on change."""
+        with self._state_lock:
+            if self._preview_waiting == value:
                 return
-            self._pool_lock_starved = value
-        if value:
+            self._preview_waiting = value
+        logger.info(
+            f"MediaPool[{self.ip_address}] previews "
+            + ("waiting: another client is using the media pool" if value
+               else "no longer waiting")
+        )
+        self._enqueue_broadcast('preview_wait', {'waiting': value})
+
+    def _note_preview_failure(self, slot_idx: int, expected_hash: str):
+        """A slot's preview failed for a reason other than waiting its turn.
+        After PREVIEW_FAILED_AFTER of that, its tile says so."""
+        now = time.monotonic()
+        payload: Optional[dict] = None
+        with self._state_lock:
+            since = self._failing_since.setdefault(slot_idx, now)
+            slot = self._slots.get(slot_idx)
+            if (slot is not None and slot['hash'] == expected_hash
+                    and not slot.get('previewFailed')
+                    and now - since >= PREVIEW_FAILED_AFTER):
+                slot['previewFailed'] = True
+                payload = dict(slot)
+        if payload is not None:
             logger.warning(
-                f"MediaPool[{self.ip_address}] media store lock is held by "
-                f"another client — previews can't be fetched until it releases"
+                f"MediaPool[{self.ip_address}] slot {slot_idx} preview still "
+                f"failing after {PREVIEW_FAILED_AFTER:.0f}s — the tile says so; "
+                f"retrying"
             )
-        else:
-            logger.info(
-                f"MediaPool[{self.ip_address}] media store lock released — "
-                f"downloads flowing again"
-            )
-        self._enqueue_broadcast('pool_lock', {'locked': value})
+            self._enqueue_broadcast('slot_updated', {'slot': payload})
 
     # ---------- Upload lockout helpers ----------
 
@@ -875,6 +919,8 @@ class MediaPoolWatcher:
                 new_slot['fileName'] = name
                 if hash_changed:
                     new_slot['thumb'] = None
+                    new_slot['previewFailed'] = False
+                    self._failing_since.pop(idx, None)
                 self._slots[idx] = new_slot
 
             # Restore a previously-rendered thumbnail from the SURVIVING module
@@ -984,7 +1030,7 @@ class MediaPoolWatcher:
         return {
             'slots': [dict(self._slots[i]) for i in slot_indices],
             'players': [dict(self._players[i]) for i in player_indices],
-            'poolLocked': self._pool_lock_starved,
+            'previewWaiting': self._preview_waiting,
         }
 
     # ---------- Worker thread ----------
@@ -1020,10 +1066,13 @@ class MediaPoolWatcher:
                         self._do_decode(slot_idx, raw, expected_hash, w, h)
                     elif kind == _TASK_DOWNLOAD:
                         # Producers enqueue 3-tuples (attempt defaults to 1);
-                        # only the retry path re-queues with an explicit count.
+                        # only the retry path re-queues with an explicit
+                        # count, and whether it only waited its turn.
                         _, slot_idx, expected_hash = item[:3]
                         attempt = item[3] if len(item) > 3 else 1
-                        self._do_download(slot_idx, expected_hash, attempt)
+                        waited = item[4] if len(item) > 4 else False
+                        self._do_download(slot_idx, expected_hash, attempt,
+                                          waited)
                 except Exception as e:
                     logger.exception(
                         f"MediaPool[{self.ip_address}] worker task {kind} failed: {e}"
@@ -1031,22 +1080,30 @@ class MediaPoolWatcher:
         finally:
             logger.info(f"MediaPool[{self.ip_address}] worker thread exited")
 
-    def _do_download(self, slot_idx: int, expected_hash: str, attempt: int = 1):
+    def _do_download(self, slot_idx: int, expected_hash: str, attempt: int = 1,
+                     waited: bool = False):
         """Worker-thread task wrapper: run the download, then release the
         slot's pending-download claim unless the task re-queued itself
         (defer/retry keep their claim so producers can't stack duplicate
         tasks for the slot behind a slow transfer)."""
         requeued = False
         try:
-            requeued = self._download_task(slot_idx, expected_hash, attempt)
+            requeued = self._download_task(slot_idx, expected_hash, attempt,
+                                           waited)
         finally:
             if not requeued:
                 with self._state_lock:
                     if self._pending_downloads.get(slot_idx) == expected_hash:
                         del self._pending_downloads[slot_idx]
+                    idle = not self._pending_downloads
+                if idle:
+                    # Nothing left to fetch (the last one may have come from
+                    # the still cache, with no download to say so): nothing
+                    # is waiting any more.
+                    self._end_turn_wait()
 
     def _download_task(self, slot_idx: int, expected_hash: str,
-                       attempt: int) -> bool:
+                       attempt: int, waited: bool = False) -> bool:
         """Re-check the task is still needed, then download via the pooled
         connection's native interleaved transfer (``download_still``) and
         decode inline. Blocks only this worker thread — the pooled
@@ -1123,13 +1180,13 @@ class MediaPoolWatcher:
         except Exception:
             pass
 
-        # A retry attempt means the previous one just failed against a busy,
-        # recovering, or lock-held ATEM — give it breathing room before
-        # probing again, settling at the max backoff for the long patient
-        # phase. (Blocks only this single worker; downloads are sequential
-        # by design anyway, and the recheck above retires the task the
-        # moment it stops being needed.)
-        if attempt > 1:
+        # A retry attempt means the previous one just failed against a busy
+        # or recovering ATEM — give it breathing room before probing again,
+        # settling at the max backoff for the long patient phase. (Blocks
+        # only this single worker; downloads are sequential by design
+        # anyway, and the recheck above retires the task the moment it
+        # stops being needed.) One that only waited its turn goes at once.
+        if attempt > 1 and not waited:
             if self._stop_event.wait(min(DOWNLOAD_RETRY_BACKOFF * (attempt - 1),
                                          DOWNLOAD_RETRY_BACKOFF_MAX)):
                 return False
@@ -1156,19 +1213,35 @@ class MediaPoolWatcher:
         if raw_ycbcr is None:
             if failure is not None and not self._stop_event.is_set():
                 # 'lock never granted' is atemwire's timeout enrichment when
-                # the PLCK went unanswered — the foreign-lock-holder
-                # signature. Any other failure shape leaves the flag alone.
-                if 'lock never granted' in failure:
-                    self._set_pool_lock_starved(True)
+                # the lock was never ours: another client's turn (ATEM
+                # Software Control loading thumbnails, automation at work).
+                # The tile keeps its spinner and the download goes again.
+                turn = 'lock never granted' in failure
+                if turn:
+                    self._note_turn_wait(download_started)
+                elif failure == 'pooled connection not ready':
+                    # The page's own connection notice says this.
+                    self._end_turn_wait()
+                else:
+                    self._end_turn_wait()
+                    self._note_preview_failure(slot_idx, expected_hash)
                 if attempt <= 3 or attempt % DOWNLOAD_FAILURE_LOG_EVERY == 0:
-                    logger.warning(
-                        f"MediaPool[{self.ip_address}] download slot "
-                        f"{slot_idx} failed (attempt {attempt}): {failure} — "
-                        f"will keep retrying while the slot needs it"
-                    )
+                    if turn:
+                        logger.info(
+                            f"MediaPool[{self.ip_address}] slot {slot_idx} "
+                            f"waiting for its turn: another client is using "
+                            f"the media pool (attempt {attempt})"
+                        )
+                    else:
+                        logger.warning(
+                            f"MediaPool[{self.ip_address}] download slot "
+                            f"{slot_idx} failed (attempt {attempt}): {failure} "
+                            f"— will keep retrying while the slot needs it"
+                        )
                 try:
                     self._work_queue.put_nowait(
-                        (_TASK_DOWNLOAD, slot_idx, expected_hash, attempt + 1)
+                        (_TASK_DOWNLOAD, slot_idx, expected_hash, attempt + 1,
+                         turn)
                     )
                 except Exception as e:
                     logger.warning(
@@ -1184,7 +1257,7 @@ class MediaPoolWatcher:
             f"MediaPool[{self.ip_address}] slot {slot_idx} downloaded "
             f"({len(raw_ycbcr)} bytes in {download_ms}ms)"
         )
-        self._set_pool_lock_starved(False)   # lock demonstrably grantable
+        self._end_turn_wait()
 
         self._do_decode(slot_idx, raw_ycbcr, expected_hash, w, h)
         return False
@@ -1203,6 +1276,7 @@ class MediaPoolWatcher:
             logger.exception(
                 f"MediaPool[{self.ip_address}] decode failed for slot {slot_idx}: {e}"
             )
+            self._note_preview_failure(slot_idx, expected_hash)
             return
 
         # Cache the rendered thumb by content hash so it survives the next
@@ -1235,6 +1309,8 @@ class MediaPoolWatcher:
                 )
                 return False
             current['thumb'] = thumb_b64
+            current['previewFailed'] = False
+            self._failing_since.pop(slot_idx, None)
             self._slots[slot_idx] = current
             slot_payload = dict(current)
 

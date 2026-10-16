@@ -1335,7 +1335,7 @@
       if (alpineInstance.mediaPool.forIP !== ipAddress) {
         alpineInstance.mediaPool.slots.splice(0);
         alpineInstance.mediaPool.players.splice(0);
-        alpineInstance.mediaPool.locked = false;
+        alpineInstance.mediaPool.waiting = false;
         alpineInstance.mediaPool.forIP = ipAddress;
         if (window.AtemHyperdeck) window.AtemHyperdeck.close();
         alpineInstance.hyperdeck.deckIp = null;
@@ -1504,13 +1504,13 @@
           if (Array.isArray(payload.players)) {
             alpineInstance._reconcileMediaPoolPlayers(mp.players, payload.players);
           }
-          if ("poolLocked" in payload) {
-            mp.locked = !!payload.poolLocked;
+          if ("previewWaiting" in payload) {
+            mp.waiting = !!payload.previewWaiting;
           }
           break;
         }
-        case "media_pool_lock": {
-          alpineInstance.mediaPool.locked = !!(data.data && data.data.locked);
+        case "media_pool_preview_wait": {
+          alpineInstance.mediaPool.waiting = !!(data.data && data.data.waiting);
           break;
         }
         case "media_pool_slot_updated": {
@@ -2111,11 +2111,10 @@
     mediaPool: {
       slots: [],
       players: [],
-      // True while the ATEM refuses to grant the media store lock
-      // (another client — automation software, a stuck session —
-      // holds it). Drives the modal's honest banner instead of
-      // anonymous forever-spinners.
-      locked: false,
+      // True once previews have waited a while for another app's turn
+      // at the switcher's media pool (ATEM Software Control loading its
+      // thumbnails, say). Drives the waiting notice; never "locked".
+      waiting: false,
       // Which ATEM the slots/players below belong to. The store
       // survives in-page ATEM switches (recent dropdown / quick
       // connect); connect() resets the pool when this doesn't match
@@ -2316,7 +2315,7 @@
     // Equality check used by both reconcilers. Compare every user-
     // visible field — if all match, no DOM update is needed.
     _slotsDiffer(a, b) {
-      return a.index !== b.index || a.isUsed !== b.isUsed || a.hash !== b.hash || a.fileName !== b.fileName || a.thumb !== b.thumb;
+      return a.index !== b.index || a.isUsed !== b.isUsed || a.hash !== b.hash || a.fileName !== b.fileName || a.thumb !== b.thumb || !!a.previewFailed !== !!b.previewFailed;
     },
     _playersDiffer(a, b) {
       return a.index !== b.index || a.type !== b.type || a.stillIndex !== b.stillIndex || a.clipIndex !== b.clipIndex;
