@@ -1282,14 +1282,20 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
             'data': event.get('payload', {}),
         })
 
-    async def mediapool_pool_lock(self, event):
-        # The watcher detected (or saw the end of) a foreign client holding
-        # the ATEM's media store lock — surface it so the modal shows an
-        # honest banner instead of anonymous spinners.
+    async def mediapool_preview_wait(self, event):
+        # Previews have waited long enough for another client's turn (ATEM
+        # Software Control loading thumbnails, another app) to say so, or
+        # have stopped waiting: drives the media pool's waiting notice.
         await self._safe_send_json({
-            'type': 'media_pool_lock',
+            'type': 'media_pool_preview_wait',
             'data': event.get('payload', {}),
         })
+
+    async def mediapool_pool_lock(self, event):
+        # The media pool's lock banner is gone (2.1.6): a download waiting
+        # for another client's turn keeps its spinner and goes again. An
+        # older process can still send this through a restart; drop it.
+        return
 
     async def mediapool_slot_uploaded(self, event):
         # Fast-path event broadcast when an upload lands — a thumbnail

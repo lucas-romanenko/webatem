@@ -270,7 +270,7 @@ def test_do_download_requeues_on_failure():
     assert w._conn._calls == [0]
     assert w._slots[0]['thumb'] is None
     # re-queued as attempt 2 so the tile eventually resolves
-    assert _downloads(w._work_queue) == [(W._TASK_DOWNLOAD, 0, hash_hex, 2)]
+    assert _downloads(w._work_queue) == [(W._TASK_DOWNLOAD, 0, hash_hex, 2, False)]
 
 
 def test_do_download_dead_connection_requeues_without_wire():
@@ -286,7 +286,7 @@ def test_do_download_dead_connection_requeues_without_wire():
     w._do_download(0, hash_hex)
 
     assert w._conn._calls == []
-    assert _downloads(w._work_queue) == [(W._TASK_DOWNLOAD, 0, hash_hex, 2)]
+    assert _downloads(w._work_queue) == [(W._TASK_DOWNLOAD, 0, hash_hex, 2, False)]
 
 
 def test_do_download_reconnect_gap_requeues_without_wire():
@@ -305,7 +305,7 @@ def test_do_download_reconnect_gap_requeues_without_wire():
     w._do_download(0, hash_hex)
 
     assert w._conn._calls == []
-    assert _downloads(w._work_queue) == [(W._TASK_DOWNLOAD, 0, hash_hex, 2)]
+    assert _downloads(w._work_queue) == [(W._TASK_DOWNLOAD, 0, hash_hex, 2, False)]
 
 
 def test_do_download_never_gives_up_while_needed(monkeypatch):
@@ -328,7 +328,7 @@ def test_do_download_never_gives_up_while_needed(monkeypatch):
     w._do_download(0, hash_hex, attempt=47)                  # deep into patience
 
     assert w._slots[0]['thumb'] is None
-    assert _downloads(w._work_queue) == [(W._TASK_DOWNLOAD, 0, hash_hex, 48)]
+    assert _downloads(w._work_queue) == [(W._TASK_DOWNLOAD, 0, hash_hex, 48, False)]
 
     # ...but once the slot no longer needs it (cleared), the task retires.
     w2 = W.MediaPoolWatcher('10.0.0.28')
@@ -358,21 +358,25 @@ def test_requeue_missing_rearms_thumbless_slots_only():
 
 
 def test_worker_dispatch_carries_attempt_count(monkeypatch):
-    """The worker must unpack both 3-tuple (fresh) and 4-tuple (retry) download
-    tasks and pass the attempt through to _do_download."""
+    """The worker must unpack 3-tuple (fresh), 4-tuple (an older retry) and
+    5-tuple (retry) download tasks and pass the attempt, and whether the
+    last one only waited its turn, through to _do_download."""
     w = W.MediaPoolWatcher('10.0.0.25')
     seen = []
     monkeypatch.setattr(
         w, '_do_download',
-        lambda slot, h, attempt=1: seen.append((slot, h, attempt)),
+        lambda slot, h, attempt=1, waited=False:
+        seen.append((slot, h, attempt, waited)),
     )
     w._work_queue.put_nowait((W._TASK_DOWNLOAD, 1, 'aa' * 16))
     w._work_queue.put_nowait((W._TASK_DOWNLOAD, 2, 'bb' * 16, 3))
+    w._work_queue.put_nowait((W._TASK_DOWNLOAD, 3, 'cc' * 16, 4, True))
     w._work_queue.put_nowait((W._TASK_STOP,))
 
     w._run_worker()
 
-    assert seen == [(1, 'aa' * 16, 1), (2, 'bb' * 16, 3)]
+    assert seen == [(1, 'aa' * 16, 1, False), (2, 'bb' * 16, 3, False),
+                    (3, 'cc' * 16, 4, True)]
 
 
 # --------------------------------------------------------------------------
@@ -701,73 +705,69 @@ def _lock_starve_failure(slot):
         'store lock never granted; another client is holding it')
 
 
-def test_lock_starve_sets_pool_locked_and_broadcasts():
+class _WaitLog(_FakeStopEvent):
+    """_FakeStopEvent that records each backoff it was asked to sit."""
+
+    def __init__(self):
+        super().__init__()
+        self.waits = []
+
+    def wait(self, timeout=None):
+        self.waits.append(timeout)
+        return False
+
+
+def _needing(w, hash_hex):
+    w._slots[0] = dict(W._empty_slot(0), isUsed=True, hash=hash_hex, fileName='x')
+
+
+def test_a_turn_wait_retries_at_once_and_reports_no_lock():
+    # Another client's turn (ATEM Software Control loading its thumbnails):
+    # the tile keeps its spinner, nothing says locked, and the download is
+    # queued again marked as having only waited.
     w = W.MediaPoolWatcher('10.0.0.70')
     hash_hex = 'aa' * 16
-    w._slots[0] = {'index': 0, 'isUsed': True, 'hash': hash_hex,
-                   'fileName': 'x', 'thumb': None}
+    _needing(w, hash_hex)
     w._conn = _fake_conn(download=_lock_starve_failure)
-    w._stop_event = _FakeStopEvent()
+    w._stop_event = _WaitLog()
 
     w._do_download(0, hash_hex)
 
-    assert w._pool_lock_starved is True
-    assert w.get_snapshot()['poolLocked'] is True
-    broadcasts = [it for it in _drain(w._work_queue) if it[0] == W._TASK_BROADCAST]
-    assert ('pool_lock', {'locked': True}) in [(b[1], b[2]) for b in broadcasts]
+    items = _drain(w._work_queue)
+    assert [it for it in items if it[0] == W._TASK_BROADCAST] == []
+    assert [it for it in items if it[0] == W._TASK_DOWNLOAD] == [
+        (W._TASK_DOWNLOAD, 0, hash_hex, 2, True)]
+    assert 'poolLocked' not in w.get_snapshot()
 
 
-def test_lock_starve_broadcasts_only_on_change(monkeypatch):
+def test_a_retry_after_a_turn_wait_has_no_backoff():
     w = W.MediaPoolWatcher('10.0.0.71')
     hash_hex = 'aa' * 16
-    w._slots[0] = {'index': 0, 'isUsed': True, 'hash': hash_hex,
-                   'fileName': 'x', 'thumb': None}
+    _needing(w, hash_hex)
     w._conn = _fake_conn(download=_lock_starve_failure)
-    w._stop_event = _FakeStopEvent()
+    w._stop_event = _WaitLog()
 
-    w._do_download(0, hash_hex)
-    w._do_download(0, hash_hex, attempt=2)     # still starving — no re-broadcast
+    w._do_download(0, hash_hex, attempt=5, waited=True)
 
-    broadcasts = [it for it in _drain(w._work_queue)
-                  if it[0] == W._TASK_BROADCAST and it[1] == 'pool_lock']
-    assert len(broadcasts) == 1
+    assert w._stop_event.waits == [], 'sat a backoff after only waiting its turn'
 
 
-def test_wire_success_clears_pool_locked(monkeypatch):
-    w = W.MediaPoolWatcher('10.0.0.72')
-    hash_hex = 'aa' * 16
-    w._slots[0] = {'index': 0, 'isUsed': True, 'hash': hash_hex,
-                   'fileName': 'x', 'thumb': None}
-    w._pool_lock_starved = True
-    w._conn = _fake_conn(download=lambda slot: b'rawbytes')
-    monkeypatch.setattr(W, 'atem_to_rgb', lambda raw, w_, h_: b'rgba')
-    monkeypatch.setattr(W, '_encode_thumbnail_from_rgba', lambda rgba, w_, h_: b'jpeg')
-
-    w._do_download(0, hash_hex)
-
-    assert w._pool_lock_starved is False
-    assert w.get_snapshot()['poolLocked'] is False
-    broadcasts = [it for it in _drain(w._work_queue)
-                  if it[0] == W._TASK_BROADCAST and it[1] == 'pool_lock']
-    assert [(b[2]) for b in broadcasts] == [{'locked': False}]
-
-
-def test_plain_timeout_does_not_flip_pool_locked():
-    """A timeout WITHOUT the never-granted hint (lock obtained, data stalled)
-    is not the foreign-holder signature — leave the flag alone."""
+def test_other_failures_keep_the_backoff():
+    """A timeout WITHOUT the never-granted hint (lock obtained, data
+    stalled) is a real failure: the retry backs off as before."""
     w = W.MediaPoolWatcher('10.0.0.73')
     hash_hex = 'aa' * 16
-    w._slots[0] = {'index': 0, 'isUsed': True, 'hash': hash_hex,
-                   'fileName': 'x', 'thumb': None}
+    _needing(w, hash_hex)
 
     def _fail(slot):
         raise TimeoutError('download: store 0 slot 0 on 10.0.0.73 timed out (15.0s)')
     w._conn = _fake_conn(download=_fail)
-    w._stop_event = _FakeStopEvent()
+    w._stop_event = _WaitLog()
 
-    w._do_download(0, hash_hex)
+    w._do_download(0, hash_hex, attempt=2)
 
-    assert w._pool_lock_starved is False
+    assert w._stop_event.waits == [W.DOWNLOAD_RETRY_BACKOFF]
+    assert _downloads(w._work_queue) == [(W._TASK_DOWNLOAD, 0, hash_hex, 3, False)]
 
 
 # --------------------------------------------------------------------------
@@ -837,3 +837,164 @@ def test_seed_rejects_empty_or_zero_hash():
     W.seed_uploaded_thumb('10.0.0.83', 0, 'ee' * 16, '')
     assert W._thumb_cache_get('10.0.0.83', 'ee' * 16) is None
     assert len(W._thumb_cache) == 0
+
+
+class _Clock:
+    """time.monotonic stand-in the tests move by hand."""
+
+    def __init__(self, t=1000.0):
+        self.t = t
+
+    def __call__(self):
+        return self.t
+
+
+def _waiting_events(q):
+    return [it[2] for it in _drain(q)
+            if it[0] == W._TASK_BROADCAST and it[1] == 'preview_wait']
+
+
+def _taking(clock, seconds, error):
+    """A download that takes ``seconds`` on the clock, then raises."""
+    def _download(slot):
+        clock.t += seconds
+        raise error
+    return _download
+
+
+TURN = TimeoutError('download: store 0 slot 0 on 10.0.0.80 timed out (15.0s) '
+                    '— media store lock never granted; another client is holding it')
+STALL = TimeoutError('download: store 0 slot 0 on 10.0.0.80 timed out (15.0s)')
+
+
+def _watcher_needing(ip, monkeypatch):
+    clock = _Clock()
+    monkeypatch.setattr(W.time, 'monotonic', clock)
+    w = W.MediaPoolWatcher(ip)
+    hash_hex = 'aa' * 16
+    _needing(w, hash_hex)
+    w._pending_downloads[0] = hash_hex
+    w._stop_event = _WaitLog()
+    return w, clock, hash_hex
+
+
+def test_a_short_turn_wait_says_nothing(monkeypatch):
+    w, clock, h = _watcher_needing('10.0.0.80', monkeypatch)
+    w._conn = _fake_conn(download=_taking(clock, 15, TURN))
+    w._do_download(0, h)
+    assert _waiting_events(w._work_queue) == []
+    assert w.get_snapshot()['previewWaiting'] is False
+
+
+def test_a_long_turn_wait_shows_the_notice_once(monkeypatch):
+    w, clock, h = _watcher_needing('10.0.0.81', monkeypatch)
+    w._conn = _fake_conn(download=_taking(clock, 15, TURN))
+    for attempt in (1, 2, 3):
+        w._do_download(0, h, attempt=attempt, waited=attempt > 1)
+    assert _waiting_events(w._work_queue) == [{'waiting': True}]
+    assert w.get_snapshot()['previewWaiting'] is True
+
+
+def test_the_notice_clears_when_a_preview_comes_through(monkeypatch):
+    w, clock, h = _watcher_needing('10.0.0.82', monkeypatch)
+    w._preview_waiting, w._waiting_since = True, clock.t - 60
+    w._conn = _fake_conn(download=lambda slot: b'rawbytes')
+    monkeypatch.setattr(W, 'atem_to_rgb', lambda raw, w_, h_: b'rgba')
+    monkeypatch.setattr(W, '_encode_thumbnail_from_rgba', lambda rgba, w_, h_: b'jpeg')
+    w._do_download(0, h)
+    assert _waiting_events(w._work_queue) == [{'waiting': False}]
+
+
+def test_the_notice_clears_when_nothing_is_left_to_fetch(monkeypatch):
+    # The last preview came from the still cache: no download says the wait
+    # is over, so the empty queue of downloads has to.
+    w, clock, h = _watcher_needing('10.0.0.83', monkeypatch)
+    w._preview_waiting, w._waiting_since = True, clock.t - 60
+    w._slots[0]['thumb'] = 'data:image/jpeg;base64,FROMCACHE'
+    w._conn = _fake_conn()                        # the wire is never touched
+    w._do_download(0, h)
+    assert w._pending_downloads == {}
+    assert _waiting_events(w._work_queue) == [{'waiting': False}]
+
+
+def test_a_tile_says_unavailable_after_two_minutes_of_failures(monkeypatch):
+    w, clock, h = _watcher_needing('10.0.0.84', monkeypatch)
+    w._conn = _fake_conn(download=_taking(clock, 15, STALL))
+    w._do_download(0, h)
+    assert w._slots[0]['previewFailed'] is False
+    clock.t += W.PREVIEW_FAILED_AFTER
+    w._do_download(0, h, attempt=2)
+    assert w._slots[0]['previewFailed'] is True
+    updates = [it[2]['slot'] for it in _drain(w._work_queue)
+               if it[0] == W._TASK_BROADCAST and it[1] == 'slot_updated']
+    assert [u['previewFailed'] for u in updates] == [True]
+
+
+def test_waiting_its_turn_never_marks_a_tile(monkeypatch):
+    w, clock, h = _watcher_needing('10.0.0.85', monkeypatch)
+    w._conn = _fake_conn(download=_taking(clock, 15, TURN))
+    for attempt in range(1, 30):                 # over seven minutes waiting
+        w._do_download(0, h, attempt=attempt, waited=attempt > 1)
+    assert w._slots[0]['previewFailed'] is False
+
+
+def test_the_picture_replaces_the_marker(monkeypatch):
+    w, clock, h = _watcher_needing('10.0.0.86', monkeypatch)
+    w._slots[0]['previewFailed'] = True
+    w._failing_since[0] = clock.t - 300
+    w._conn = _fake_conn(download=lambda slot: b'rawbytes')
+    monkeypatch.setattr(W, 'atem_to_rgb', lambda raw, w_, h_: b'rgba')
+    monkeypatch.setattr(W, '_encode_thumbnail_from_rgba', lambda rgba, w_, h_: b'jpeg')
+    w._do_download(0, h)
+    assert w._slots[0]['thumb'] and w._slots[0]['previewFailed'] is False
+    assert 0 not in w._failing_since
+
+
+def test_a_new_picture_in_the_slot_starts_clean(monkeypatch):
+    w, clock, h = _watcher_needing('10.0.0.87', monkeypatch)
+    w._connected_flag = True
+    w._slots[0]['previewFailed'] = True
+    w._failing_since[0] = clock.t - 300
+    w._on_file_info(_FakeMPfe(0, True, b'\x09' * 16))
+    assert w._slots[0]['previewFailed'] is False
+    assert 0 not in w._failing_since
+
+
+def test_a_picture_that_cannot_be_decoded_counts_as_failing(monkeypatch):
+    w, clock, h = _watcher_needing('10.0.0.88', monkeypatch)
+
+    def _bad(raw, w_, h_):
+        raise ValueError('not a frame')
+    monkeypatch.setattr(W, 'atem_to_rgb', _bad)
+    w._do_decode(0, b'raw', h, 1920, 1080)
+    clock.t += W.PREVIEW_FAILED_AFTER
+    w._do_decode(0, b'raw', h, 1920, 1080)
+    assert w._slots[0]['previewFailed'] is True
+
+
+def test_the_waiting_notice_reaches_the_page():
+    import asyncio
+    from atem_control.control.consumer import ATEMConsumer
+    c = ATEMConsumer()
+    sent = []
+
+    async def _send(payload):
+        sent.append(payload)
+    c.send_json = _send
+    asyncio.run(c.mediapool_preview_wait({'payload': {'waiting': True}}))
+    assert sent == [{'type': 'media_pool_preview_wait', 'data': {'waiting': True}}]
+
+
+def test_an_old_pool_lock_event_is_dropped():
+    # 2.1.6 has no lock banner. An older process can still send the event
+    # through a restart: the consumer takes it and sends the page nothing.
+    import asyncio
+    from atem_control.control.consumer import ATEMConsumer
+    c = ATEMConsumer()
+    sent = []
+
+    async def _send(payload):
+        sent.append(payload)
+    c.send_json = _send
+    asyncio.run(c.mediapool_pool_lock({'payload': {'locked': True}}))
+    assert sent == []

@@ -40,19 +40,17 @@
             <!-- Body -->
             <div class="flex-1 min-h-0 overflow-y-auto p-4 space-y-6">
 
-                <!-- Media lock held by another client (automation software /
-                     stuck session): the ATEM refuses every preview download
-                     until it releases. Honest banner instead of anonymous
-                     forever-spinners; downloads keep retrying underneath and
-                     the banner clears itself the moment one succeeds. -->
-                <div x-show="$store.atem.mediaPool.locked" x-cloak
-                     class="alert alert-warning py-2">
-                    <i class="bi bi-lock-fill"></i>
+                <!-- Previews waiting for another app's turn at the media pool
+                     (ATEM Software Control loading its thumbnails, say): they
+                     load when it is done. Shown only after a while, and it
+                     says waiting, never locked. -->
+                <div x-show="$store.atem.mediaPool.waiting" x-cloak
+                     class="alert alert-info py-2">
+                    <i class="bi bi-hourglass-split"></i>
                     <span class="text-sm">
-                        Media pool is locked by another device (automation /
-                        another control app), so image previews can't be
-                        fetched right now. Names and slots are live; previews
-                        will load automatically as soon as the lock releases.
+                        Previews are waiting while another app uses the media
+                        pool (for example ATEM Software Control loading its
+                        thumbnails). They'll load when it's done.
                     </span>
                 </div>
 
@@ -134,8 +132,11 @@
                                     <template x-if="slot.isUsed && slot.thumb">
                                         <img :src="slot.thumb" class="w-full h-full object-contain pointer-events-none" :alt="'Slot ' + (slot.index + 1)">
                                     </template>
-                                    <template x-if="slot.isUsed && !slot.thumb">
+                                    <template x-if="slot.isUsed && !slot.thumb && !slot.previewFailed">
                                         <span class="loading loading-spinner loading-sm text-base-content/40"></span>
+                                    </template>
+                                    <template x-if="slot.isUsed && !slot.thumb && slot.previewFailed">
+                                        <span class="text-xs text-base-content/50 text-center px-2 pointer-events-none">Preview unavailable — retrying</span>
                                     </template>
                                     <template x-if="!slot.isUsed">
                                         <span class="text-base-content/20 text-xs pointer-events-none">empty</span>
