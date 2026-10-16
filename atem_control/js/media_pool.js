@@ -21,11 +21,6 @@ export const mediaPoolStore = {
     mediaPool: {
         slots: [],
         players: [],
-        // True while the ATEM refuses to grant the media store lock
-        // (another client — automation software, a stuck session —
-        // holds it). Drives the modal's honest banner instead of
-        // anonymous forever-spinners.
-        locked: false,
         // Which ATEM the slots/players below belong to. The store
         // survives in-page ATEM switches (recent dropdown / quick
         // connect); connect() resets the pool when this doesn't match
