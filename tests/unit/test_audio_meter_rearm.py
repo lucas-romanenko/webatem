@@ -50,6 +50,11 @@ def _consumer(conn):
     c._meter_batch_strips = {}
     c._meter_batch_master = None
     c._meter_batch_pending = False
+    # The meters arm for the mixer the pushed state names; these are
+    # Fairlight's (test_legacy_audio_meters.py has the classic mixer's).
+    c.last_known_state = {'audio': {'mixer': 'fairlight'}}
+    c._meter_mixer = None
+    c._meter_pending = False
     return c
 
 

@@ -11,7 +11,12 @@
          AudioMeters in atem_control.js.
 
          EQ band detail / dynamics tuning aren't surfaced in this MVP
-         (per atemwire coverage: comp/lim/exp can't be written today). -->
+         (per atemwire coverage: comp/lim/exp can't be written today).
+
+         A classic (pre-Fairlight) mixer — state.audio.mixer 'legacy',
+         $store.atem.classicAudio — shows the same panel less the input
+         gain, EQ and dynamics rows it doesn't have; its faders top out at
+         +6 dB. Built from protocol docs, untested on a classic switcher. -->
     <div class="fixed inset-0 z-[200] pointer-events-none" x-show="audioPanelOpen" x-cloak
          @keydown.escape.window="if (!audioModal) audioPanelOpen = false">
         <!-- Backdrop. x-show on the backdrop is load-bearing — without it,
@@ -45,12 +50,12 @@
             <div class="flex items-center justify-between p-4 border-b border-base-300 flex-shrink-0">
                 <h2 class="text-lg font-semibold flex items-center gap-2">
                     <i class="bi bi-sliders"></i>
-                    Fairlight Audio Mixer
+                    <span x-text="['legacy', 'unknown'].includes($store.atem.state?.audio?.mixer) ? 'Audio Mixer' : 'Fairlight Audio Mixer'">Fairlight Audio Mixer</span>
                     <span class="text-sm text-base-content/50 font-normal ml-2"
                           x-show="$store.atem.state && $store.atem.state.audio && $store.atem.state.audio.present"
                           x-text="($store.atem.state?.audio?.strips?.length || 0) + ' strips'"></span>
                     <span class="text-sm text-base-content/50 font-normal ml-2"
-                          x-show="!$store.atem.state || !$store.atem.state.audio || !$store.atem.state.audio.present">
+                          x-show="(!$store.atem.state || !$store.atem.state.audio || !$store.atem.state.audio.present) && !$store.atem.audioNoMixer">
                         Loading…
                     </span>
                 </h2>
@@ -59,13 +64,20 @@
                 </button>
             </div>
 
-            <!-- Loading state -->
+            <!-- Loading state. A switcher whose state still names no audio
+                 mixer 10 s after connecting has none (store.audioNoMixer). -->
             <div x-show="!$store.atem.state || !$store.atem.state.audio || !$store.atem.state.audio.present"
                  class="flex-1 flex items-center justify-center">
-                <div class="flex flex-col items-center gap-3">
+                <div class="flex flex-col items-center gap-3" x-show="!$store.atem.audioNoMixer">
                     <span class="loading loading-spinner loading-lg"></span>
                     <span class="text-sm text-base-content/60">
-                        Waiting for Fairlight audio state…
+                        Waiting for audio state…
+                    </span>
+                </div>
+                <div class="flex flex-col items-center gap-3" x-show="$store.atem.audioNoMixer" x-cloak>
+                    <i class="bi bi-volume-mute text-3xl text-base-content/40"></i>
+                    <span class="text-sm text-base-content/60">
+                        This switcher reports no audio mixer
                     </span>
                 </div>
             </div>
@@ -86,14 +98,24 @@
             <div x-show="$store.atem.state && $store.atem.state.audio && $store.atem.state.audio.present"
                  class="flex-1 min-h-0 overflow-x-auto overflow-y-auto flex pb-3 audio-mixer-root">
 
-                <!-- Labels rail (sticky left) -->
+                <!-- Labels rail (sticky left). On the classic mixer
+                     (is-classic) the Input / EQ / Dyn rows are gone from
+                     every grid here: x-if, not x-show, so nothing in them
+                     reads the input gain, EQ or dynamics a classic strip
+                     doesn't carry, and the grid drops their tracks
+                     (.audio-strip-grid.is-classic). -->
                 <div class="audio-strip-grid sticky left-0 z-10 bg-base-200
                             text-[11px] text-base-content/60 border-r border-base-300
-                            w-[88px] min-w-[88px] flex-shrink-0 px-3 uppercase tracking-wider">
+                            w-[88px] min-w-[88px] flex-shrink-0 px-3 uppercase tracking-wider"
+                     :class="{'is-classic': $store.atem.classicAudio}">
                     <div class="row-header"></div>
-                    <div class="row-input flex items-center">Input</div>
-                    <div class="row-eq flex items-center">EQ</div>
-                    <div class="row-dyn flex items-center">Dyn</div>
+                    <template x-if="!$store.atem.classicAudio">
+                        <div class="contents">
+                            <div class="row-input flex items-center">Input</div>
+                            <div class="row-eq flex items-center">EQ</div>
+                            <div class="row-dyn flex items-center">Dyn</div>
+                        </div>
+                    </template>
                     <div class="row-db flex items-center">dB</div>
                     <div class="row-channel"></div>
                     <div class="row-fader-value"></div>
@@ -115,7 +137,8 @@
                         <div class="audio-strip-grid audio-strip-card flex-1 min-w-[100px]"
                              :class="{
                                 'is-on':  strip.mix_type === 'On',
-                                'is-afv': strip.mix_type === 'AudioFollowVideo'
+                                'is-afv': strip.mix_type === 'AudioFollowVideo',
+                                'is-classic': $store.atem.classicAudio
                              }">
                             <!-- Header: name + on indicator bar -->
                             <div class="row-header flex flex-col items-center justify-end pb-0.5">
@@ -129,6 +152,9 @@
                                      }"></div>
                             </div>
 
+                            <!-- Input gain, EQ and dynamics: Fairlight only. -->
+                            <template x-if="!$store.atem.classicAudio">
+                            <div class="contents">
                             <!-- Input gain: drag knob + numeric input.
                                  Drag vertically; Shift = ¼ sensitivity;
                                  dblclick = reset to 0 dB; wheel = ±2 dB
@@ -192,6 +218,8 @@
                                           stroke-width="1.2" fill="none"></path>
                                 </svg>
                             </div>
+                            </div>
+                            </template>
 
                             <!-- dB readout — live meter peak (text written
                                  by AudioMeters._paintLevelText, blank when
@@ -213,7 +241,8 @@
                                 <div class="audio-fader-track"
                                      x-init="AudioFader.attach($el, {
                                         stripId: strip.strip_id,
-                                        min: -100, max: 10, taper: 2,
+                                        /* The classic mixer tops out at +6 dB. */
+                                        min: -100, max: $store.atem.classicAudio ? 6 : 10, taper: 2,
                                         getValue: () => strip.volume_db ?? -100,
                                         send: (v) => ATEMControl.cmdAudio(
                                             'set_audio_strip_volume', strip,
@@ -306,6 +335,7 @@
                      more strips while master stays in view. -->
                 <div class="audio-strip-grid audio-master-card sticky right-0 z-10
                             w-[130px] min-w-[130px] flex-shrink-0"
+                     :class="{'is-classic': $store.atem.classicAudio}"
                      x-data="{master() { return $store.atem.state?.audio?.master ?? null; }}">
                     <template x-if="master()">
                         <div class="contents">
@@ -315,6 +345,9 @@
                                 <div class="audio-on-bar w-3/4 mt-0.5 is-on"></div>
                             </div>
 
+                            <!-- Input row, EQ and dynamics: Fairlight only. -->
+                            <template x-if="!$store.atem.classicAudio">
+                            <div class="contents">
                             <!-- Input row: empty on master -->
                             <div class="row-input"></div>
 
@@ -351,6 +384,8 @@
                                           stroke-width="1.2" fill="none"></path>
                                 </svg>
                             </div>
+                            </div>
+                            </template>
 
                             <!-- dB readout — live master peak; blank when silent -->
                             <div class="row-db flex items-center justify-center text-[11px] font-mono">
@@ -362,7 +397,7 @@
                                 <div class="audio-fader-track"
                                      x-init="AudioFader.attach($el, {
                                         stripId: '_master',
-                                        min: -100, max: 10, taper: 2,
+                                        min: -100, max: $store.atem.classicAudio ? 6 : 10, taper: 2,
                                         getValue: () => master().volume_db ?? -100,
                                         send: (v) => ATEMControl.cmd(
                                             'set_audio_master_volume',

@@ -13,7 +13,13 @@ explicit guard against silent miss-imports — a new feature module must be
 added there to surface its ops through the dispatch table.
 
 Dispatch contract preserved for the consumer:
-    dispatch(connection, command: str, data: dict) -> (ok: bool, error: Optional[str])
+    dispatch(connection, command: str, data: dict, mixer=None)
+        -> (ok: bool, error: Optional[str])
+
+``mixer`` is the ``audio.mixer`` of the state last pushed for this
+connection (``'fairlight'``, ``'legacy'`` or ``'unknown'``; absent with
+bmdwire before 1.6). Only ``'legacy'`` changes anything: the audio verbs
+go to the classic mixer (``LEGACY_AUDIO_COMMAND_MAP``).
 
 On ok=False the consumer forwards ``error`` as the frontend message text.
 Operations that raise on invalid args are caught here and mapped to the
@@ -25,8 +31,9 @@ from types import SimpleNamespace
 from typing import Tuple, Optional
 
 from atemwire.messages import (
-    color_generator, downstream_keyer, fade_to_black, fairlight, hyperdeck,
-    input_video, macros, media, switching, transition, upstream_keyer,
+    audio_legacy, color_generator, downstream_keyer, fade_to_black, fairlight,
+    hyperdeck, input_video, macros, media, switching, transition,
+    upstream_keyer,
 )
 
 
@@ -37,6 +44,7 @@ from atemwire.messages import (
 _OPS_MODULES = (
     switching, color_generator, fade_to_black, media, input_video,
     upstream_keyer, macros, downstream_keyer, transition, fairlight, hyperdeck,
+    audio_legacy,
 )
 
 ops = SimpleNamespace()
@@ -452,13 +460,84 @@ ATEM_COMMAND_MAP = {
 }
 
 
-def dispatch(connection, command: str, data: dict) -> HandlerResult:
-    """Look up the handler for a command name and execute it. Returns
-    ``(ok, error)`` tuple. Consumer treats ok=False as a failed command and
-    emits ``error`` back to the frontend."""
+# =========================================================================
+# Classic (legacy, pre-Fairlight) audio mixer
+# =========================================================================
+# A switcher whose state says ``audio.mixer == 'legacy'`` (Production
+# Studio 4K, Television Studio HD and their kin) gets these in place of the
+# Fairlight entries: the frontend sends the same verbs to either mixer. The
+# volume (dB, ``null`` = silenced) and the pan (±100) go through atemwire's
+# legacy_db_to_volume / legacy_pan_to_balance; ``channel`` is ignored, every
+# classic strip being stereo. Every other set_audio_* verb is refused on
+# this mixer, which has no EQ, dynamics, delay or input gain. Built from the
+# protocol docs; untested on a legacy switcher.
+
+_LEGACY_MIX_OPTIONS = {
+    'Off': {'on': False},
+    'On': {'on': True},
+    'AudioFollowVideo': {'afv': True},
+}
+
+
+def _legacy_mix_option(mix_type):
+    if mix_type not in _LEGACY_MIX_OPTIONS:
+        raise ValueError(f"unknown mix_type {mix_type!r}")
+    return _LEGACY_MIX_OPTIONS[mix_type]
+
+
+LEGACY_AUDIO_COMMAND_MAP = {
+    'set_audio_strip_volume': lambda c, d: ops.set_audio_input(
+        c, source=int(d['source']),
+        volume=ops.legacy_db_to_volume(d.get('volume_db'))),
+    'set_audio_strip_pan': lambda c, d: ops.set_audio_input(
+        c, source=int(d['source']),
+        balance=ops.legacy_pan_to_balance(d['pan'])),
+    'set_audio_strip_mix_type': lambda c, d: ops.set_audio_input(
+        c, source=int(d['source']), **_legacy_mix_option(d['mix_type'])),
+    'set_audio_master_volume': lambda c, d: ops.set_audio_master(
+        c, volume=ops.legacy_db_to_volume(d.get('volume_db'))),
+    'set_audio_master_afv': lambda c, d: ops.set_audio_master(
+        c, afv=bool(d['afv'])),
+    # The monitor bus, which the state shows as the headphones. Fairlight's
+    # headphones (FMHP) have no command in atemwire, so these two are
+    # classic-only.
+    'set_audio_headphones_volume': lambda c, d: ops.set_audio_monitor(
+        c, volume=ops.legacy_db_to_volume(d.get('volume_db'))),
+    'set_audio_headphones_mute': lambda c, d: ops.set_audio_monitor(
+        c, mute=bool(d['mute'])),
+}
+
+_LEGACY_ONLY_AUDIO = frozenset({'set_audio_headphones_volume',
+                                'set_audio_headphones_mute'})
+
+
+def _route(command: str, mixer):
+    """``(handler, None)`` for the command on this mixer, or
+    ``(None, error)``."""
+    if mixer == 'legacy':
+        handler = LEGACY_AUDIO_COMMAND_MAP.get(command)
+        if handler is not None:
+            return handler, None
+        if command.startswith('set_audio_'):
+            return None, (f"{command}: this switcher's classic audio mixer has "
+                          f"no EQ, dynamics, delay or input gain")
+    elif command in _LEGACY_ONLY_AUDIO:
+        return None, (f"{command}: the headphones can be set only on a classic "
+                      f"audio mixer; on Fairlight they are read-only here")
     handler = ATEM_COMMAND_MAP.get(command)
     if handler is None:
-        return False, f"unknown command: {command}"
+        return None, f"unknown command: {command}"
+    return handler, None
+
+
+def dispatch(connection, command: str, data: dict, mixer=None) -> HandlerResult:
+    """Look up the handler for a command name and execute it. Returns
+    ``(ok, error)`` tuple. Consumer treats ok=False as a failed command and
+    emits ``error`` back to the frontend. ``mixer`` is the state's
+    ``audio.mixer``; see the module docstring."""
+    handler, error = _route(command, mixer)
+    if handler is None:
+        return False, error
     try:
         handler(connection, data)
         return True, None
