@@ -16,6 +16,7 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from asgiref.sync import sync_to_async
 from atem_control.media_pool import watcher as media_pool_service
 from atemwire.state import ATEMStateMixin
+from atemwire.messages.audio_legacy import enable_audio_levels
 from atemwire.messages.fairlight import enable_fairlight_levels
 from atemwire.messages.system_info import device_name
 from atemwire.pool import ATEMInstanceManager
@@ -141,6 +142,12 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
         # worker died, builds a new protocol; the poll loop's identity
         # check re-registers the handlers on it.
         self._meter_protocol = None
+        # Which mixer's meters are armed: 'fairlight' (SFLN, FMLv/FDLv) or
+        # 'legacy' (SALN, AMLv), from the pushed state's audio.mixer. A
+        # subscribe that comes before the state names the mixer is pending
+        # and armed by the push that does (_arm_deferred_audio_meters).
+        self._meter_mixer = None
+        self._meter_pending = False
         self._meter_loop = None
         self._meter_batch_strips: dict = {}  # strip_id → latest payload this tick
         self._meter_batch_master: dict | None = None
@@ -760,6 +767,7 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
                     t_send = time.monotonic() - t1
                     sent = True
                     self.last_known_state = current_state.copy()
+                    self._arm_deferred_audio_meters()
                     self.last_change_time = asyncio.get_event_loop().time()
                     consecutive_no_changes = 0
                 else:
@@ -965,40 +973,80 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
 
     METER_BATCH_INTERVAL_S = 0.04  # ~25 Hz total batch flush
 
+    def _meter_mixer_now(self):
+        """The mixer to arm meters for, from the last pushed state:
+        'fairlight' or 'legacy', or None while it hasn't said (no state yet,
+        'unknown', or a state without audio). A state with audio but no
+        ``mixer`` key comes from a bmdwire before 1.6: Fairlight, as
+        always."""
+        audio = (self.last_known_state or {}).get('audio')
+        if audio is None:
+            return None
+        mixer = audio.get('mixer', 'fairlight')
+        return mixer if mixer in ('fairlight', 'legacy') else None
+
+    def _arm_deferred_audio_meters(self):
+        """After each state push: a subscribe that came before the state
+        named the mixer is armed by the first push that does."""
+        if self._meter_pending and self._meter_mixer_now() is not None:
+            self._meter_pending = False
+            self._subscribe_audio_meters()
+
+    def _enable_meter_stream(self, enable):
+        """Start or stop the armed mixer's meters: SFLN for Fairlight, SALN
+        for the classic mixer."""
+        if self._meter_mixer == 'legacy':
+            enable_audio_levels(self.connection, enable=enable)
+        else:
+            enable_fairlight_levels(self.connection, enable=enable)
+
     def _subscribe_audio_meters(self):
         """Idempotent. Register per-consumer meter listeners and bump the
         per-IP subscriber refcount; send SFLN(enable=True) to the ATEM on
-        the 0→1 transition so it starts streaming FMLv/FDLv packets.
+        the 0→1 transition so it starts streaming FMLv/FDLv packets. On a
+        classic mixer (the pushed state's audio.mixer is 'legacy') it is
+        SALN and AMLv instead; until a push names the mixer the subscribe
+        waits (``_meter_pending``).
 
         Captures the current asyncio loop so the (sync) atemwire event
         callbacks can hand events back to the consumer's loop via
         ``call_soon_threadsafe``.
         """
-        if self._audio_subscribed:
+        if self._audio_subscribed or self._meter_pending:
             return
         protocol = getattr(self.connection, 'protocol', None)
         if protocol is None:
             return
+        mixer = self._meter_mixer_now()
+        if mixer is None:
+            self._meter_pending = True
+            return
+        self._meter_mixer = mixer
         self._meter_loop = asyncio.get_event_loop()
         self._meter_batch_strips = {}
         self._meter_batch_master = None
         self._meter_batch_pending = False
 
-        # Per-strip meter levels. NOTE: the wildcard ':*' is only emitted
-        # by AtemProtocol when the field is registered in
-        # FIELDNAME_UNIQUE — and 'fairlight-meter-levels' is NOT, despite
-        # being multi-strip. Each FMLv arrives as the bare event name
-        # carrying a single strip's data; the FMLv field has .strip_id
-        # so we discriminate inside the handler.
-        sid = protocol.on('change:fairlight-meter-levels',
-                          self._on_strip_meter)
-        self._meter_handler_ids.append(
-            ('change:fairlight-meter-levels', sid))
+        if mixer == 'legacy':
+            # One AMLv carries every input and the master (bare event).
+            lid = protocol.on('change:audio-meter-levels', self._on_legacy_meter)
+            self._meter_handler_ids.append(('change:audio-meter-levels', lid))
+        else:
+            # Per-strip meter levels. NOTE: the wildcard ':*' is only emitted
+            # by AtemProtocol when the field is registered in
+            # FIELDNAME_UNIQUE — and 'fairlight-meter-levels' is NOT, despite
+            # being multi-strip. Each FMLv arrives as the bare event name
+            # carrying a single strip's data; the FMLv field has .strip_id
+            # so we discriminate inside the handler.
+            sid = protocol.on('change:fairlight-meter-levels',
+                              self._on_strip_meter)
+            self._meter_handler_ids.append(
+                ('change:fairlight-meter-levels', sid))
 
-        # Master bus meter levels.
-        mid = protocol.on('change:fairlight-master-levels',
-                          self._on_master_meter)
-        self._meter_handler_ids.append(('change:fairlight-master-levels', mid))
+            # Master bus meter levels.
+            mid = protocol.on('change:fairlight-master-levels',
+                              self._on_master_meter)
+            self._meter_handler_ids.append(('change:fairlight-master-levels', mid))
 
         # A new switcher session (the transport re-handshaking after a
         # silence) has not had SFLN, so it streams no meters until it
@@ -1016,9 +1064,9 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
             _meter_subscribers[ip] = prev + 1
             if prev == 0:
                 try:
-                    enable_fairlight_levels(self.connection, enable=True)
+                    self._enable_meter_stream(True)
                 except Exception as e:
-                    logger.warning(f"Failed to enable Fairlight meter stream: {e}")
+                    logger.warning(f"Failed to enable the {mixer} meter stream: {e}")
 
         self._audio_subscribed = True
         self._meter_protocol = protocol
@@ -1043,17 +1091,21 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
         logger.info(
             f"Re-arming audio meters after in-place reconnect ({self.current_ip})")
         self._meter_handler_ids = []           # old ids died with the old protocol
-        sid = protocol.on('change:fairlight-meter-levels', self._on_strip_meter)
-        self._meter_handler_ids.append(('change:fairlight-meter-levels', sid))
-        mid = protocol.on('change:fairlight-master-levels', self._on_master_meter)
-        self._meter_handler_ids.append(('change:fairlight-master-levels', mid))
+        if self._meter_mixer == 'legacy':
+            lid = protocol.on('change:audio-meter-levels', self._on_legacy_meter)
+            self._meter_handler_ids.append(('change:audio-meter-levels', lid))
+        else:
+            sid = protocol.on('change:fairlight-meter-levels', self._on_strip_meter)
+            self._meter_handler_ids.append(('change:fairlight-meter-levels', sid))
+            mid = protocol.on('change:fairlight-master-levels', self._on_master_meter)
+            self._meter_handler_ids.append(('change:fairlight-master-levels', mid))
         cid = protocol.on('connected', self._on_session_connected)
         self._meter_handler_ids.append(('connected', cid))
         self._meter_protocol = protocol
         try:
-            enable_fairlight_levels(self.connection, enable=True)
+            self._enable_meter_stream(True)
         except Exception as e:
-            logger.warning(f"SFLN re-arm failed: {e}")
+            logger.warning(f"Meter re-arm failed: {e}")
 
     def _on_session_connected(self):
         """Handler for the protocol's 'connected' event, which fires when
@@ -1068,14 +1120,19 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
             return
         logger.info(f"Re-arming audio meters for the new switcher session ({self.current_ip})")
         try:
-            enable_fairlight_levels(self.connection, enable=True)
+            self._enable_meter_stream(True)
         except Exception as e:
-            logger.warning(f"SFLN re-arm after reconnect failed: {e}")
+            logger.warning(f"Meter re-arm after reconnect failed: {e}")
 
     def _unsubscribe_audio_meters(self):
         """Idempotent. Unregister per-consumer meter listeners and
         decrement the per-IP refcount; send SFLN(enable=False) on 1→0
-        so the ATEM stops streaming once nobody's watching."""
+        so the ATEM stops streaming once nobody's watching (SALN on a
+        classic mixer). A subscribe still waiting for the mixer is just
+        dropped."""
+        if self._meter_pending:
+            self._meter_pending = False
+            return
         if not self._audio_subscribed:
             return
         protocol = getattr(self.connection, 'protocol', None) if self.connection else None
@@ -1099,12 +1156,13 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
                 if prev == 1:
                     try:
                         if self.connection is not None:
-                            enable_fairlight_levels(self.connection, enable=False)
+                            self._enable_meter_stream(False)
                     except Exception as e:
-                        logger.warning(f"Failed to disable Fairlight meter stream: {e}")
+                        logger.warning(f"Failed to disable the {self._meter_mixer} meter stream: {e}")
                     _meter_subscribers.pop(ip, None)
 
         self._audio_subscribed = False
+        self._meter_mixer = None
 
     def _on_strip_meter(self, contents):
         """Handler for FMLv events — runs on the atemwire worker thread.
@@ -1130,6 +1188,51 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
             loop.call_soon_threadsafe(self._enqueue_strip_meter, sid, payload)
         except RuntimeError:
             pass  # loop closed
+
+    def _on_legacy_meter(self, contents):
+        """Handler for AMLv, the classic mixer's levels — runs on the
+        atemwire worker thread. One packet carries every input and the
+        master, each (L, R, peak L, peak R) in dB; they go into the batch
+        as the Fairlight strips and master do, input ``n`` as strip
+        ``"n.0"``. AMLv has one level per input where FMLv has three
+        stages, so it fills ``input`` (which the painter needs) and
+        ``level`` (which it paints); the dynamics fields have no
+        counterpart. Untested on a classic switcher."""
+        loop = self._meter_loop
+        if loop is None or loop.is_closed():
+            return
+        inputs = getattr(contents, 'input', None) or {}
+        strips = []
+        for src, levels in inputs.items():
+            m = self._legacy_meter_levels(levels)
+            strips.append((f'{src}.0', {'strip_id': f'{src}.0', 'input': m, 'level': m}))
+        m = self._legacy_meter_levels(getattr(contents, 'master', None))
+        master = {'input': m, 'level': m}
+        try:
+            loop.call_soon_threadsafe(self._enqueue_legacy_meters, strips, master)
+        except RuntimeError:
+            pass  # loop closed
+
+    @staticmethod
+    def _legacy_meter_levels(t):
+        """An AMLv (L, R, peak L, peak R) tuple in ``_meter_tuple``'s JSON
+        shape. Anything unreadable is silence (-60, AMLv's own floor), not
+        0 dB, which would paint full scale."""
+        try:
+            return {
+                'l': round(float(t[0]), 2),
+                'r': round(float(t[1]), 2),
+                'peak_l': round(float(t[2]), 2),
+                'peak_r': round(float(t[3]), 2),
+            }
+        except (IndexError, TypeError, ValueError):
+            return {'l': -60.0, 'r': -60.0, 'peak_l': -60.0, 'peak_r': -60.0}
+
+    def _enqueue_legacy_meters(self, strips, master):
+        for sid, payload in strips:
+            self._meter_batch_strips[sid] = payload
+        self._meter_batch_master = master
+        self._arm_meter_batch_flush()
 
     def _on_master_meter(self, contents):
         """Handler for FDLv — runs on atemwire worker thread."""
