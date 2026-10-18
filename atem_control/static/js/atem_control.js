@@ -1434,6 +1434,7 @@
           alpineInstance.connected = data.connected;
           alpineInstance.statusText = data.message;
           if (data.connected) {
+            alpineInstance.armAudioMixerWait();
             this.isReconnecting = false;
             this.connectingIP = null;
             this.isUserInitiatedConnection = false;
@@ -2815,12 +2816,15 @@
         // ``sourcesFor(ctx)`` can filter per dropdown context.
         // Empty until InPr arrives.
         sources: [],
-        // Fairlight audio. ``present: false`` is the loading-gate the
+        // Audio. ``present: false`` is the loading-gate the
         // template watches — the Fairlight handshake arrives ~hundreds
         // of ms after the rest of the state dump. Default empty
         // strips/master so the template can read fields safely before
-        // the first state push lands.
+        // the first state push lands. ``mixer`` is 'fairlight', 'legacy'
+        // (the classic mixer, which has no input gain, EQ or dynamics:
+        // see ``classicAudio``) or 'unknown' until FAMP or AMMO arrives.
         audio: {
+          mixer: "unknown",
           present: false,
           master: {
             present: false,
@@ -4109,6 +4113,27 @@
       // Generic command sender
       send(command, params = {}) {
         ATEMControl.cmd(command, params);
+      },
+      // The switcher has the classic (pre-Fairlight) audio mixer: the
+      // panel hides the input gain, EQ and dynamics it doesn't have.
+      get classicAudio() {
+        return this.state.audio?.mixer === "legacy";
+      },
+      // 10 s after each connect, a state that still names no audio mixer
+      // (neither FAMP nor AMMO arrived) is a switcher without one: the
+      // panel says so instead of waiting. A state without the key at all
+      // (bmdwire before 1.6) keeps waiting, as it always did.
+      audioMixerWaitOver: false,
+      _audioMixerWaitTimer: null,
+      armAudioMixerWait() {
+        clearTimeout(this._audioMixerWaitTimer);
+        this.audioMixerWaitOver = false;
+        this._audioMixerWaitTimer = setTimeout(() => {
+          this.audioMixerWaitOver = true;
+        }, 1e4);
+      },
+      get audioNoMixer() {
+        return this.audioMixerWaitOver && this.state.audio?.mixer === "unknown";
       },
       // Audio meter subscription — tab-gated. The Fairlight meter stream
       // is ~375 msg/s sustained on a 14-strip mixer, which saturates the
