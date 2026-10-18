@@ -494,6 +494,19 @@
     align-items: stretch;
 }
 
+/* The classic (pre-Fairlight) mixer has no input gain, EQ or dynamics: the
+   template leaves those three cells out (x-if), so their tracks go too. */
+.audio-strip-grid.is-classic {
+    grid-template-rows:
+        28px            /* header (name + on-bar)                 */
+        20px            /* dB readout                             */
+        minmax(0, 1fr)  /* channel (fader + meter) — flex-shrink  */
+        20px            /* fader value                            */
+        66px            /* pan knob + numeric                     */
+        26px            /* mix buttons                            */
+        24px;           /* phones                                 */
+}
+
 /* On-air indicator bar above the strip name */
 .audio-on-bar {
     height: 3px;
