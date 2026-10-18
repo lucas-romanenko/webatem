@@ -339,8 +339,10 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
         # the async consumer model and in case handlers grow to read state.
         # KI#13: dispatch is pure atemwire (no ORM) — off the shared
         # thread-sensitive lane so one slow call elsewhere can't queue
-        # every operator's commands behind it.
-        ok, err = await sync_to_async(dispatch_command, thread_sensitive=False)(self.connection, command, data)
+        # every operator's commands behind it. The audio verbs go to the
+        # mixer the last pushed state named (Fairlight or classic).
+        ok, err = await sync_to_async(dispatch_command, thread_sensitive=False)(
+            self.connection, command, data, self._audio_mixer())
 
         if not ok:
             logger.warning(f"Command {command} failed: {err}")
@@ -477,6 +479,9 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
             # _audio_subscribed True so the new ATEM's subscribe no-oped.
             self._unsubscribe_audio_meters()
             await sync_to_async(self._release_pool_ref, thread_sensitive=False)()
+            # The old switcher's state, its audio mixer with it, must not
+            # route the new one's commands before its first push.
+            self.last_known_state = {}
 
         await sync_to_async(self._acquire_pool_ref, thread_sensitive=False)(ip_address)
 
@@ -940,6 +945,13 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
                 )
         finally:
             await sync_to_async(media_pool_service.release, thread_sensitive=False)(ip)
+
+    def _audio_mixer(self):
+        """``audio.mixer`` of the state last pushed for this connection:
+        'fairlight', 'legacy' (the classic mixer) or 'unknown'. None before
+        the first push, and with a bmdwire older than 1.6, which has no
+        such key; both are treated as Fairlight, as before."""
+        return (self.last_known_state.get('audio') or {}).get('mixer')
 
     # =========================================================================
     # Audio meter subscription
