@@ -717,6 +717,7 @@ window.ATEMControl = {
                 alpineInstance.connected = data.connected;
                 alpineInstance.statusText = data.message;
                 if (data.connected) {
+                    alpineInstance.armAudioMixerWait();
                     this.isReconnecting = false; // Connection successful, clear flag
                     this.connectingIP = null;
                     this.isUserInitiatedConnection = false; // Connection successful, clear flag
