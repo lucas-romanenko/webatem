@@ -32,6 +32,12 @@ document.addEventListener('alpine:init', () => {
     Alpine.store('atem', {
         // Connection state
         connected: false,
+        // True from a mid-session "connection lost" (``reconnecting``) to
+        // "restored": the switcher went quiet and bmdwire is
+        // re-handshaking. ``connected`` stays true, so the surface keeps
+        // the last state on screen; it goes inert under a banner, and
+        // cmd() sends the switcher nothing (#38).
+        switcherAway: false,
         // ``stateReady`` flips true on the FIRST atem_state arrival
         // (see updateState). Templates that don't want to render against
         // the initial default values gate their x-show on
