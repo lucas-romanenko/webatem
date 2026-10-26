@@ -127,16 +127,26 @@ jobs:
             kill -0 "$APP_PID" 2>/dev/null || break
             sleep 2
           done
+          # Every build keeps webatem.log in its data folder (1.7.6; before,
+          # only a Windows build with no stdout did, so this always said
+          # "(none)"). It says "listening" once the launcher has seen the
+          # server up (_came_up), which can be after the page first
+          # answers: killed at once, a slow runner's app hadn't said it yet
+          # (macos-intel, 2026-10-26). So wait for the line, then stop it.
+          logged=
+          if [ -n "$ok" ]; then
+            for i in $(seq 1 30); do
+              grep -q "WebATEM listening on 127.0.0.1:8899" smoke/webatem.log 2>/dev/null && { logged=1; break; }
+              sleep 1
+            done
+          fi
           echo "--- the app's own log ---"; cat smoke/webatem.log 2>/dev/null || echo "(none)"
           echo "--- stdout/stderr ---";     cat smoke/stdout.txt 2>/dev/null || echo "(none)"
           kill "$APP_PID" 2>/dev/null || true
           [ -n "$ok" ] || { echo "::error::the frozen build never served /atem/"; exit 1; }
           echo "the frozen build serves /atem/"
-          # Every build keeps webatem.log in its data folder (1.7.6; before,
-          # only a Windows build with no stdout did, so this always said
-          # "(none)"). With the page served, the log has said so.
-          grep -q "WebATEM listening on 127.0.0.1:8899" smoke/webatem.log 2>/dev/null \
-            || { echo "::error::the frozen build wrote no webatem.log in its data folder"; exit 1; }
+          [ -n "$logged" ] \
+            || { echo "::error::the frozen build's webatem.log never said it was listening (30 s after serving /atem/)"; exit 1; }
           echo "and it logs to webatem.log"
 
       # 6b'. The frozen build reaches GitHub over HTTPS, as a user's would.
