@@ -9,7 +9,31 @@
 {% endblock %}
 
 {% block content %}
+{% comment %} The switcher went quiet mid-session (#38): the page keeps its last
+state under this scrim and banner, inert, until the server says the switcher
+is back. They sit outside the wrapper, which goes inert, and above every
+overlay; the scrim dims the page without filtering it. {% endcomment %}
+<div x-data x-show="$store.atem.switcherAway" x-cloak
+     class="fixed inset-0 z-[400] pointer-events-none"
+     role="status" aria-live="polite">
+    <div class="absolute inset-0 bg-base-100/50"></div>
+    {% comment %} Solid raised surface, strong border: a notice, not a state. No
+    alert colour: --in is the link coral, which reads as PROGRAM here. {% endcomment %}
+    <div class="relative flex justify-center px-4 pt-4">
+        <div class="flex flex-wrap sm:flex-nowrap items-center gap-x-4 gap-y-3 px-5 py-3 w-full sm:w-auto max-w-2xl bg-base-300 text-base-content border border-[color:var(--border-strong)] rounded-[14px] shadow-2xl pointer-events-auto">
+            <span class="loading loading-spinner loading-sm text-base-content/60 shrink-0"></span>
+            <div class="text-sm leading-snug flex-1 min-w-0">
+                <div class="font-semibold">The switcher isn't responding. Reconnecting&hellip;</div>
+                <div class="text-base-content/60">Controls are paused until it's back.</div>
+            </div>
+            {% comment %} Its own row on a phone, where it ran off the banner. {% endcomment %}
+            <button class="btn btn-sm w-full sm:w-auto shrink-0" @click="$store.atem.disconnect()">Back to connect page</button>
+        </div>
+    </div>
+</div>
+
 <div x-data="atemControlPage"
+     :inert="$store.atem.switcherAway"
      x-effect="audioPanelOpen && !document.hidden ? $store.atem.subscribeAudioMeters() : $store.atem.unsubscribeAudioMeters()"
      @visibilitychange.window="if (document.hidden) $store.atem.unsubscribeAudioMeters(); else if (audioPanelOpen) $store.atem.subscribeAudioMeters()"
      @drop.window="dragOverSlotIdx = null; dragOverPlayerIdx = null"
@@ -19,9 +43,9 @@
     <div class="min-h-screen bg-base-100 p-4 relative atem-main-content"
          :class="[$store.atem.bodyWarningClass]">
     <!-- Loading Overlay - shows until ATEM is fully connected with state.
-         Disconnect handling is via redirect: on mid-session ATEM loss,
-         inactivity timeout, or manual disconnect, the operator goes back
-         to /atem/ with an appropriate alert there. -->
+         On an inactivity timeout or a manual disconnect the operator goes
+         back to /atem/ with an appropriate alert there. A switcher lost
+         mid-session keeps this page, under the reconnecting banner. -->
     <div x-show="!$store.atem.connected || !$store.atem.stateReady" class="absolute inset-0 bg-base-100 z-40 flex items-start justify-center p-4 pt-24">
         <div class="card w-full max-w-md bg-base-200">
             <div class="card-body text-center">

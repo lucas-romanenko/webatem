@@ -885,6 +885,14 @@
   window.chromaSampleBox = chromaSampleBox;
 
   // ../../atem_control/js/runtime.js
+  var SESSION_VERBS = /* @__PURE__ */ new Set([
+    "connect",
+    "disconnect",
+    "refresh",
+    "subscribe_audio_meters",
+    "unsubscribe_audio_meters",
+    "media_pool_refresh"
+  ]);
   window.ATEMControl = {
     ws: null,
     // ---- Declared-state-keys guard ------------------------------------
@@ -1088,7 +1096,9 @@
     // global verbs ignore it. Explicit params.me wins over the stamp.
     cmd(command, params = {}) {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-      const me = window.Alpine?.store?.("atem")?.activeMe ?? 0;
+      const store = window.Alpine?.store?.("atem");
+      if (store?.switcherAway && !SESSION_VERBS.has(command)) return;
+      const me = store?.activeMe ?? 0;
       this.ws.send(JSON.stringify({ command, me, ...params }));
     },
     // Audio per-strip command helper. Bundles ``source`` and ``channel``
@@ -1431,9 +1441,15 @@
       const alpineInstance = Alpine.store("atem");
       switch (data.type) {
         case "connection_status":
+          if (!data.connected && data.reconnecting && alpineInstance.stateReady) {
+            alpineInstance.switcherAway = true;
+            alpineInstance.statusText = data.message;
+            break;
+          }
           alpineInstance.connected = data.connected;
           alpineInstance.statusText = data.message;
           if (data.connected) {
+            alpineInstance.switcherAway = false;
             alpineInstance.armAudioMixerWait();
             this.isReconnecting = false;
             this.connectingIP = null;
@@ -2440,6 +2456,12 @@
     Alpine.store("atem", {
       // Connection state
       connected: false,
+      // True from a mid-session "connection lost" (``reconnecting``) to
+      // "restored": the switcher went quiet and bmdwire is
+      // re-handshaking. ``connected`` stays true, so the surface keeps
+      // the last state on screen; it goes inert under a banner, and
+      // cmd() sends the switcher nothing (#38).
+      switcherAway: false,
       // ``stateReady`` flips true on the FIRST atem_state arrival
       // (see updateState). Templates that don't want to render against
       // the initial default values gate their x-show on

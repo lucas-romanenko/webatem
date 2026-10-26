@@ -199,6 +199,18 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
     def is_connected(self) -> bool:
         return bool(self.connection and self.connection.is_connected)
 
+    @property
+    def is_ready(self) -> bool:
+        """The switcher's state is current. Through a transport re-handshake
+        ``is_connected`` stays True while this is False: what is sent then
+        goes out under the session being replaced, and is lost or lands
+        late (#38, #39). bmdwire before 1.3 has no ``is_ready``; there it
+        is ``is_connected``. The poll loop stays on ``is_connected``: it
+        must keep polling through the gap to see the switcher go and
+        come back."""
+        conn = self.connection
+        return bool(conn and getattr(conn, 'is_ready', conn.is_connected))
+
     # =========================================================================
     # WebSocket Lifecycle
     # =========================================================================
@@ -336,8 +348,12 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
         drags (20 Hz × 30 KB = ~600 KB/s purely from per-command pushes,
         on top of the polling loop). That saturates the WebSocket write
         buffer and queues audio meter / other small messages behind it.
+
+        Refused while the switcher is away (``is_ready``), not only once
+        the worker is gone: a command sent into a re-handshake is lost,
+        or lands after the operator has moved on (#38, #39).
         """
-        if not self.is_connected:
+        if not self.is_ready:
             await self.send_json({'type': 'error', 'message': 'ATEM not connected'})
             return
 
@@ -722,9 +738,16 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
                     if was_atem_reachable and not atem_reachable:
                         logger.info("ATEM dropped mid-session; notifying frontend")
                         try:
+                            # ``reconnecting``: bmdwire re-handshakes in
+                            # place until the switcher answers, and the
+                            # branch below says so. The page stays and
+                            # waits (#38); the other connected=False
+                            # notices (a failed connect, a disconnect)
+                            # send it to the connect page.
                             await self.send_json({
                                 'type': 'connection_status',
                                 'connected': False,
+                                'reconnecting': True,
                                 'message': 'ATEM connection lost',
                             })
                         except Exception as e:  # noqa: BLE001
@@ -1341,7 +1364,9 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
         if not isinstance(slot, int) or slot < 0 or slot >= 32:
             await self.send_json({'type': 'error', 'message': f'Invalid slot: {slot}'})
             return
-        if not self.is_connected:
+        # is_ready, as for every command (#39): bmdwire's clear_still
+        # refuses a re-handshake too (bmdwire#8), but as a failed delete.
+        if not self.is_ready:
             await self.send_json({'type': 'error', 'message': 'ATEM not connected'})
             return
         try:
