@@ -13,6 +13,14 @@
  * object — that load order is a documented contract (e2e spec 08).
  */
 
+// What cmd() still sends while the switcher is away (#38): the session's
+// own verbs, which the server answers itself. Everything else is for the
+// switcher, which isn't there to take it.
+const SESSION_VERBS = new Set([
+    'connect', 'disconnect', 'refresh',
+    'subscribe_audio_meters', 'unsubscribe_audio_meters', 'media_pool_refresh',
+]);
+
 window.ATEMControl = {
     ws: null,
 
@@ -232,7 +240,12 @@ window.ATEMControl = {
     // global verbs ignore it. Explicit params.me wins over the stamp.
     cmd(command, params = {}) {
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-        const me = window.Alpine?.store?.('atem')?.activeMe ?? 0;
+        const store = window.Alpine?.store?.('atem');
+        // While the switcher is away nothing goes to it: the page is
+        // inert, and this catches the keyboard and anything else that
+        // calls in. The server refuses it too (consumer.is_ready).
+        if (store?.switcherAway && !SESSION_VERBS.has(command)) return;
+        const me = store?.activeMe ?? 0;
         this.ws.send(JSON.stringify({ command, me, ...params }));
     },
 
@@ -714,9 +727,22 @@ window.ATEMControl = {
         
         switch (data.type) {
             case 'connection_status':
+                if (!data.connected && data.reconnecting && alpineInstance.stateReady) {
+                    // The switcher went quiet mid-session (#38). bmdwire
+                    // re-handshakes in place until it answers, and the
+                    // server sends "restored" once its state is back. So
+                    // the page stays: it keeps the last state on screen,
+                    // goes inert under a banner, and waits as long as it
+                    // takes. The banner's button is the way out.
+                    alpineInstance.switcherAway = true;
+                    alpineInstance.statusText = data.message;
+                    break;
+                }
                 alpineInstance.connected = data.connected;
                 alpineInstance.statusText = data.message;
                 if (data.connected) {
+                    // Cleared first: the refresh below goes through cmd().
+                    alpineInstance.switcherAway = false;
                     alpineInstance.armAudioMixerWait();
                     this.isReconnecting = false; // Connection successful, clear flag
                     this.connectingIP = null;
@@ -743,11 +769,11 @@ window.ATEMControl = {
                     //     no message (the redirect itself is the feedback)
                     //   - 5-minute inactivity timeout: server sets
                     //     ``auto_disconnected: true``
-                    //   - ATEM lost mid-session (cable yank, power off):
-                    //     server's _monitor_loop sends "ATEM connection
-                    //     lost" via connection_status connected=false
                     //   - Outright connection failure (couldn't reach the
-                    //     ATEM at all): also surfaced as "lost connection"
+                    //     ATEM at all): surfaced as "lost connection"
+                    // An ATEM lost mid-session (cable yank, power off)
+                    // doesn't come here: it carries ``reconnecting`` and
+                    // the page stays (above).
                     if (alpineInstance._userInitiatedDisconnect) {
                         // Manual disconnect — the disconnect() method on
                         // the store already kicked off the navigation.
