@@ -107,12 +107,16 @@ def atem_status(request):
                         ATEMInstanceManager.release_instance(ip, instance=instance)
 
                     if state.get('is_connected'):
+                        # The fields describe M/E 1: bmdwire keeps each
+                        # M/E's buses, transition and FTB under mes[],
+                        # with no top-level copies (#40).
+                        me1 = (state.get('mes') or [{}])[0]
                         response_data['instances'][ip].update({
-                            'program': state.get('program', 0),
-                            'preview': state.get('preview', 0),
-                            'transition_active': state.get('transition', {}).get('in_transition', False),
-                            'ftb_active': state.get('ftb', {}).get('active', False),
-                            'ftb_disabled': state.get('ftb', {}).get('disabled', False)
+                            'program': me1.get('program', 0),
+                            'preview': me1.get('preview', 0),
+                            'transition_active': me1.get('transition', {}).get('in_transition', False),
+                            'ftb_active': me1.get('ftb', {}).get('active', False),
+                            'ftb_disabled': me1.get('ftb', {}).get('disabled', False)
                         })
 
                 except Exception as e:
