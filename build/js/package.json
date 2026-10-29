@@ -1,5 +1,5 @@
 {
-  "name": "av-server-js",
+  "name": "webatem-js",
   "private": true,
   "description": "Bundles the control page's per-feature ES modules (atem_control/js/) into the served static/js/atem_control.js. Build: see build.sh",
   "devDependencies": {
