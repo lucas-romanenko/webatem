@@ -73,8 +73,12 @@ REUPLOAD_SETTLE = 1.0
 STATE_READY_TIMEOUT = CONNECTION_TIMEOUT
 
 # Tally cycle-wait timings + the shared cold->hot->cold loop live in
-# ``content_change.tally`` so the media-pool and HyperDeck paths can't drift.
+# ``atem_control.tally`` so the media-pool and HyperDeck paths can't drift.
+# What "the state is there" means lives there too: the cycle and the slot
+# check below must agree on it.
 from atem_control.tally import (
+    _pooled,
+    _state_ready,
     ticked_pump,
     wait_for_safe_cycle,
     TALLY_OBSERVATION_SECONDS,
@@ -211,29 +215,6 @@ class _StateNotReady(Exception):
     nothing can say the slot is off air. ``_upload_one`` refuses the item."""
 
 
-def _pooled(conn) -> bool:
-    """A pooled ``ATEMConnection`` (how a host calls ``_is_slot_safe``), not
-    the uploader's own ``AtemProtocol``: its worker thread pumps the loop and
-    tracks the session, so it is asked rather than pumped."""
-    return hasattr(conn, 'is_connected')
-
-
-def _state_ready(conn) -> bool:
-    """The switcher's state is there to read: its dump has finished and
-    carried a video mode, the test ``atemwire.ready.wait_ready`` uses. A
-    dropped session empties ``mixerstate`` while the transport re-handshakes
-    in place, and the new dump refills it field by field, so anything short of
-    this can be missing exactly the field that says the slot is on air."""
-    if 'video-mode' not in conn.mixerstate:
-        return False
-    if _pooled(conn):
-        # is_ready (bmdwire >= 1.3) is False through a re-handshake, when
-        # is_connected stays True; the media-pool watcher asks the same.
-        return bool(getattr(conn, 'is_ready', conn.is_connected))
-    # Set at the end-of-dump marker, cleared on a drop.
-    return bool(getattr(conn, 'initialized', False))
-
-
 def _await_state(conn, timeout: float,
                  is_cancelled: Optional[Callable[[], bool]] = None) -> bool:
     """Wait until the state is ready (True), or until ``timeout`` seconds pass
@@ -319,11 +300,14 @@ def _wait_for_safe_upload_window(protocol, slot_0_indexed: int,
                                  observation: float = TALLY_OBSERVATION_SECONDS,
                                  timeout: float = TALLY_TIMEOUT) -> bool:
     """Cycle-wait for tally safety before overwriting a media-pool slot. Thin
-    wrapper over the shared ``wait_for_safe_cycle`` (content_change.tally) with
+    wrapper over the shared ``wait_for_safe_cycle`` (atem_control.tally) with
     the media-pool slot liveness predicate, so the cold->hot->cold loop is
     identical to the HyperDeck path. ``_StateNotReady`` from the predicate is
     not caught here: it ends the cycle at once, a refusal rather than a wait
-    that runs out the tally timeout as if the slot had stayed live."""
+    that runs out the tally timeout as if the slot had stayed live. A state
+    that does come back in time costs the cycle a fresh start, not the
+    upload: the predicate's answer from the new dump is not taken as the end
+    of the gap's unseen seconds (see ``wait_for_safe_cycle``)."""
     slot_user = slot_0_indexed + 1
     if not _state_ready(protocol):
         source = (f"not ready (session reconnecting), waiting up to "
