@@ -130,3 +130,26 @@ def test_no_notice_while_the_first_state_comes_in():
     # A fresh connect's first polls may find the state empty: no flash.
     up, gone = {'is_connected': True}, {'is_connected': False}
     assert _run_monitor([gone, gone, up, up]) == []
+
+
+# --- the notice ---------------------------------------------------------------
+
+def test_the_notice_dims_only_the_page_and_sits_in_its_middle():
+    """The scrim covers the page's own scroller (<main>), not the window, so
+    the host's navigation above it stays usable and the operator can go to
+    another page; the notice is centred in it. Covering the window put the
+    notice over the navigation and dimmed it too."""
+    import pathlib
+    import re
+
+    import atem_control
+
+    html = (pathlib.Path(atem_control.__file__).parent / 'templates' / 'control.html').read_text()
+    host = re.search(r'<div x-data="\{(?P<data>.*?)\}"\s*x-show="\$store\.atem\.switcherAway"(?P<rest>.*?)>',
+                     html, re.S)
+    assert host, 'the switcher-away notice moved; update this test'
+    assert "closest('main')" in host['data']
+    assert ':style="box"' in host['rest']            # an object: a string would undo x-show
+    classes = re.search(r'class="([^"]*)"', host['rest']).group(1).split()
+    assert 'fixed' in classes and 'inset-0' not in classes
+    assert {'items-center', 'justify-center'} <= set(classes)
