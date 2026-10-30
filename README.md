@@ -103,9 +103,10 @@ with mine".
 
 It should work more widely than that. The protocol is the same across the
 range, the control surface is built from what each switcher reports about
-itself rather than from a hardcoded model list, and features a switcher does
-not have simply do not appear. But should is not the same as does, and
-nobody has checked.
+itself rather than from a hardcoded model list: features a switcher does
+not have do not appear, or appear greyed where the switcher reports it has
+none of something (a DVE, a stinger). But should is not the same as does,
+and nobody has checked.
 
 So if you have a Mini, a Mini Pro, a Television Studio, a 2 M/E or 4 M/E, or
 anything else with an ATEM badge on it, **trying this and telling me what

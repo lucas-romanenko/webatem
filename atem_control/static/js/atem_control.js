@@ -2814,7 +2814,15 @@
           colorGenerators: 0,
           multiviewWindows: 0,
           fairlightStrips: 0,
-          macros: 0
+          macros: 0,
+          // The DVE / stinger / SuperSource block counts from the
+          // switcher's _top (bmdwire's topology_block_counts). null
+          // means unknown and greys nothing; only a reported 0 greys
+          // what depends on the block (lacksBlock). A bmdwire without
+          // these keys leaves them undefined, which is unknown too.
+          dves: null,
+          stingers: null,
+          superSources: null
         },
         // Must exist in the initial state so the merge in updateState
         // (which only copies keys that are already defined) picks it
@@ -2954,7 +2962,47 @@
           "DVE": 3
         };
         const typeValue = typeof keyType === "string" ? typeMap[keyType] : keyType;
+        if (typeValue === 3 && this.lacksBlock("dves")) return;
         this.send("set_usk_type", { key_index: uskIndex, key_type: typeValue });
+      },
+      // What the switcher says it lacks. True only when its _top reported
+      // 0 blocks of ``kind`` ('dves' | 'stingers' | 'superSources'); an
+      // unknown count (null, or undefined from an older bmdwire) is never
+      // "lacks", so a switcher that hasn't said keeps every control.
+      lacksBlock(kind) {
+        return this.state.topology?.[kind] === 0;
+      },
+      // Why a control is greyed, for its tooltip; null (no title) when it
+      // isn't.
+      lacksBlockTitle(kind) {
+        if (!this.lacksBlock(kind)) return null;
+        return {
+          dves: "This switcher has no DVE",
+          stingers: "This switcher has no stinger",
+          superSources: "This switcher has no SuperSource"
+        }[kind] ?? null;
+      },
+      // The block a transition style needs: DVE (3) and Stinger (4).
+      transitionStyleBlock(style) {
+        return { 3: "dves", 4: "stingers" }[style] ?? null;
+      },
+      transitionStyleMissing(style) {
+        const kind = this.transitionStyleBlock(style);
+        return kind !== null && this.lacksBlock(kind);
+      },
+      transitionStyleTitle(style) {
+        const kind = this.transitionStyleBlock(style);
+        return kind === null ? null : this.lacksBlockTitle(kind);
+      },
+      setTransitionStyle(style) {
+        if (this.transitionStyleMissing(style)) return;
+        this.send("set_transition_style", { style });
+      },
+      // The greying classes, the same pair the settings-dependent controls
+      // use. A switcher SET to a style it says it lacks still shows it
+      // selected (the style class is kept), only greyed.
+      greyedClass(missing) {
+        return missing ? " opacity-50 pointer-events-none" : "";
       },
       // Source-picker filter for dropdowns. ``ctx`` selects the
       // filter rule:
@@ -3803,7 +3851,7 @@
       },
       getTransitionStyleButtonClass(styleIndex) {
         const isActive = this.state.mes[this.activeMe].transition.style === styleIndex;
-        return isActive ? "btn btn-sm btn-warning shadow-lg" : "btn btn-sm btn-outline hover:border-[oklch(var(--wa))]";
+        return (isActive ? "btn btn-sm btn-warning shadow-lg" : "btn btn-sm btn-outline hover:border-[oklch(var(--wa))]") + this.greyedClass(this.transitionStyleMissing(styleIndex));
       },
       getTransitionSelectionButtonClass(keyType, keyIndex = null) {
         const selection = this.state.mes[this.activeMe].transition.selection;
