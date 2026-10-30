@@ -43,11 +43,17 @@
                                     @click="$store.atem.setUSKType(k, 2)">
                                     Pattern
                                 </button>
-                                <button 
-                                    x-bind:class="$store.atem.getUSKType(k) === 3 ? 'flex-1 px-3 py-2 text-xs font-medium -mb-px transition-colors text-center border-b-2 border-b-primary text-primary bg-base-100' : 'flex-1 px-3 py-2 text-xs font-medium -mb-px transition-colors text-center text-base-content/70 hover:text-base-content hover:bg-base-300'"
+                                <!-- DVE greys (the cell keeps the tooltip) when the switcher
+                                     reports no DVE; still shown selected if the key is set to it. -->
+                                <div class="flex-1 flex" :title="$store.atem.lacksBlockTitle('dves')">
+                                <button
+                                    x-bind:class="($store.atem.getUSKType(k) === 3 ? 'flex-1 px-3 py-2 text-xs font-medium -mb-px transition-colors text-center border-b-2 border-b-primary text-primary bg-base-100' : 'flex-1 px-3 py-2 text-xs font-medium -mb-px transition-colors text-center text-base-content/70 hover:text-base-content hover:bg-base-300') + $store.atem.greyedClass($store.atem.lacksBlock('dves'))"
+                                    :aria-disabled="$store.atem.lacksBlock('dves') ? 'true' : null"
+                                    :tabindex="$store.atem.lacksBlock('dves') ? -1 : null"
                                     @click="$store.atem.setUSKType(k, 3)">
                                     DVE
                                 </button>
+                                </div>
                             </div>
                             
                             <!-- Luma Settings for USK -->

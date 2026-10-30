@@ -6,13 +6,20 @@
                             Transition Style
                         </h2>
                         <div class="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-2 xl:grid-cols-3 gap-2">
+                            {% comment %} A style the switcher reports it has no block for (DVE,
+                                 stinger) is greyed, not hidden. pointer-events-none on the button
+                                 leaves the tooltip to the cell around it. {% endcomment %}
                             <template x-for="(style, index) in ATEMControl.transitionStyles" :key="style.value">
-                                <button 
-                                    :class="$store.atem.getTransitionStyleButtonClass(style.value)"
-                                    @click="$store.atem.send('set_transition_style', {style: style.value})"
-                                    x-text="style.label"
-                                    class="btn btn-sm transition-all duration-200 hover:scale-105 active:scale-95">
-                                </button>
+                                <div :title="$store.atem.transitionStyleTitle(style.value)">
+                                    <button
+                                        :class="$store.atem.getTransitionStyleButtonClass(style.value)"
+                                        :aria-disabled="$store.atem.transitionStyleMissing(style.value) ? 'true' : null"
+                                        :tabindex="$store.atem.transitionStyleMissing(style.value) ? -1 : null"
+                                        @click="$store.atem.setTransitionStyle(style.value)"
+                                        x-text="style.label"
+                                        class="btn btn-sm w-full transition-all duration-200 hover:scale-105 active:scale-95">
+                                    </button>
+                                </div>
                             </template>
                         </div>
                     </div>

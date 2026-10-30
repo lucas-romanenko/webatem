@@ -12,7 +12,8 @@
                         class="px-4 acc-body">
                         <div class="space-y-4 text-sm">
                             
-                            <!-- Transition Type Tabs -->
+                            <!-- Transition Type Tabs. DVE and Stinger grey (the cell keeps the
+                                 tooltip) when the switcher reports none of that block. -->
                             <div class="flex border-b border-base-300 -mx-4">
                                 <button 
                                     class="flex-1 px-3 py-2 text-xs font-medium -mb-px transition-colors text-center"
@@ -32,18 +33,26 @@
                                     @click="selectedTransitionTab = 'Wipe'">
                                     Wipe
                                 </button>
-                                <button 
+                                <div class="flex-1 flex" :title="$store.atem.lacksBlockTitle('dves')">
+                                <button
                                     class="flex-1 px-3 py-2 text-xs font-medium -mb-px transition-colors text-center"
-                                    :class="selectedTransitionTab === 'DVE' ? 'border-b-2 border-b-primary text-primary bg-base-100' : 'text-base-content/70 hover:text-base-content hover:bg-base-300'"
+                                    :class="(selectedTransitionTab === 'DVE' ? 'border-b-2 border-b-primary text-primary bg-base-100' : 'text-base-content/70 hover:text-base-content hover:bg-base-300') + $store.atem.greyedClass($store.atem.lacksBlock('dves'))"
+                                    :aria-disabled="$store.atem.lacksBlock('dves') ? 'true' : null"
+                                    :tabindex="$store.atem.lacksBlock('dves') ? -1 : null"
                                     @click="selectedTransitionTab = 'DVE'">
                                     DVE
                                 </button>
-                                <button 
+                                </div>
+                                <div class="flex-1 flex" :title="$store.atem.lacksBlockTitle('stingers')">
+                                <button
                                     class="flex-1 px-3 py-2 text-xs font-medium -mb-px transition-colors text-center"
-                                    :class="selectedTransitionTab === 'Stinger' ? 'border-b-2 border-b-primary text-primary bg-base-100' : 'text-base-content/70 hover:text-base-content hover:bg-base-300'"
+                                    :class="(selectedTransitionTab === 'Stinger' ? 'border-b-2 border-b-primary text-primary bg-base-100' : 'text-base-content/70 hover:text-base-content hover:bg-base-300') + $store.atem.greyedClass($store.atem.lacksBlock('stingers'))"
+                                    :aria-disabled="$store.atem.lacksBlock('stingers') ? 'true' : null"
+                                    :tabindex="$store.atem.lacksBlock('stingers') ? -1 : null"
                                     @click="selectedTransitionTab = 'Stinger'">
                                     Stinger
                                 </button>
+                                </div>
                             </div>
                             
                             <!-- Mix Settings -->
