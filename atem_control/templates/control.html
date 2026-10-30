@@ -10,25 +10,45 @@
 
 {% block content %}
 {% comment %} The switcher went quiet mid-session (#38): the page keeps its last
-state under this scrim and banner, inert, until the server says the switcher
-is back. They sit outside the wrapper, which goes inert, and above every
-overlay; the scrim dims the page without filtering it. {% endcomment %}
-<div x-data x-show="$store.atem.switcherAway" x-cloak
-     class="fixed inset-0 z-[400] pointer-events-none"
+state under this scrim and notice, inert, until the server says the switcher
+is back. The scrim covers the page's own scroller (the <main> this page sits
+in), not the window: whatever the host puts above it, its navigation, stays
+usable, so the operator can just go to another page. The box is measured, not
+assumed, since hosts differ in what sits above <main>; with no <main> it is the
+window. The notice is centred in it. Both sit outside the wrapper, which goes
+inert, and above every overlay of this page; the scrim dims the page without
+filtering it. :style is an object, never a string: a string would rewrite the
+style attribute and undo x-show. {% endcomment %}
+<div x-data="{
+        box: {},
+        fit() {
+            const m = this.$el.closest('main');
+            const r = m ? m.getBoundingClientRect() : { top: 0, left: 0, width: innerWidth, height: innerHeight };
+            this.box = { top: r.top + 'px', left: r.left + 'px', width: r.width + 'px', height: r.height + 'px' };
+        },
+        init() {
+            const m = this.$el.closest('main');
+            if (m && window.ResizeObserver) new ResizeObserver(() => this.fit()).observe(m);
+            this.fit();
+        },
+     }"
+     x-show="$store.atem.switcherAway" x-cloak
+     x-effect="$store.atem.switcherAway && fit()"
+     @resize.window="fit()"
+     :style="box"
+     class="fixed z-[400] pointer-events-none flex items-center justify-center px-4"
      role="status" aria-live="polite">
     <div class="absolute inset-0 bg-base-100/50"></div>
     {% comment %} Solid raised surface, strong border: a notice, not a state. No
     alert colour: --in is the link coral, which reads as PROGRAM here. {% endcomment %}
-    <div class="relative flex justify-center px-4 pt-4">
-        <div class="flex flex-wrap sm:flex-nowrap items-center gap-x-4 gap-y-3 px-5 py-3 w-full sm:w-auto max-w-2xl bg-base-300 text-base-content border border-[color:var(--border-strong)] rounded-[14px] shadow-2xl pointer-events-auto">
-            <span class="loading loading-spinner loading-sm text-base-content/60 shrink-0"></span>
-            <div class="text-sm leading-snug flex-1 min-w-0">
-                <div class="font-semibold">The switcher isn't responding. Reconnecting&hellip;</div>
-                <div class="text-base-content/60">Controls are paused until it's back.</div>
-            </div>
-            {% comment %} Its own row on a phone, where it ran off the banner. {% endcomment %}
-            <button class="btn btn-sm w-full sm:w-auto shrink-0" @click="$store.atem.disconnect()">Back to connect page</button>
+    <div class="relative flex flex-wrap sm:flex-nowrap items-center gap-x-4 gap-y-3 px-5 py-3 w-full sm:w-auto max-w-2xl bg-base-300 text-base-content border border-[color:var(--border-strong)] rounded-[14px] shadow-2xl pointer-events-auto">
+        <span class="loading loading-spinner loading-sm text-base-content/60 shrink-0"></span>
+        <div class="text-sm leading-snug flex-1 min-w-0">
+            <div class="font-semibold">The switcher isn't responding. Reconnecting&hellip;</div>
+            <div class="text-base-content/60">Controls are paused until it's back.</div>
         </div>
+        {% comment %} Its own row on a phone, where it ran off the banner. {% endcomment %}
+        <button class="btn btn-sm w-full sm:w-auto shrink-0" @click="$store.atem.disconnect()">Back to connect page</button>
     </div>
 </div>
 
