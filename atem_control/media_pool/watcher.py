@@ -71,6 +71,7 @@ Upload-lockout pattern (2026-07-02 semantics):
 import base64
 import io
 import logging
+import inspect
 import queue
 import threading
 import time
@@ -112,11 +113,18 @@ _TASK_DECODE = 'decode'
 _TASK_DOWNLOAD = 'download'
 _TASK_STOP = 'stop'
 
-# Per-slot download timeout (native interleaved transfer). Healthy
-# transfers are ~2s measured on LAN; 15s is ~7x headroom and still
-# generous for VPN links, while keeping the retry cycle fast when a
-# transfer dies (a long timeout only delays the retry).
-DOWNLOAD_TIMEOUT = 15.0
+# Per-slot download limits (native interleaved transfer). A download gives
+# up after DOWNLOAD_STALL_TIMEOUT with no data arriving (waiting for the
+# lock counts as no data) and after DOWNLOAD_MAX_SECONDS in all. A 1080p
+# still is ~2 s on a LAN, but a 4K one is 12 MB or more on the wire and an
+# 8K one four times that: the old fixed 15 s cut a 4K Plus's first still
+# off mid-stream every time, and the release of the store lock that came
+# with it left the switcher's transfer engine refusing every request after
+# (a 4K Plus, 2026-11-04). bmdwire before 1.11 has no stall timeout; the
+# download then gets DOWNLOAD_TIMEOUT, as it always did.
+DOWNLOAD_STALL_TIMEOUT = 15.0
+DOWNLOAD_MAX_SECONDS = 240.0
+DOWNLOAD_TIMEOUT = DOWNLOAD_STALL_TIMEOUT
 
 # A failed download is NEVER dropped (changed 2026-07-03): while the watcher
 # is alive and the slot still needs its thumb, the task re-queues itself
@@ -136,6 +144,11 @@ DOWNLOAD_TIMEOUT = 15.0
 # the store is free, and the thumb arrives as soon as it is.
 DOWNLOAD_RETRY_BACKOFF = 2.0
 DOWNLOAD_RETRY_BACKOFF_MAX = 30.0
+# A retry's pause never holds up the other slots: with other tasks queued it
+# goes to the back of the queue, and alone it waits at most this long at a
+# time before looking again, so a still that arrives meanwhile isn't stuck
+# behind a slot that keeps failing.
+DOWNLOAD_RETRY_IDLE_STEP = 2.0
 # What the operator is told. Previews that have waited this long for
 # another client's turn show the media pool's waiting notice (ATEM Software
 # Control loading its thumbnails takes ~40 s for 20 stills, so a normal turn
@@ -234,6 +247,14 @@ def _thumb_from_png(png: bytes) -> Optional[str]:
     return 'data:image/jpeg;base64,' + base64.b64encode(thumb_bytes).decode('ascii')
 
 
+def _takes_stall_timeout(download_still) -> bool:
+    """Whether this bmdwire's download_still has ``stall_timeout`` (1.11)."""
+    try:
+        return 'stall_timeout' in inspect.signature(download_still).parameters
+    except (TypeError, ValueError):
+        return False
+
+
 def _empty_slot(idx: int) -> dict:
     return {'index': idx, 'isUsed': False, 'hash': '', 'fileName': '', 'thumb': None,
             'previewFailed': False}
@@ -285,6 +306,8 @@ class MediaPoolWatcher:
         self._waiting_since: Optional[float] = None
         self._preview_waiting = False
         self._failing_since: Dict[int, float] = {}
+        # slot -> when its next download may start, after a failure's pause.
+        self._retry_due: Dict[int, float] = {}
 
         # The SHARED pooled connection this watcher rides (binder-owned).
         # _pool_instance is the pool entry dict, kept for the identity-
@@ -363,6 +386,7 @@ class MediaPoolWatcher:
                     # ones here would suppress every fresh enqueue.
                     self._work_queue = queue.Queue()
                     self._pending_downloads.clear()
+                    self._retry_due.clear()
                     self._worker_thread = threading.Thread(
                         target=self._run_worker,
                         daemon=True,
@@ -1187,9 +1211,24 @@ class MediaPoolWatcher:
         # anyway, and the recheck above retires the task the moment it
         # stops being needed.) One that only waited its turn goes at once.
         if attempt > 1 and not waited:
-            if self._stop_event.wait(min(DOWNLOAD_RETRY_BACKOFF * (attempt - 1),
-                                         DOWNLOAD_RETRY_BACKOFF_MAX)):
-                return False
+            now = time.monotonic()
+            with self._state_lock:
+                due = self._retry_due.pop(slot_idx, None)
+            if due is None:
+                due = now + min(DOWNLOAD_RETRY_BACKOFF * (attempt - 1),
+                                DOWNLOAD_RETRY_BACKOFF_MAX)
+            remaining = due - now
+            if remaining > 0:
+                if not self._work_queue.empty():
+                    # Others are waiting: they go first, this one after.
+                    return self._retry_later(slot_idx, expected_hash, attempt,
+                                             waited, due)
+                step = min(remaining, DOWNLOAD_RETRY_IDLE_STEP)
+                if self._stop_event.wait(step):
+                    return False
+                if step < remaining:
+                    return self._retry_later(slot_idx, expected_hash, attempt,
+                                             waited, due)
 
         # Failures re-queue the whole task FOREVER (capped backoff) while
         # the slot still needs its thumb — settled content gets no further
@@ -1206,8 +1245,13 @@ class MediaPoolWatcher:
             failure = 'pooled connection not ready'
         else:
             try:
-                raw_ycbcr = conn.download_still(
-                    slot_idx, timeout=DOWNLOAD_TIMEOUT)
+                if _takes_stall_timeout(conn.download_still):
+                    raw_ycbcr = conn.download_still(
+                        slot_idx, timeout=DOWNLOAD_MAX_SECONDS,
+                        stall_timeout=DOWNLOAD_STALL_TIMEOUT)
+                else:
+                    raw_ycbcr = conn.download_still(
+                        slot_idx, timeout=DOWNLOAD_TIMEOUT)
             except Exception as e:
                 failure = str(e)
         if raw_ycbcr is None:
@@ -1238,6 +1282,11 @@ class MediaPoolWatcher:
                             f"{slot_idx} failed (attempt {attempt}): {failure} "
                             f"— will keep retrying while the slot needs it"
                         )
+                if not turn:
+                    with self._state_lock:
+                        self._retry_due[slot_idx] = time.monotonic() + min(
+                            DOWNLOAD_RETRY_BACKOFF * attempt,
+                            DOWNLOAD_RETRY_BACKOFF_MAX)
                 try:
                     self._work_queue.put_nowait(
                         (_TASK_DOWNLOAD, slot_idx, expected_hash, attempt + 1,
@@ -1261,6 +1310,19 @@ class MediaPoolWatcher:
 
         self._do_decode(slot_idx, raw_ycbcr, expected_hash, w, h)
         return False
+
+    def _retry_later(self, slot_idx: int, expected_hash: str, attempt: int,
+                     waited: bool, due: float) -> bool:
+        """Put a retry whose pause isn't over at the back of the queue, its
+        claim kept. True iff it was queued."""
+        with self._state_lock:
+            self._retry_due[slot_idx] = due
+        try:
+            self._work_queue.put_nowait(
+                (_TASK_DOWNLOAD, slot_idx, expected_hash, attempt, waited))
+        except Exception:
+            return False
+        return True
 
     def _do_decode(self, slot_idx: int, raw: bytes, expected_hash: str, w: int, h: int):
         if not raw:

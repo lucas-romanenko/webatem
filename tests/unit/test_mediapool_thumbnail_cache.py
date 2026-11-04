@@ -323,7 +323,8 @@ def test_do_download_never_gives_up_while_needed(monkeypatch):
     def _fail(slot):
         raise TimeoutError('timed out waiting for transfer')
     w._conn = _fake_conn(download=_fail)
-    w._stop_event = _FakeStopEvent()                         # skip the 30s backoff wait
+    w._stop_event = _FakeStopEvent()
+    monkeypatch.setattr(W, 'DOWNLOAD_RETRY_BACKOFF_MAX', 0.0)  # skip the 30s backoff
 
     w._do_download(0, hash_hex, attempt=47)                  # deep into patience
 
@@ -637,7 +638,8 @@ def test_failed_download_keeps_claim_success_releases_it(monkeypatch):
     hash_hex = 'aa' * 16
     w._slots[0] = {'index': 0, 'isUsed': True, 'hash': hash_hex,
                    'fileName': 'x', 'thumb': None}
-    w._stop_event = _FakeStopEvent()                         # skip backoff waits
+    w._stop_event = _FakeStopEvent()
+    monkeypatch.setattr(W, 'DOWNLOAD_RETRY_BACKOFF', 0.0)    # skip backoff waits
 
     def _fail(slot):
         raise TimeoutError('timed out')
@@ -768,6 +770,84 @@ def test_other_failures_keep_the_backoff():
 
     assert w._stop_event.waits == [W.DOWNLOAD_RETRY_BACKOFF]
     assert _downloads(w._work_queue) == [(W._TASK_DOWNLOAD, 0, hash_hex, 3, False)]
+
+
+def test_a_retry_pause_lets_the_other_slots_go_first():
+    """A slot that keeps failing doesn't hold up the rest: while its pause
+    runs and other tasks are queued, it goes to the back untouched."""
+    w = W.MediaPoolWatcher('10.0.0.74')
+    hash_hex = 'aa' * 16
+    _needing(w, hash_hex)
+    w._conn = _fake_conn()                                   # wire must not be hit
+    w._stop_event = _WaitLog()
+    w._retry_due[0] = W.time.monotonic() + 20
+    w._work_queue.put_nowait((W._TASK_DOWNLOAD, 1, 'bb' * 16))
+
+    assert w._download_task(0, hash_hex, attempt=4) is True
+
+    assert w._stop_event.waits == [], 'sat its pause in front of another slot'
+    assert w._conn._calls == []
+    assert _downloads(w._work_queue) == [
+        (W._TASK_DOWNLOAD, 1, 'bb' * 16), (W._TASK_DOWNLOAD, 0, hash_hex, 4, False)]
+
+
+def test_a_lone_retry_looks_again_every_idle_step():
+    """Alone, a long pause is sat a step at a time, so a still that arrives
+    meanwhile waits at most DOWNLOAD_RETRY_IDLE_STEP."""
+    w = W.MediaPoolWatcher('10.0.0.75')
+    hash_hex = 'aa' * 16
+    _needing(w, hash_hex)
+    w._conn = _fake_conn()                                   # wire must not be hit
+    w._stop_event = _WaitLog()
+
+    assert w._download_task(0, hash_hex, attempt=40) is True
+
+    assert w._stop_event.waits == [W.DOWNLOAD_RETRY_IDLE_STEP]
+    assert _downloads(w._work_queue) == [(W._TASK_DOWNLOAD, 0, hash_hex, 40, False)]
+    assert w._retry_due[0] > W.time.monotonic()
+
+
+def test_a_download_waits_while_data_flows(monkeypatch):
+    """bmdwire 1.11's stall timeout: a 4K still is given as long as data
+    keeps coming (up to DOWNLOAD_MAX_SECONDS), and given up after
+    DOWNLOAD_STALL_TIMEOUT with none."""
+    w = W.MediaPoolWatcher('10.0.0.76')
+    hash_hex = 'aa' * 16
+    _needing(w, hash_hex)
+    seen = {}
+
+    def download_still(slot, *, timeout=30.0, progress_callback=None,
+                       stall_timeout=None):
+        seen.update(timeout=timeout, stall_timeout=stall_timeout)
+        return b'rawbytes'
+    w._conn = _types.SimpleNamespace(is_connected=True, mixerstate={},
+                                     download_still=download_still)
+    monkeypatch.setattr(W, 'atem_to_rgb', lambda raw, w_, h_: b'rgba')
+    monkeypatch.setattr(W, '_encode_thumbnail_from_rgba', lambda rgba, w_, h_: b'jpeg')
+
+    w._do_download(0, hash_hex)
+
+    assert seen == {'timeout': W.DOWNLOAD_MAX_SECONDS,
+                    'stall_timeout': W.DOWNLOAD_STALL_TIMEOUT}
+    assert w._slots[0]['thumb'] is not None
+
+
+def test_an_older_bmdwire_gets_the_old_timeout():
+    w = W.MediaPoolWatcher('10.0.0.77')
+    hash_hex = 'aa' * 16
+    _needing(w, hash_hex)
+    seen = {}
+
+    def download_still(slot, *, timeout=30.0, progress_callback=None):
+        seen.update(timeout=timeout)
+        raise TimeoutError('timed out')
+    w._conn = _types.SimpleNamespace(is_connected=True, mixerstate={},
+                                     download_still=download_still)
+    w._stop_event = _WaitLog()
+
+    w._do_download(0, hash_hex)
+
+    assert seen == {'timeout': W.DOWNLOAD_TIMEOUT}
 
 
 # --------------------------------------------------------------------------

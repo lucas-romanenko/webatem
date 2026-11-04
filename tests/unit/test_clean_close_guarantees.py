@@ -292,9 +292,15 @@ def test_ftde_fatal_status_releases_lock_when_queue_empties():
             pass
 
 
-def test_ftde_try_again_still_retries():
+def test_ftde_try_again_still_retries(monkeypatch):
+    # bmdwire 1.11 asks again after a pause (TRY_AGAIN_FIRST, doubling),
+    # not at once: an immediate retry every ~10 ms is what hammered a 4K
+    # Plus whose transfer engine was busy (2026-11-04).
+    import atemwire.protocol as proto_mod
     from atemwire.protocol import TransferTask
 
+    now = [1000.0]
+    monkeypatch.setattr(proto_mod.time, 'monotonic', lambda: now[0])
     p, sent = _bare_protocol()
     try:
         t1 = TransferTask(0, 3)
@@ -307,6 +313,10 @@ def test_ftde_try_again_still_retries():
         p.save_field_data(b'FTDE', (43).to_bytes(2, 'big') + bytes([1, 0]))
 
         assert p.transfer_queue[0] == [t1]      # task kept for retry
+        if hasattr(proto_mod, 'TRY_AGAIN_FIRST'):
+            assert p.transfer_requested is False    # not at once
+            now[0] += proto_mod.TRY_AGAIN_FIRST
+            p._service_yields()
         assert p.transfer_requested is True     # re-requested
     finally:
         try:
