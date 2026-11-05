@@ -65,6 +65,7 @@ CONNECTION_TIMEOUT = 15.0
 # connect), within CONNECT_MAX. A switcher with no free connection answers
 # "no room" at once and the job fails with that reason, without retrying.
 CONNECT_STALL_TIMEOUT = 5.0
+CONNECT_HELLO_TIMEOUT = 10.0     # before the switcher answers: two hellos (bmdwire 1.12.1)
 CONNECT_MAX = 60.0
 NO_FREE_CONNECTION_ERROR = ('No free connection on this switcher (ATEM Software Control, '
                             'panels or other clients are using all its slots)')
@@ -738,7 +739,7 @@ def _run_for_single_ip(ip_address: str,
         try:
             # Preserves the original 0.005s pump interval from this site.
             wait_ready(candidate, timeout=CONNECT_MAX, stall_timeout=CONNECT_STALL_TIMEOUT,
-                       pump_interval=0.005)
+                       hello_timeout=CONNECT_HELLO_TIMEOUT, pump_interval=0.005)
             protocol = candidate
             break
         except NoFreeConnection:

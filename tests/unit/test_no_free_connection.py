@@ -49,6 +49,7 @@ def test_the_uploader_fails_at_once_with_the_reason(monkeypatch):
     assert len(_Protocol.made) == 1, 'a "no room" answer is not asked again'
     assert [r.error for r in out] == [U.NO_FREE_CONNECTION_ERROR] * 2
     assert waits[0]['stall_timeout'] == U.CONNECT_STALL_TIMEOUT
+    assert waits[0]['hello_timeout'] == U.CONNECT_HELLO_TIMEOUT
     assert any('No free connection' in m for m in logs)
 
 
@@ -91,11 +92,11 @@ def test_the_control_page_names_a_full_switcher_after_one_try():
     assert last['message'] == C.NO_FREE_CONNECTION_MESSAGE
 
 
-def test_a_silent_switcher_gets_two_tries_inside_the_page_timeout():
+def test_a_silent_switcher_gets_one_try_inside_the_page_timeout():
     conn = _Conn(refused=False)
     c = _consumer(conn)
     asyncio.run(c.handle_connect({'ip_address': '10.9.9.5'}))
-    assert conn.attempts == C.CONNECT_ATTEMPTS == 2       # 2 x 5 s < the page's 15 s
+    assert conn.attempts == C.CONNECT_ATTEMPTS == 1       # two hellos in 10 s < the page's 15 s
     assert c.sent[-1]['message'].startswith('Failed to connect')
 
 

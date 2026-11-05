@@ -54,11 +54,12 @@ def active_control_sessions() -> dict:
         return {ip: list(users) for ip, users in _control_sessions.items() if users}
 
 
-# A connect gives up after 5 s with nothing from the switcher (bmdwire's
-# no-progress connect, CONNECT_STALL_TIMEOUT) and fails at once when the
-# switcher has no free connection. Two tries keep a silent switcher under the
-# connect page's 15 s, which itself restarts on every progress message.
-CONNECT_ATTEMPTS = 2
+# A connect gives up after 5 s with nothing from the switcher once it has
+# answered, 10 s (two hellos) before it answers (bmdwire 1.12.1's no-progress
+# connect), and fails at once when the switcher has no free connection. One
+# try keeps a silent switcher under the connect page's 15 s, which itself
+# restarts on every progress message; the second hello inside it is the retry.
+CONNECT_ATTEMPTS = 1
 CONNECT_PROGRESS_EVERY = 0.5     # s between "Connecting…" updates to the page
 NO_FREE_CONNECTION_MESSAGE = ('No free connection on this switcher (ATEM Software Control, '
                               'panels or other clients are using all its slots)')
