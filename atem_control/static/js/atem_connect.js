@@ -202,18 +202,25 @@
         setLoading(true);
         hideStatus();
 
-        // Set timeout for entire connection process
-        var connectionTimeout = setTimeout(function () {
-            if (connectionAttempting) {
-                showStatus('Connection timeout - please check IP address and try again', 'error');
-                setLoading(false);
-                connectionAttempting = false;
-                if (ws) {
-                    ws.close();
-                    ws = null;
+        // Give up after 15 s with no word from the server. Every progress
+        // message ("receiving switcher state") starts the 15 s again, so a
+        // big switcher on a slow network is waited for while it answers.
+        var connectionTimeout = null;
+        function armTimeout() {
+            clearTimeout(connectionTimeout);
+            connectionTimeout = setTimeout(function () {
+                if (connectionAttempting) {
+                    showStatus('Connection timeout - please check IP address and try again', 'error');
+                    setLoading(false);
+                    connectionAttempting = false;
+                    if (ws) {
+                        ws.close();
+                        ws = null;
+                    }
                 }
-            }
-        }, 15000);
+            }, 15000);
+        }
+        armTimeout();
 
         var protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         var wsUrl = protocol + '//' + window.location.host + '/ws/atem/';
@@ -233,7 +240,10 @@
                 try {
                     var data = JSON.parse(event.data);
 
-                    if (data.type === 'connection_status') {
+                    if (data.type === 'connection_progress') {
+                        armTimeout();
+                        if (!waitingForState) setLoadingText(data.message || 'Connecting...');
+                    } else if (data.type === 'connection_status') {
                         if (data.connected) {
                             // ATEM connected, now request initial state
                             waitingForState = true;
@@ -249,7 +259,9 @@
                             setLoading(false);
 
                             var errorMsg = data.message || 'Failed to connect to ATEM';
-                            if (errorMsg.includes('timeout')) {
+                            if (data.no_free_connection) {
+                                // said as the server says it: the switcher is there, and full
+                            } else if (errorMsg.includes('timeout')) {
                                 errorMsg = 'ATEM connection timeout - check IP address';
                             } else if (errorMsg.includes('refused') || errorMsg.includes('failed')) {
                                 errorMsg = 'Cannot reach ATEM - check IP address and network';

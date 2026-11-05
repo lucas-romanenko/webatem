@@ -94,7 +94,7 @@ def test_run_for_single_ip_says_goodbye_on_unexpected_exception(monkeypatch):
             # mixerstate stays EMPTY -> body raises KeyError('video-mode')
 
     monkeypatch.setattr(U, 'AtemProtocol', _P)
-    monkeypatch.setattr(U, 'wait_ready', lambda p, timeout, pump_interval: None)
+    monkeypatch.setattr(U, 'wait_ready', lambda p, timeout, pump_interval, **kw: None)
 
     with pytest.raises(KeyError):
         U._run_for_single_ip(
@@ -117,7 +117,7 @@ def test_run_for_single_ip_says_goodbye_on_normal_path(monkeypatch):
             }
 
     monkeypatch.setattr(U, 'AtemProtocol', _P)
-    monkeypatch.setattr(U, 'wait_ready', lambda p, timeout, pump_interval: None)
+    monkeypatch.setattr(U, 'wait_ready', lambda p, timeout, pump_interval, **kw: None)
 
     out = U._run_for_single_ip(
         '10.9.9.8', [], True, U._Canceller(None), lambda m: None,

@@ -20,6 +20,7 @@ from atemwire.messages.audio_legacy import enable_audio_levels
 from atemwire.messages.fairlight import enable_fairlight_levels
 from atemwire.messages.system_info import device_name
 from atemwire.pool import ATEMInstanceManager
+from atemwire.transport import NoFreeConnection
 from atem_control.control.commands import dispatch as dispatch_command
 from atem_control.control.logging import ATEMConnectionLoggingMixin
 from atem_control import hooks
@@ -51,6 +52,16 @@ def active_control_sessions() -> dict:
     """Snapshot ``{ip: [usernames]}`` — one entry per live control session."""
     with _control_sessions_lock:
         return {ip: list(users) for ip, users in _control_sessions.items() if users}
+
+
+# A connect gives up after 5 s with nothing from the switcher (bmdwire's
+# no-progress connect, CONNECT_STALL_TIMEOUT) and fails at once when the
+# switcher has no free connection. Two tries keep a silent switcher under the
+# connect page's 15 s, which itself restarts on every progress message.
+CONNECT_ATTEMPTS = 2
+CONNECT_PROGRESS_EVERY = 0.5     # s between "Connecting…" updates to the page
+NO_FREE_CONNECTION_MESSAGE = ('No free connection on this switcher (ATEM Software Control, '
+                              'panels or other clients are using all its slots)')
 
 
 class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketConsumer):
@@ -509,29 +520,39 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
         await sync_to_async(self._acquire_pool_ref, thread_sensitive=False)(ip_address)
 
         success = False
-        for attempt in range(3):
-            logger.info(f"Consumer: Connection attempt {attempt + 1}/3 to {ip_address}")
+        refused = False
+        progress = asyncio.ensure_future(self._send_connect_progress())
+        try:
+            for attempt in range(CONNECT_ATTEMPTS):
+                logger.info(f"Consumer: Connection attempt {attempt + 1}/{CONNECT_ATTEMPTS} to {ip_address}")
+                try:
+                    # thread_sensitive=False: connect() blocks while the
+                    # switcher answers (and up to 5 s when it doesn't).
+                    # Channels consumers share ONE process-wide
+                    # thread-sensitive executor, so on the default a slow/dead-IP
+                    # connect stalls every operator's commands and state polls on
+                    # every ATEM for the duration. connect() is thread-safe (own
+                    # _lifecycle_lock, no ORM/thread-local state).
+                    success = await sync_to_async(
+                        self.connection.connect, thread_sensitive=False
+                    )(ip_address)
+                except NoFreeConnection:
+                    success, refused = False, True
+                except Exception as e:
+                    logger.error(f"Consumer: Attempt {attempt + 1} exception: {e}", exc_info=True)
+                    success = False
 
-            try:
-                # thread_sensitive=False: connect() blocks up to CONNECT_TIMEOUT
-                # (6s) per attempt. Channels consumers share ONE process-wide
-                # thread-sensitive executor, so on the default a slow/dead-IP
-                # connect stalls every operator's commands and state polls on
-                # every ATEM for the duration. connect() is thread-safe (own
-                # _lifecycle_lock, no ORM/thread-local state).
-                success = await sync_to_async(
-                    self.connection.connect, thread_sensitive=False
-                )(ip_address)
-            except Exception as e:
-                logger.error(f"Consumer: Attempt {attempt + 1} exception: {e}", exc_info=True)
-                success = False
-
-            if success:
-                break
-
-            if attempt < 2:
-                logger.info(f"Consumer: Attempt {attempt + 1} failed, waiting 1s before retry")
-                await asyncio.sleep(1)
+                if success:
+                    break
+                if refused or getattr(self.connection, 'connect_refused', False):
+                    # asking again at once gets the same answer
+                    refused = True
+                    break
+                if attempt < CONNECT_ATTEMPTS - 1:
+                    logger.info(f"Consumer: Attempt {attempt + 1} failed, trying once more")
+                    await asyncio.sleep(0.5)
+        finally:
+            progress.cancel()
 
         if success:
             # The host's name for the switcher first (one lookup per
@@ -579,12 +600,36 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
             await asyncio.sleep(1.0)
             await self.start_monitoring()
 
+        elif refused:
+            await self.send_json({
+                'type': 'connection_status',
+                'connected': False,
+                'no_free_connection': True,
+                'message': NO_FREE_CONNECTION_MESSAGE,
+            })
         else:
             await self.send_json({
                 'type': 'connection_status',
                 'connected': False,
                 'message': f'Failed to connect to ATEM at {ip_address}'
             })
+
+    async def _send_connect_progress(self):
+        """While a connect runs: tell the page how far it has got, so it
+        can say so and keep waiting while the switcher's state arrives."""
+        words = {'hello': 'Connecting… waiting for the switcher to answer',
+                 'state': 'Connecting… receiving switcher state'}
+        try:
+            while True:
+                await asyncio.sleep(CONNECT_PROGRESS_EVERY)
+                conn = self.connection
+                p = conn.connect_progress() if hasattr(conn, 'connect_progress') else None
+                if not p or p['stage'] not in words:
+                    continue
+                await self._safe_send_json({'type': 'connection_progress', 'stage': p['stage'],
+                                            'packets': p['packets'], 'message': words[p['stage']]})
+        except asyncio.CancelledError:
+            pass
 
     async def handle_disconnect(self):
         """Handle user-initiated disconnection."""

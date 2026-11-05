@@ -1440,6 +1440,9 @@
     handleMessage(data) {
       const alpineInstance = Alpine.store("atem");
       switch (data.type) {
+        case "connection_progress":
+          if (!alpineInstance.connected) alpineInstance.statusText = data.message;
+          break;
         case "connection_status":
           if (!data.connected && data.reconnecting && alpineInstance.stateReady) {
             alpineInstance.switcherAway = true;
