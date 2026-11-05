@@ -48,6 +48,7 @@ from typing import Callable, List, Optional
 from PIL import Image, UnidentifiedImageError
 from PIL.Image import DecompressionBombError
 from atemwire.protocol import AtemProtocol
+from atemwire.transport import NoFreeConnection
 from atemwire.imaging import atem_to_rgb, rgb_to_atem
 from atemwire.ready import wait_ready
 
@@ -59,6 +60,14 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 CONNECTION_TIMEOUT = 15.0
+# A connect attempt waits while the switcher keeps sending its state and
+# gives up after this long with nothing from it (bmdwire's no-progress
+# connect), within CONNECT_MAX. A switcher with no free connection answers
+# "no room" at once and the job fails with that reason, without retrying.
+CONNECT_STALL_TIMEOUT = 5.0
+CONNECT_MAX = 60.0
+NO_FREE_CONNECTION_ERROR = ('No free connection on this switcher (ATEM Software Control, '
+                            'panels or other clients are using all its slots)')
 # Connect attempts per batch (parity with the control page's 3-attempt
 # pool connect; this path used to give up after one timeout, failing
 # jobs a moment's switcher busyness would otherwise have survived).
@@ -718,6 +727,7 @@ def _run_for_single_ip(ip_address: str,
     # Each attempt uses a fresh protocol/socket; a half-open attempt is
     # closed (close_session no-ops below ESTABLISHED).
     protocol = None
+    refused = False
     t_connect = time.time()
     for attempt in range(1, CONNECT_ATTEMPTS + 1):
         # aggressive_drain=True: whole-queue drain per queue_trigger on a
@@ -727,8 +737,14 @@ def _run_for_single_ip(ip_address: str,
         candidate.connect()
         try:
             # Preserves the original 0.005s pump interval from this site.
-            wait_ready(candidate, timeout=CONNECTION_TIMEOUT, pump_interval=0.005)
+            wait_ready(candidate, timeout=CONNECT_MAX, stall_timeout=CONNECT_STALL_TIMEOUT,
+                       pump_interval=0.005)
             protocol = candidate
+            break
+        except NoFreeConnection:
+            _close_protocol(candidate)
+            log_append(f"{ip_address}: {NO_FREE_CONNECTION_ERROR}")
+            refused = True
             break
         except TimeoutError:
             _close_protocol(candidate)
@@ -741,7 +757,8 @@ def _run_for_single_ip(ip_address: str,
             out.append(ItemResult(
                 slot=slot, image_path=image_path,
                 success=False,
-                error=f"connection timeout ({CONNECT_ATTEMPTS} attempts)",
+                error=(NO_FREE_CONNECTION_ERROR if refused
+                       else f"connection timeout ({CONNECT_ATTEMPTS} attempts)"),
             ))
         return out
 

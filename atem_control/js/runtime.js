@@ -726,6 +726,10 @@ window.ATEMControl = {
         const alpineInstance = Alpine.store('atem');
         
         switch (data.type) {
+            case 'connection_progress':
+                // a connect in progress: say how far it has got ("receiving switcher state")
+                if (!alpineInstance.connected) alpineInstance.statusText = data.message;
+                break;
             case 'connection_status':
                 if (!data.connected && data.reconnecting && alpineInstance.stateReady) {
                     // The switcher went quiet mid-session (#38). bmdwire
