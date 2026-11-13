@@ -179,6 +179,21 @@ class Hooks:
         media_pool_views.start_in_process_upload(ip, slot, file_path, job_dir)
         return True, None
 
+    def hold_upload_lock(self, ip):
+        """A context manager held around an upload this process opens to
+        ``ip`` with the uploader's own socket (a profile load's stills): one
+        such upload per switcher at a time, since two at once split its
+        bandwidth and churn its session slots.
+
+        Default: a per-IP lock in this process (``atem_control.ip_upload_lock``),
+        which waits up to 30 s and then lets the upload through. A host whose
+        uploads also run in other processes supplies a lock they share. To
+        refuse instead (the switcher stayed busy), raise
+        ``atem_control.ip_upload_lock.UploadBusy`` with the operator's message;
+        the caller reports it and uploads nothing."""
+        from atem_control.ip_upload_lock import hold_ip_upload_lock
+        return hold_ip_upload_lock(ip)
+
     # ---- the media pool's stills -----------------------------------------
     def still_cache_dir(self):
         """Where the media pool's stills are kept at full size, one PNG per

@@ -37,7 +37,8 @@ from atem_control.profile.export import (
 from atem_control.activity import ActivityLog
 from atem_control.activity import actor, record_activity
 from atem_control.uploader import execute_upload
-from atem_control.ip_upload_lock import hold_ip_upload_lock
+from atem_control.ip_upload_lock import UploadBusy
+from atem_control import hooks
 from atem_control.hooks import access_required
 from atem_control.netutil import is_valid_ip
 
@@ -427,8 +428,10 @@ def profile_load(request):
                         # this ATEM: execute_upload opens the uploader's own
                         # aggressive-drain socket, and two of those to one
                         # switcher is the documented degradation mode (audit
-                        # UP-1). All items here share this single IP.
-                        with hold_ip_upload_lock(ip):
+                        # UP-1). All items here share this single IP. The
+                        # lock is the host's (Hooks.hold_upload_lock), so a
+                        # host's uploads in other processes are serialized too.
+                        with hooks.get().hold_upload_lock(ip):
                             results = execute_upload(items, skip_tally=True)
                         for r in results:
                             if r.success:
@@ -436,6 +439,10 @@ def profile_load(request):
                             else:
                                 image_report['upload_errors'].append(
                                     f"slot {r.slot}: {r.error}")
+                    except UploadBusy as exc:
+                        # The host refused: the switcher stayed busy with
+                        # another upload. Nothing was sent.
+                        image_report['upload_errors'].append(str(exc))
                     except Exception as exc:  # noqa: BLE001
                         logger.exception(
                             "profile_load image upload failed for %s", ip)
