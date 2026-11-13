@@ -735,8 +735,8 @@ def _run_for_single_ip(ip_address: str,
         # bmdwire before 1.5.0; from 1.5.0 every budget goes whole anyway.
         candidate = AtemProtocol(ip=ip_address, aggressive_drain=True)
         log_append(f"connecting to {ip_address} (attempt {attempt}/{CONNECT_ATTEMPTS})")
-        candidate.connect()
         try:
+            candidate.connect()
             # Preserves the original 0.005s pump interval from this site.
             wait_ready(candidate, timeout=CONNECT_MAX, stall_timeout=CONNECT_STALL_TIMEOUT,
                        hello_timeout=CONNECT_HELLO_TIMEOUT, pump_interval=0.005)
@@ -753,6 +753,13 @@ def _run_for_single_ip(ip_address: str,
                 log_append(f"attempt {attempt} timed out — retrying in "
                            f"{CONNECT_RETRY_DELAY:.0f}s")
                 time.sleep(CONNECT_RETRY_DELAY)
+        except BaseException:
+            # Anything else while connecting (a SIGTERM-raised SystemExit, a
+            # socket error, a bug) still closes the candidate: a session
+            # that got as far as the handshake is on the switcher, and
+            # without the goodbye it is abandoned there.
+            _close_protocol(candidate)
+            raise
     if protocol is None:
         for slot, image_path in slot_paths:
             out.append(ItemResult(
