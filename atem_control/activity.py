@@ -15,6 +15,12 @@ class ActivityLog:
     DEVICE_HYPERDECK = 'hyperdeck'
 
 
+def actor(user):
+    """The logged-in user an entry is credited to, or None (standalone
+    WebATEM has no login: an AnonymousUser, or no user at all)."""
+    return user if getattr(user, 'is_authenticated', False) else None
+
+
 def record_activity(**kwargs):
     return hooks.get().record_activity(**kwargs)
 

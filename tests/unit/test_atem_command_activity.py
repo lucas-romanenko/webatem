@@ -79,7 +79,7 @@ def test_toggles_read_the_index():
 
 
 def test_macro_and_aux():
-    assert A.summarize('execute_macro', {'index': 2}) == 'Ran macro 3'
+    assert A.summarize('execute_macro', {'macro_number': 3}) == 'Ran macro 3'
     mx = _mx({3010: 'MP1'})
     assert A.summarize('set_aux_output', {'aux': 0, 'source': 3010}, mx) == 'Aux 1 → MP1'
 

@@ -15,6 +15,7 @@ Every operator action on the control page flows through the consumer's
 resolving source ids to their labels from mixerstate where relevant.
 """
 from atemwire.messages.input_video import input_label
+from atemwire.messages.macros import macro_entry
 
 # Args that identify WHICH control (not its value) — used to build the
 # debounce key and the summary's instance prefix.
@@ -128,6 +129,20 @@ def _humanize(command: str, data: dict) -> str:
     return f"{text} → {value}" if value else text.strip().capitalize()
 
 
+def _macro_name(mixerstate, number):
+    """The macro's own name, or '' when it has none worth showing: a slot
+    never recorded comes off the wire (MPrp) unused and nameless, and
+    "Macro 3", what the page and bmdwire show for those, says nothing the
+    number doesn't."""
+    if mixerstate is None:
+        return ''
+    entry = macro_entry(mixerstate, number - 1)
+    name = (entry.get('name') or '').strip()
+    if not entry.get('is_used') or name.lower() == f"macro {number}":
+        return ''
+    return name
+
+
 def summarize(command: str, data: dict, mixerstate=None) -> str:
     """Human one-liner for a control command. ``mixerstate`` (optional)
     resolves source ids to labels for the source-picking commands."""
@@ -177,8 +192,12 @@ def summarize(command: str, data: dict, mixerstate=None) -> str:
         lbl = d.get('long_name') or d.get('short_name') or ''
         return f"Renamed input {d.get('source')} to '{lbl}'"
     if command == 'execute_macro':
-        idx = d.get('index', d.get('macro'))
-        return f"Ran macro {idx + 1 if isinstance(idx, int) else idx}"
+        # The page sends the button's number, 1-based ({macro_number: 3}).
+        number = _int(d.get('macro_number'), None)
+        if number is None:
+            return "Ran macro"
+        name = _macro_name(mixerstate, number)
+        return f"Ran macro {number} '{name}'" if name else f"Ran macro {number}"
     if command == 'set_media_player_still':
         return (f"Media player {_int(d.get('player')) + 1} → still "
                 f"{_int(d.get('still', d.get('index'))) + 1}")
