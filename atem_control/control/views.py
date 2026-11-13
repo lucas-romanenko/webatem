@@ -22,7 +22,7 @@ from atem_control import discovery, hooks
 from atem_control.control.device_api import set_device_name
 from atem_control.hooks import access_required
 from atem_control.netutil import is_valid_ip
-from atem_control.activity import ActivityLog, record_activity
+from atem_control.activity import ActivityLog, actor, record_activity
 
 logger = logging.getLogger(__name__)
 
@@ -260,7 +260,7 @@ def atem_set_device_name(request):
         h.record_named(ip, name)          # a rename we made is never a question
     record_activity(
         feature=ActivityLog.FEATURE_ATEM_CONTROL, device=ActivityLog.DEVICE_ATEM,
-        action='set_device_name', user=getattr(request, 'user', None), target=ip,
+        action='set_device_name', user=actor(getattr(request, 'user', None)), target=ip,
         target_name=h.name_for_ip(ip) or '',
         summary=(f'Set switcher name to "{name}"' if ok else f'Failed to set switcher name: {err}'),
         success=ok, new_name=name,

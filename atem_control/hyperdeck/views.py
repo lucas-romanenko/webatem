@@ -177,8 +177,7 @@ _TRANSPORT_VERB = {'play': 'Played', 'pause': 'Paused', 'stop': 'Stopped',
 
 def _log_transport(request, ip, action, body):
     try:
-        from atem_control.activity import ActivityLog
-        from atem_control.activity import record_activity
+        from atem_control.activity import ActivityLog, actor, record_activity
         name = _deck_name(ip) or ''
         label = name or ip
         verb = _TRANSPORT_VERB.get(action, action)
@@ -193,6 +192,7 @@ def _log_transport(request, ip, action, body):
             feature=ActivityLog.FEATURE_ATEM_CONTROL,
             device=ActivityLog.DEVICE_HYPERDECK,
             action=f'hyperdeck_{action}',
+            user=actor(getattr(request, 'user', None)),
             target=ip, target_name=name,
             summary=f"{verb} HyperDeck {label}{detail}",
             clip_id=clip, loop=bool(body.get('loop')),

@@ -25,7 +25,7 @@ from atem_control.control.commands import dispatch as dispatch_command
 from atem_control.control.logging import ATEMConnectionLoggingMixin
 from atem_control import hooks
 from atem_control.activity import ActivityLog
-from atem_control.activity import arecord_activity
+from atem_control.activity import actor, arecord_activity
 from atem_control.netutil import is_valid_ip
 
 logger = logging.getLogger(__name__)
@@ -437,13 +437,18 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
         asyncio.create_task(arecord_activity(
             feature=ActivityLog.FEATURE_ATEM_CONTROL,
             device=ActivityLog.DEVICE_ATEM,
-            action=command,
+            action=command, user=self._activity_user(),
             target=self.current_ip or '',
             target_name=self.current_atem_name or '',
             summary=summary,
             args={k: v for k, v in (data or {}).items()
                   if isinstance(v, (str, int, float, bool))},
         ))
+
+    def _activity_user(self):
+        """The session's logged-in user, as the connect row credits it.
+        Without it a host's log showed every command as "system"."""
+        return actor(self.scope.get('user') if getattr(self, 'scope', None) else None)
 
     @staticmethod
     def _lookup_equipment_name(ip_address, mixerstate=None):
@@ -1425,7 +1430,7 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
             )
             await arecord_activity(
                 feature=ActivityLog.FEATURE_ATEM_CONTROL, device=ActivityLog.DEVICE_ATEM,
-                action='slot_delete',
+                action='slot_delete', user=self._activity_user(),
                 target=self.current_ip or '',
                 summary=f"Deleted media-pool slot {slot + 1} on {self.current_ip}",
                 slot=slot + 1,
@@ -1434,7 +1439,7 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
             logger.error(f"Media pool delete failed (slot {slot}): {e}")
             await arecord_activity(
                 feature=ActivityLog.FEATURE_ATEM_CONTROL, device=ActivityLog.DEVICE_ATEM,
-                action='slot_delete',
+                action='slot_delete', user=self._activity_user(),
                 target=self.current_ip or '',
                 success=False,
                 summary=f"Failed to delete media-pool slot {slot + 1} on {self.current_ip}",

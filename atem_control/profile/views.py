@@ -35,7 +35,7 @@ from atem_control.profile.export import (
     request_capture_cancel,
 )
 from atem_control.activity import ActivityLog
-from atem_control.activity import record_activity
+from atem_control.activity import actor, record_activity
 from atem_control.uploader import execute_upload
 from atem_control.ip_upload_lock import hold_ip_upload_lock
 from atem_control.hooks import access_required
@@ -233,7 +233,7 @@ def profile_save(request):
 
     record_activity(
         feature=ActivityLog.FEATURE_ATEM_CONTROL, device=ActivityLog.DEVICE_ATEM,
-        action='profile_save',
+        action='profile_save', user=actor(getattr(request, 'user', None)),
         target=ip,
         summary=f"Saved switcher profile from {ip} ({filename})",
         filename=filename,
@@ -447,7 +447,7 @@ def profile_load(request):
 
     record_activity(
         feature=ActivityLog.FEATURE_ATEM_CONTROL, device=ActivityLog.DEVICE_ATEM,
-        action='profile_load',
+        action='profile_load', user=actor(getattr(request, 'user', None)),
         target=ip,
         success=not result.errors,
         summary=(f"Restored switcher profile to {ip}"
