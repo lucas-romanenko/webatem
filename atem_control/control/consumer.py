@@ -64,6 +64,19 @@ CONNECT_PROGRESS_EVERY = 0.5     # s between "Connecting…" updates to the page
 NO_FREE_CONNECTION_MESSAGE = ('No free connection on this switcher (ATEM Software Control, '
                               'panels or other clients are using all its slots)')
 
+# What the page sends on its own: the session's verbs and panel/tab
+# housekeeping (the audio-meter subscribe follows tab visibility, the media
+# pool refreshes when it opens). None of it says the operator is there, so
+# none of it holds the idle disconnect off. Every control command does, and
+# so does the page's ``activity`` ping, sent on real input (pointer, touch,
+# keys) — which also covers what goes over HTTP or stays in the browser.
+# State coming back from the switcher never counts: another controller may
+# be driving it around the clock.
+PASSIVE_VERBS = frozenset({
+    'connect', 'disconnect', 'refresh',
+    'subscribe_audio_meters', 'unsubscribe_audio_meters', 'media_pool_refresh',
+})
+
 
 class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketConsumer):
     """
@@ -314,11 +327,13 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
             data = json.loads(text_data)
             command = data.get('command')
 
-            # Reset inactivity timer for control commands
-            if command and command not in ['connect', 'disconnect', 'refresh']:
+            # The operator is using the page (see PASSIVE_VERBS).
+            if command and command not in PASSIVE_VERBS:
                 self.last_command_time = asyncio.get_event_loop().time()
 
-            if command == 'connect':
+            if command == 'activity':
+                pass                # the stamp above is the whole point
+            elif command == 'connect':
                 await self.handle_connect(data, is_test_connection=data.get('test_connection', False))
             elif command == 'disconnect':
                 await self.handle_disconnect()

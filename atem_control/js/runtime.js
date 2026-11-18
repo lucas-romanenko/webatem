@@ -19,7 +19,19 @@
 const SESSION_VERBS = new Set([
     'connect', 'disconnect', 'refresh',
     'subscribe_audio_meters', 'unsubscribe_audio_meters', 'media_pool_refresh',
+    'activity',
 ]);
+
+// The operator using the page holds the host's idle disconnect off
+// (hooks.idle_disconnect_seconds): any real pointer, touch or key input
+// sends an ``activity`` ping, at most one per ACTIVITY_PING_MS, plus one at
+// the end of a window that saw input, so the last click always reaches the
+// server. It covers what goes over HTTP (HyperDeck, uploads, profiles, the
+// switcher's name) and what stays in the browser (Settings, the M/E
+// selector, typing). Watching is not activity: no mousemove, no wheel, and
+// state from the switcher never counts.
+const ACTIVITY_EVENTS = ['pointerdown', 'keydown', 'touchstart'];
+const ACTIVITY_PING_MS = 30000;
 
 window.ATEMControl = {
     ws: null,
@@ -375,12 +387,40 @@ window.ATEMControl = {
     },
 
     // Initialize system
+    // ---- Operator activity (see ACTIVITY_EVENTS) ------------------------
+    _lastActivityPing: 0,
+    _activityTimer: null,
+
+    trackActivity() {
+        const note = (e) => {
+            if (!e.isTrusted) return;           // script-made events never count
+            const wait = this._lastActivityPing + ACTIVITY_PING_MS - Date.now();
+            if (wait <= 0) {
+                this.pingActivity();
+            } else if (!this._activityTimer) {
+                this._activityTimer = setTimeout(() => this.pingActivity(), wait);
+            }
+        };
+        ACTIVITY_EVENTS.forEach(ev =>
+            window.addEventListener(ev, note, { capture: true, passive: true }));
+    },
+
+    pingActivity() {
+        clearTimeout(this._activityTimer);
+        this._activityTimer = null;
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+        if (!Alpine.store('atem')?.connected) return;
+        this._lastActivityPing = Date.now();
+        this.cmd('activity');
+    },
+
     init() {
         console.log('🎛️ ATEM Control System Initializing');
         
         // Initialize T-Bar after DOM is ready
         setTimeout(() => this.initializeTBar(), 100);
         this.addButtonFeedback();
+        this.trackActivity();
 
         // ASC-style momentary shift: holding the keyboard Shift key shows
         // the second source bank on the Program/Preview rows. Only active

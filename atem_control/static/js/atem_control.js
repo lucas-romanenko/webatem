@@ -891,8 +891,11 @@
     "refresh",
     "subscribe_audio_meters",
     "unsubscribe_audio_meters",
-    "media_pool_refresh"
+    "media_pool_refresh",
+    "activity"
   ]);
+  var ACTIVITY_EVENTS = ["pointerdown", "keydown", "touchstart"];
+  var ACTIVITY_PING_MS = 3e4;
   window.ATEMControl = {
     ws: null,
     // ---- Declared-state-keys guard ------------------------------------
@@ -1233,10 +1236,34 @@
       }
     },
     // Initialize system
+    // ---- Operator activity (see ACTIVITY_EVENTS) ------------------------
+    _lastActivityPing: 0,
+    _activityTimer: null,
+    trackActivity() {
+      const note = (e) => {
+        if (!e.isTrusted) return;
+        const wait = this._lastActivityPing + ACTIVITY_PING_MS - Date.now();
+        if (wait <= 0) {
+          this.pingActivity();
+        } else if (!this._activityTimer) {
+          this._activityTimer = setTimeout(() => this.pingActivity(), wait);
+        }
+      };
+      ACTIVITY_EVENTS.forEach((ev) => window.addEventListener(ev, note, { capture: true, passive: true }));
+    },
+    pingActivity() {
+      clearTimeout(this._activityTimer);
+      this._activityTimer = null;
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+      if (!Alpine.store("atem")?.connected) return;
+      this._lastActivityPing = Date.now();
+      this.cmd("activity");
+    },
     init() {
       console.log("🎛️ ATEM Control System Initializing");
       setTimeout(() => this.initializeTBar(), 100);
       this.addButtonFeedback();
+      this.trackActivity();
       document.addEventListener("keydown", (e) => {
         if (e.key !== "Shift" || e.repeat) return;
         if (e.target?.matches?.("input, textarea, select")) return;
