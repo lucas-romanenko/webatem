@@ -359,6 +359,11 @@ media-pool thumbnail cache, LAN discovery identity, WebSocket origin checks)
 runs against fake protocol layers. CI runs it on every push. The protocol
 libraries carry their own suites in [bmdwire](https://github.com/lucas-romanenko/bmdwire).
 
+Two bench scripts in `tools/` run the real thing against a live switcher:
+`python tools/mediapool_smoke.py <ip>` (media-pool watcher and thumbnails,
+read-only) and `python tools/upload_service_smoke.py <ip> <image> [slot]`
+(one still upload, so a test switcher only).
+
 `python manage.py runserver` works too for plain Django development. The
 per-OS downloads are built by the **Desktop builds** workflow
 (`pyinstaller build/desktop/webatem.spec`).
