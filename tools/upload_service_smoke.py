@@ -20,8 +20,7 @@ logging.basicConfig(
 
 # Run from a checkout (python tools/<script>.py): the repo root on the path,
 # and Django configured, since the hooks read settings. A host's own
-# settings win when DJANGO_SETTINGS_MODULE is set (inside AV Server's
-# container, say).
+# settings win when DJANGO_SETTINGS_MODULE is set.
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)

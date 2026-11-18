@@ -1,7 +1,7 @@
 """L10 (2026-07-07): the profile-save capture cancel registry. A cancel
 arrives on another request than the save it stops, so it goes through a
 module-level registry keyed by the page session: bounded, and consumed by
-the save it cancelled. Moved here from AV Server's session-hygiene tests."""
+the save it cancelled."""
 import pytest
 
 from atem_control.profile import export as export_mod

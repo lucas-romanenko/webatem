@@ -1,6 +1,4 @@
 """The HyperDeck panel's deck cache (2026-07-06 session hygiene, SH-20b/c).
-Moved here from AV Server (2026-11-18), which tested this module from the
-outside.
 
   * SH-20b: ``_connect`` closes the client when ``remote_enable`` raises
     after a successful ``connect()`` (``HyperdeckError`` isn't caught by

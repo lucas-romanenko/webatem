@@ -1,4 +1,4 @@
-"""Names a host imports from this package (AV Server does) are public, and
+"""Names a host imports from this package are public, and
 the underscore names they had until 2.6.1 still import, as the same
 objects. A patch or minor release never drops either (CONTRIBUTING.md,
 Versioning): a host built against 2.6.1 keeps working."""

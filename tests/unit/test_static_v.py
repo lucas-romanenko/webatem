@@ -1,7 +1,6 @@
 """{% static_v %}: the content-hash cache-buster on every control-page
-script and stylesheet. Moved here from AV Server (2026-11-18), which loads
-the tag by name from its own templates and keeps the rendering half of
-these; the cache's growth is this module's business only."""
+script and stylesheet: the URL, its content hash, the fallback for a
+missing file, and a cache that replaces an entry instead of growing."""
 import re
 
 from django.template import Context, Template

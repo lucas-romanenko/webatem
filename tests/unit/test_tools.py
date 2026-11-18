@@ -1,6 +1,5 @@
 """The bench scripts in tools/ need a live switcher, so the suite never runs
-them. They moved here from AV Server on 2026-11-18 and are exercised
-nowhere else, so it keeps them parseable, and checks that each that opens
+them. They are exercised nowhere else, so it keeps them parseable, and checks that each that opens
 an ATEM session installs ``_exit_signals`` (a signal unwinds into the
 goodbye instead of abandoning the session on the switcher)."""
 import ast
