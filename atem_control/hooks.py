@@ -113,8 +113,9 @@ class Hooks:
         return {}
 
     def idle_disconnect_seconds(self):
-        """Drop a control session after this many seconds with no command
-        from the operator, or None for never. Default: NEVER — WebATEM is
+        """Drop a control session after this many seconds in which nobody
+        used the page (a control command, or any click, touch or key on it;
+        never state from the switcher), or None for never. Default: NEVER — WebATEM is
         somebody's switcher panel and a panel does not log itself out
         (Lucas, 2026-09-14). A platform whose operators share switchers can
         return a number and get the old five-minute behaviour."""
