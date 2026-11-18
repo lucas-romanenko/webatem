@@ -35,6 +35,14 @@ Public API:
         check_cancelled: Callable[[], bool] | None = None,
         log_append: Callable[[str], None] | None = None,
     ) -> list[ItemResult]
+
+Also public, for a host that runs its own upload or capture worker around
+this module (AV Server does): ``is_slot_safe`` and ``StateNotReady`` (is a
+media-pool slot off air), ``media_player_source_ids``, ``apply_macro_xml``
+(the macro pool of a profile over an open session), ``close_protocol``
+(lock release, goodbye and socket close in that order) and
+``OwnershipLost``. They had a leading underscore until 2.6.1; the old
+names stay as aliases at the bottom of this module.
 """
 
 import hashlib
@@ -119,7 +127,7 @@ class ItemResult:
 # Cancellation helper
 # ---------------------------------------------------------------------------
 
-class _OwnershipLost(BaseException):
+class OwnershipLost(BaseException):
     """Raised by the cancel/ownership check when it can no longer confirm this
     replica still owns the row it is uploading (e.g. its DB session — and with
     it the session-level advisory lane lock — died mid-upload). It is a
@@ -143,7 +151,7 @@ class _Canceller:
             try:
                 if self._check():
                     return True
-            # _OwnershipLost is a BaseException, so it is NOT caught here — it
+            # OwnershipLost is a BaseException, so it is NOT caught here — it
             # propagates to abort the upload (see the class docstring). Only a
             # genuine bug in the check is swallowed as "not cancelled".
             except Exception:
@@ -155,7 +163,7 @@ class _Canceller:
 # Tally safety (cycle-wait — ports Mediaupload.exe's WaitForSafeUploadWindow)
 # ---------------------------------------------------------------------------
 
-def _media_player_source_ids(mp_idx) -> set:
+def media_player_source_ids(mp_idx) -> set:
     """The program-bus source IDs a media player presents, BMD convention:
     MP1 fill=3010 / key=3011, MP2=3020/3021, MP3=3030/3031, … (0-indexed)."""
     fill = 3010 + int(mp_idx) * 10
@@ -220,7 +228,7 @@ def _source_on_air(mixerstate, ids: set) -> bool:
     return False
 
 
-class _StateNotReady(Exception):
+class StateNotReady(Exception):
     """The switcher's state did not come back within STATE_READY_TIMEOUT, so
     nothing can say the slot is off air. ``_upload_one`` refuses the item."""
 
@@ -244,8 +252,8 @@ def _await_state(conn, timeout: float,
     return True
 
 
-def _is_slot_safe(protocol, slot_0_indexed: int,
-                  is_cancelled: Optional[Callable[[], bool]] = None) -> bool:
+def is_slot_safe(protocol, slot_0_indexed: int,
+                 is_cancelled: Optional[Callable[[], bool]] = None) -> bool:
     """Safe to overwrite a media-pool slot when no media player currently
     showing that slot (as a still) is live on PROGRAM output.
 
@@ -264,14 +272,14 @@ def _is_slot_safe(protocol, slot_0_indexed: int,
     session reconnecting) or a dump still arriving has no media players and no
     tally in it, which reads as "nothing on air"; until 2.0.4 that let an
     upload through into a live slot. So the check first waits up to
-    STATE_READY_TIMEOUT for the state and raises ``_StateNotReady`` if it does
+    STATE_READY_TIMEOUT for the state and raises ``StateNotReady`` if it does
     not come back. A cancel ends that wait the same way; the caller checks for
     the cancel first. It raises rather than answering False because "cannot
     tell" means different things to different callers: to an upload it is a
     refusal, to a host watching for a slot to go on air it is "not live".
     """
     if not _await_state(protocol, STATE_READY_TIMEOUT, is_cancelled):
-        raise _StateNotReady(
+        raise StateNotReady(
             f"switcher state not ready after {STATE_READY_TIMEOUT:.0f}s "
             f"(session reconnecting); cannot confirm slot {slot_0_indexed + 1} "
             f"is off air")
@@ -287,7 +295,7 @@ def _is_slot_safe(protocol, slot_0_indexed: int,
     for mp_idx, mp in mps.items():
         if getattr(mp, 'source_type', 0) == 1 \
                 and getattr(mp, 'slot', -1) == slot_0_indexed:
-            candidates |= _media_player_source_ids(mp_idx)
+            candidates |= media_player_source_ids(mp_idx)
     if not candidates:
         return True
 
@@ -312,7 +320,7 @@ def _wait_for_safe_upload_window(protocol, slot_0_indexed: int,
     """Cycle-wait for tally safety before overwriting a media-pool slot. Thin
     wrapper over the shared ``wait_for_safe_cycle`` (atem_control.tally) with
     the media-pool slot liveness predicate, so the cold->hot->cold loop is
-    identical to the HyperDeck path. ``_StateNotReady`` from the predicate is
+    identical to the HyperDeck path. ``StateNotReady`` from the predicate is
     not caught here: it ends the cycle at once, a refusal rather than a wait
     that runs out the tally timeout as if the slot had stayed live. A state
     that does come back in time costs the cycle a fresh start, not the
@@ -329,8 +337,8 @@ def _wait_for_safe_upload_window(protocol, slot_0_indexed: int,
     log_append(f"slot {slot_user}: tally source {source}")
     return wait_for_safe_cycle(
         protocol,
-        is_live=lambda: not _is_slot_safe(protocol, slot_0_indexed,
-                                          is_cancelled=canceller.is_set),
+        is_live=lambda: not is_slot_safe(protocol, slot_0_indexed,
+                                         is_cancelled=canceller.is_set),
         is_cancelled=canceller.is_set,
         log=log_append,
         label=f'slot {slot_user}',
@@ -430,7 +438,7 @@ def _upload_one(protocol, slot: int, image_path: str, width: int, height: int,
         not_ready = None
         try:
             safe = _wait_for_safe_upload_window(protocol, slot, canceller, log_append)
-        except _StateNotReady as e:
+        except StateNotReady as e:
             safe, not_ready = False, str(e)
         if not safe:
             if canceller.is_set():
@@ -603,8 +611,8 @@ def _upload_one(protocol, slot: int, image_path: str, width: int, height: int,
 # Public entry point
 # ---------------------------------------------------------------------------
 
-def _apply_macro_xml(protocol, macro_xml_path: str,
-                     log_append: Callable[[str], None]) -> Optional[ItemResult]:
+def apply_macro_xml(protocol, macro_xml_path: str,
+                    log_append: Callable[[str], None]) -> Optional[ItemResult]:
     """Apply only the <MacroPool> section of ``macro_xml_path`` over an
     already-connected ``AtemProtocol``.
 
@@ -743,12 +751,12 @@ def _run_for_single_ip(ip_address: str,
             protocol = candidate
             break
         except NoFreeConnection:
-            _close_protocol(candidate)
+            close_protocol(candidate)
             log_append(f"{ip_address}: {NO_FREE_CONNECTION_ERROR}")
             refused = True
             break
         except TimeoutError:
-            _close_protocol(candidate)
+            close_protocol(candidate)
             if attempt < CONNECT_ATTEMPTS:
                 log_append(f"attempt {attempt} timed out — retrying in "
                            f"{CONNECT_RETRY_DELAY:.0f}s")
@@ -758,7 +766,7 @@ def _run_for_single_ip(ip_address: str,
             # socket error, a bug) still closes the candidate: a session
             # that got as far as the handshake is on the switcher, and
             # without the goodbye it is abandoned there.
-            _close_protocol(candidate)
+            close_protocol(candidate)
             raise
     if protocol is None:
         for slot, image_path in slot_paths:
@@ -810,13 +818,13 @@ def _run_for_single_ip(ip_address: str,
             out.append(item_result)
 
         # Macro apply runs on the same socket after the last image. Skipped on
-        # cancel or partial-failure — see _apply_macro_xml docstring. The
+        # cancel or partial-failure — see apply_macro_xml docstring. The
         # ``all(...)`` check is vacuously True for an empty ``out`` (no images
         # attempted = macros-only Media Pool -> Hyperdeck submission), which
         # is exactly what we want — proceed to the macro apply.
         if macro_xml_path and not canceller.is_set():
             if all(r.success for r in out):
-                macro_result = _apply_macro_xml(protocol, macro_xml_path, log_append)
+                macro_result = apply_macro_xml(protocol, macro_xml_path, log_append)
                 if macro_result is not None:
                     out.append(macro_result)
             else:
@@ -839,7 +847,7 @@ def _run_for_single_ip(ip_address: str,
                 break
     finally:
         t_close = time.time()
-        _close_protocol(protocol)
+        close_protocol(protocol)
         log_append(f"close took {time.time() - t_close:.2f}s")
 
     return out
@@ -945,7 +953,7 @@ def execute_upload(items: List[tuple],
     return ordered + extra_results
 
 
-def _close_protocol(protocol: AtemProtocol) -> None:
+def close_protocol(protocol: AtemProtocol) -> None:
     # Give the media lock back BEFORE the goodbye. An upload holds the store
     # lock per frame and a failed or abandoned one can leave it held; a lock
     # still ours at teardown is kept by the switcher for the rest of the
@@ -973,3 +981,13 @@ def _close_protocol(protocol: AtemProtocol) -> None:
         protocol.transport.thread_queue.close()
     except Exception:
         pass
+
+
+# The names above had a leading underscore until 2.6.1, and hosts imported
+# them that way. Kept so a host built against 2.6.1 or earlier still imports.
+_OwnershipLost = OwnershipLost
+_StateNotReady = StateNotReady
+_media_player_source_ids = media_player_source_ids
+_is_slot_safe = is_slot_safe
+_apply_macro_xml = apply_macro_xml
+_close_protocol = close_protocol

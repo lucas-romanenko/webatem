@@ -82,7 +82,7 @@ def _read_profile_upload(upload):
             {'error': 'profile must be UTF-8 XML'}, status=400)
 
 
-def _build_apply_options(sections: dict) -> ApplyOptions:
+def build_apply_options(sections: dict) -> ApplyOptions:
     """Translate load-side section-selection JSON → ApplyOptions.
 
     Per-M/E cells arrive me-namespaced (``me<N>_program`` …
@@ -361,7 +361,7 @@ def profile_load(request):
     except Exception:
         return JsonResponse({'error': 'malformed sections JSON'}, status=400)
 
-    options = _build_apply_options(sections)
+    options = build_apply_options(sections)
 
     # Apply XML config first.
     try:
@@ -474,3 +474,8 @@ def profile_load(request):
         'video_mode': profile.video_mode,
         'images': image_report,
     })
+
+
+# Public since 2.6.2 (a host copying a profile onto a switcher builds its
+# options the same way); the old name stays for hosts built against 2.6.1.
+_build_apply_options = build_apply_options

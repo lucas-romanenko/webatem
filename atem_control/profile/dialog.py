@@ -20,7 +20,7 @@ ids (``me<N>_program`` … ``me<N>_usk_<k>``, ``me_tab: N`` 0-based);
 ``me_options_from_sections`` below is the single place that parses the
 namespacing back into ``mes[N]`` ``MixEffectOptions`` for the two
 submission-mapping functions (``export.build_save_options`` /
-``views._build_apply_options``) — the ids never travel past them.
+``views.build_apply_options``) — the ids never travel past them.
 Global section ids stay flat and match the ``SaveOptions`` /
 ``ApplyOptions`` field names so the mapping needs no translation table.
 """
@@ -99,7 +99,7 @@ def me_options_from_sections(sections: dict, *, program_default: bool,
 
     This is the single place the ``me<N>_`` transport namespacing is
     parsed; the two submission-mapping functions
-    (``export.build_save_options`` / ``views._build_apply_options``)
+    (``export.build_save_options`` / ``views.build_apply_options``)
     call it and nothing else sees the namespaced ids.
 
     The list is sized to the highest submitted M/E index + 1. The

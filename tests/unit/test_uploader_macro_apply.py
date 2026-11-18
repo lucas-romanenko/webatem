@@ -1,4 +1,4 @@
-"""Unit tests for ``_apply_macro_xml`` in the Content Change uploader.
+"""Unit tests for ``apply_macro_xml`` in the Content Change uploader.
 
 The helper runs after image upload on the same socket. It either:
   * returns ``None`` when ``Profile.apply`` returns a clean result;
@@ -119,8 +119,8 @@ def fake_pyatem(monkeypatch):
 def _import_helper():
     """Import the helper. Lazy so the test collection doesn't fail at
     import time on machines without the pyatem C extension built."""
-    from atem_control.uploader import _apply_macro_xml
-    return _apply_macro_xml
+    from atem_control.uploader import apply_macro_xml
+    return apply_macro_xml
 
 
 def test_apply_returns_none_on_clean_success(fake_pyatem):
@@ -185,8 +185,8 @@ def test_apply_pumps_protocol_loop_during_apply(fake_pyatem, monkeypatch):
     while ``Profile.apply`` is running, so blocking calls inside apply
     (``upload_macro_bytecode`` waits on ``upload-done``) can complete.
 
-    Simulated by making the fake ``apply()`` sleep briefly — the pump
-    thread should accumulate ``loop_calls`` during that window. Then
+    Simulated by making the fake ``apply()`` wait (up to 5 s) for the pump
+    thread to call ``loop()``. Then
     the finally block wakes the pump via ``Wakeup`` and joins it.
     """
     proto = _FakeProtocol()
@@ -208,7 +208,9 @@ def test_apply_pumps_protocol_loop_during_apply(fake_pyatem, monkeypatch):
             return cls()
 
         def apply(self, conn, opts):
-            time.sleep(0.2)
+            deadline = time.monotonic() + 5     # until the pump has driven loop()
+            while not proto.loop_calls and time.monotonic() < deadline:
+                time.sleep(0.01)
             return _SlowResult()
 
     monkeypatch.setattr(real_atemwire, 'Profile', _SlowProfile, raising=False)
@@ -221,7 +223,7 @@ def test_apply_pumps_protocol_loop_during_apply(fake_pyatem, monkeypatch):
         log_append=logs.append,
     )
     assert result is None
-    # Pump should have entered loop() at least once during the 200ms sleep.
+    # Pump should have entered loop() at least once while apply ran.
     assert proto.loop_calls >= 1, (
         f"pump thread didn't drive protocol.loop() (loop_calls={proto.loop_calls})"
     )

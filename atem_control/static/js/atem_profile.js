@@ -126,7 +126,7 @@
 
     function selectionsForBackend(descriptor, sel) {
         // Translate the dialog's selection map (per-section ids) into the
-        // shape the backend's _build_save_options / _build_apply_options
+        // shape the backend's _build_save_options / build_apply_options
         // expect. 1:1 passthrough — the descriptor is flat.
         const out = {};
         for (const s of flatSections(descriptor)) {
