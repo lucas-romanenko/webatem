@@ -37,7 +37,7 @@ Public API:
     ) -> list[ItemResult]
 
 Also public, for a host that runs its own upload or capture worker around
-this module (AV Server does): ``is_slot_safe`` and ``StateNotReady`` (is a
+this module: ``is_slot_safe`` and ``StateNotReady`` (is a
 media-pool slot off air), ``media_player_source_ids``, ``apply_macro_xml``
 (the macro pool of a profile over an open session), ``close_protocol``
 (lock release, goodbye and socket close in that order) and

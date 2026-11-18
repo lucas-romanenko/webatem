@@ -2,8 +2,7 @@
 mid-upload it can no longer prove it still owns the job (its lane lock died
 with the session), and another worker may take the job over. The host's
 cancel check raises ``OwnershipLost`` then, and the upload has to ABORT
-instead of carrying on. Moved here from AV Server, whose uploader worker
-raises it; these pin the half that lives in this module."""
+instead of carrying on. These pin the half that lives in this module."""
 import pytest
 
 from atem_control.uploader import OwnershipLost, _Canceller
