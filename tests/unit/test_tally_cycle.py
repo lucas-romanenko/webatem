@@ -189,7 +189,7 @@ def _plain(session):
 
 def _drive(monkeypatch, style, *, on_air, gaps, **kwargs):
     """Run the cycle against a session that follows ``on_air`` and ``gaps``.
-    ``style`` 'still' is the real still-upload path (``_is_slot_safe``, which
+    ``style`` 'still' is the real still-upload path (``is_slot_safe``, which
     waits the gap out and answers from the new dump); the others are the
     predicates above. Returns (result, virtual time at return, log lines)."""
     clock = _Clock()

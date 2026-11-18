@@ -65,7 +65,7 @@ def ticked_pump(protocol, idle_sleep: float = 0.0) -> None:
 
 
 def _pooled(conn) -> bool:
-    """A pooled ``ATEMConnection`` (how a host calls ``_is_slot_safe``), not
+    """A pooled ``ATEMConnection`` (how a host calls ``is_slot_safe``), not
     a bare ``AtemProtocol``: its worker thread pumps the loop and tracks the
     session, so it is asked rather than pumped."""
     return hasattr(conn, 'is_connected')

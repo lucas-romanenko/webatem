@@ -1,4 +1,4 @@
-"""Unit tests for the media-pool upload tally guard (``_is_slot_safe``).
+"""Unit tests for the media-pool upload tally guard (``is_slot_safe``).
 
 The guard refuses to overwrite a slot while a media player showing that slot is
 live on PROGRAM output. The source of truth is the ATEM's own program tally
@@ -18,7 +18,7 @@ import types
 import pytest
 
 import atem_control.uploader as U
-from atem_control.uploader import _is_slot_safe
+from atem_control.uploader import is_slot_safe
 
 MP0_FILL = 3010   # media player 1 (index 0): fill 3010 / key 3011
 MP0_KEY = 3011
@@ -75,7 +75,7 @@ def _mx(*, players=None, tally=None, program=None, usk=None, dsk=None):
 
 
 def _safe(mx, slot=SLOT):
-    return _is_slot_safe(_Proto(mx), slot)
+    return is_slot_safe(_Proto(mx), slot)
 
 
 # --- authoritative path: the ATEM's tally-source -----------------------------
@@ -208,7 +208,7 @@ def test_empty_state_waits_for_the_dump_and_answers_from_it():
         _part(full, 'tally-source'),
         _READY,
     )
-    assert _is_slot_safe(proto, SLOT) is False
+    assert is_slot_safe(proto, SLOT) is False
     assert proto.loops == 3          # pumped through the dump, read at its end
 
 
@@ -216,15 +216,15 @@ def test_a_dump_that_lands_off_air_is_safe():
     # A reconnect that finishes in time costs a wait, not the upload.
     full = _mx(players={0: (1, SLOT)}, tally={MP0_FILL: (False, True)})
     proto = _Reconnecting(full, _READY)
-    assert _is_slot_safe(proto, SLOT) is True
+    assert is_slot_safe(proto, SLOT) is True
 
 
 def test_a_state_that_never_comes_back_is_refused_within_the_bound(monkeypatch):
     monkeypatch.setattr(U, 'STATE_READY_TIMEOUT', 0.2)
     proto = _Reconnecting()
     t0 = time.monotonic()
-    with pytest.raises(U._StateNotReady, match='not ready'):
-        _is_slot_safe(proto, SLOT)
+    with pytest.raises(U.StateNotReady, match='not ready'):
+        is_slot_safe(proto, SLOT)
     assert time.monotonic() - t0 < 2.0
     assert proto.loops > 0           # waited by pumping, as the dump needs
 
@@ -283,10 +283,10 @@ class _Pooled:
 
 def test_a_pooled_connection_is_waited_for_not_pumped():
     full = _mx(players={0: (1, SLOT)}, tally={MP0_FILL: (True, False)})
-    assert _is_slot_safe(_Pooled(full), SLOT) is False
+    assert is_slot_safe(_Pooled(full), SLOT) is False
 
 
 def test_a_pooled_connection_that_stays_down_is_refused(monkeypatch):
     monkeypatch.setattr(U, 'STATE_READY_TIMEOUT', 0.2)
-    with pytest.raises(U._StateNotReady):
-        _is_slot_safe(_Pooled(_mx(), ready_after=60), SLOT)
+    with pytest.raises(U.StateNotReady):
+        is_slot_safe(_Pooled(_mx(), ready_after=60), SLOT)
