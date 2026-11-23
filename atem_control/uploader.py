@@ -82,7 +82,14 @@ NO_FREE_CONNECTION_ERROR = ('No free connection on this switcher (ATEM Software 
 # jobs a moment's switcher busyness would otherwise have survived).
 CONNECT_ATTEMPTS = 3
 CONNECT_RETRY_DELAY = 2.0
+# An upload fails after UPLOAD_TIMEOUT with nothing new from it: the lock
+# never granted, or the switcher granting no more of the still. Progress is
+# each budget of chunks the switcher grants (bmdwire's upload-progress), so a
+# slow link that keeps moving is waited for, up to UPLOAD_MAX. It used to be
+# 90 s in all: a 1080p still over 5 Mbit/s and 80 ms needs ~17 s, and a
+# larger one or a slower link ran into it mid-transfer (#63).
 UPLOAD_TIMEOUT = 90.0
+UPLOAD_MAX = 900.0
 HASH_SETTLE_TIMEOUT = 10.0
 REUPLOAD_SETTLE = 1.0
 # A tally check that finds no switcher state (the session re-handshaking after
@@ -513,6 +520,13 @@ def _upload_one(protocol, slot: int, image_path: str, width: int, height: int,
             upload_done['flag'] = True
 
     done_id = protocol.on('upload-done', _on_done)
+    last_progress = {'t': time.time()}
+
+    def _on_progress(store, uploaded_slot, *_):
+        if store == 0 and uploaded_slot == slot:
+            last_progress['t'] = time.time()
+
+    progress_id = protocol.on('upload-progress', _on_progress)
 
     def _fail_and_release(reason: str, **kw) -> ItemResult:
         # A failed/abandoned upload leaves the protocol's transfer lane
@@ -539,19 +553,24 @@ def _upload_one(protocol, slot: int, image_path: str, width: int, height: int,
             if canceller.is_set():
                 return _fail_and_release("cancelled during upload",
                                          upload_seconds=time.time() - t_upload)
-            if time.time() - t_upload > UPLOAD_TIMEOUT:
+            if time.time() - last_progress['t'] > UPLOAD_TIMEOUT:
                 return _fail_and_release(
-                    f"upload timeout after {UPLOAD_TIMEOUT:.0f}s — likely lock never "
-                    f"acquired or transfer stalled",
+                    f"upload timeout: nothing for {UPLOAD_TIMEOUT:.0f}s — likely lock "
+                    f"never acquired or transfer stalled",
+                    upload_seconds=time.time() - t_upload)
+            if time.time() - t_upload > UPLOAD_MAX:
+                return _fail_and_release(
+                    f"upload timeout after {UPLOAD_MAX:.0f}s",
                     upload_seconds=time.time() - t_upload)
             # ticked: a stalled transfer's quiet wire must not block this
             # loop past the deadline checks above (2026-07-06).
             ticked_pump(protocol, idle_sleep=0.02)
     finally:
-        try:
-            protocol.off('upload-done', done_id)
-        except Exception:
-            pass
+        for event, event_id in (('upload-done', done_id), ('upload-progress', progress_id)):
+            try:
+                protocol.off(event, event_id)
+            except Exception:
+                pass
     upload_duration = time.time() - t_upload
 
     # Verify via MPfe hash equality.

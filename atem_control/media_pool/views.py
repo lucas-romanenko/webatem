@@ -50,24 +50,48 @@ def _run_upload(ip, slot, file_path, job_dir):
     """Background-thread body: push the still, then release the watcher
     lockout (which re-queues the slot's thumbnail download) and clean up."""
     from atem_control.uploader import execute_upload
+    error = 'crashed'
     try:
         results = execute_upload([(ip, slot, file_path)], skip_tally=True)
         failed = [r for r in results if not r.success]
         if failed:
-            logger.error(
-                f"Drag-drop upload to {ip} slot {slot} failed: "
-                + '; '.join(str(getattr(r, 'message', r)) for r in failed)
-            )
+            error = '; '.join(str(r.error or 'failed') for r in failed)
+            logger.error(f"Drag-drop upload to {ip} slot {slot} failed: {error}")
         else:
+            error = None
             logger.info(f"Drag-drop upload to {ip} slot {slot} complete")
     except Exception:
         logger.exception(f"Drag-drop upload to {ip} slot {slot} crashed")
     finally:
+        _tell_browsers(ip, slot, error)
         try:
             media_pool_service.note_upload_finished(ip, slot)
         except Exception:
             logger.exception("note_upload_finished failed")
         shutil.rmtree(job_dir, ignore_errors=True)
+
+
+def _tell_browsers(ip, slot, error):
+    """Say how a drag-and-drop upload ended to the pages showing this
+    switcher, which otherwise learn it only from the watcher's new thumbnail
+    (one more transfer over the same link) and never of a failure: the ring
+    held at its 90 % estimate until a two-minute safety timer cleared it
+    without a word (#63)."""
+    from asgiref.sync import async_to_sync
+    from channels.layers import get_channel_layer
+    from atem_control.media_pool.watcher import group_name
+    try:
+        layer = get_channel_layer()
+        if layer is None:
+            return
+        if error is None:
+            message = {'type': 'mediapool.slot_uploaded', 'payload': {'slot': slot}}
+        else:
+            message = {'type': 'mediapool.upload_failed',
+                       'payload': {'slot': slot, 'status': f'failed ({error})'}}
+        async_to_sync(layer.group_send)(group_name(ip), message)
+    except Exception:
+        logger.exception(f"telling the browsers about slot {slot} on {ip} failed")
 
 
 @access_required
