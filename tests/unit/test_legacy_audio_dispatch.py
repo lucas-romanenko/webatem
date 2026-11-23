@@ -104,6 +104,25 @@ def test_headphones_are_the_monitor_bus():
     assert (mute[0], mute[4]) == (0x04, 1)
 
 
+
+def test_headphones_are_the_headphone_output_when_the_unit_sends_one():
+    # bmdwire 1.14.6 (bmdwire#93): the state shows AMHP as the headphones on
+    # a unit that sends it, so the fader writes CAMH there, not CAMm.
+    conn = _FakeConn()
+    conn.mixerstate = {'audio-mixer-headphone-properties': object()}
+    assert dispatch(conn, 'set_audio_headphones_volume', {'volume_db': 0.0}, 'legacy') == (True, None)
+    op, payload = _one(conn)
+    assert op == b'CAMH'
+    assert struct.unpack_from('>BxH', payload) == (0x01, 32768)
+
+
+def test_the_headphone_output_has_no_mute():
+    conn = _FakeConn()
+    conn.mixerstate = {'audio-mixer-headphone-properties': object()}
+    ok, err = dispatch(conn, 'set_audio_headphones_mute', {'mute': True}, 'legacy')
+    assert not ok and 'no mute' in err
+    assert conn.sent == []
+
 # Every verb the panel can send that the classic mixer has nothing for.
 _FAIRLIGHT_ONLY = [
     ('set_audio_strip_input_gain', {**STRIP, 'gain_db': 3.0}),

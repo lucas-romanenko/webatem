@@ -498,14 +498,36 @@ LEGACY_AUDIO_COMMAND_MAP = {
         c, volume=ops.legacy_db_to_volume(d.get('volume_db'))),
     'set_audio_master_afv': lambda c, d: ops.set_audio_master(
         c, afv=bool(d['afv'])),
-    # The monitor bus, which the state shows as the headphones. Fairlight's
+    # The headphones as the state shows them (legacy_audio_headphones): the
+    # headphone output (AMHP, written by CAMH) on a unit that sends one,
+    # the monitor bus otherwise (bmdwire 1.14.6, bmdwire#93). Fairlight's
     # headphones (FMHP) have no command in atemwire, so these two are
     # classic-only.
-    'set_audio_headphones_volume': lambda c, d: ops.set_audio_monitor(
-        c, volume=ops.legacy_db_to_volume(d.get('volume_db'))),
-    'set_audio_headphones_mute': lambda c, d: ops.set_audio_monitor(
-        c, mute=bool(d['mute'])),
+    'set_audio_headphones_volume': lambda c, d: _set_headphones_volume(
+        c, ops.legacy_db_to_volume(d.get('volume_db'))),
+    'set_audio_headphones_mute': lambda c, d: _set_headphones_mute(
+        c, bool(d['mute'])),
 }
+
+
+def _has_headphone_output(connection):
+    mx = getattr(connection, 'mixerstate', None) or {}
+    return mx.get('audio-mixer-headphone-properties') is not None
+
+
+def _set_headphones_volume(connection, volume):
+    if _has_headphone_output(connection):
+        ops.set_audio_headphones(connection, gain=volume)
+    else:
+        ops.set_audio_monitor(connection, volume=volume)
+
+
+def _set_headphones_mute(connection, mute):
+    if _has_headphone_output(connection):
+        # AMHP has no mute; muting the monitor bus here would not change
+        # what the state shows as the headphones.
+        raise ValueError("this switcher's headphone output has no mute")
+    ops.set_audio_monitor(connection, mute=mute)
 
 _LEGACY_ONLY_AUDIO = frozenset({'set_audio_headphones_volume',
                                 'set_audio_headphones_mute'})
