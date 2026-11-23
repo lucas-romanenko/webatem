@@ -599,11 +599,12 @@ window.ATEMControl = {
             // SH-27: ATEM-bound-but-unknown deck notice is per-ATEM.
             alpineInstance.hyperdeckUnknownDecks = [];
 
-            // SH-27: per-slot "Uploading…" overlays (and their safety
-            // timers) belong to the old ATEM's pool.
+            // SH-27: per-slot "Uploading…" overlays (and their progress
+            // and failure notices) belong to the old ATEM's pool.
             for (const slot of alpineInstance.pendingUploads.slice()) {
                 alpineInstance._clearUploading(slot);
             }
+            alpineInstance.uploadErrors = [];
 
             // SH-13b: the meter subscription died with the old consumer —
             // clear the flag so the audio panel's x-effect re-subscribes
@@ -944,19 +945,25 @@ window.ATEMControl = {
                 alpineInstance._finishUpload(slotIdx);
                 break;
             }
+            case 'media_pool_upload_progress':
+                // What an upload this page started is doing, as it moves
+                // (connecting / sending n% / verifying): the slot's ring.
+                alpineInstance.noteUploadProgress(data.data || {});
+                break;
             case 'media_pool_upload_failed': {
                 // The upload for this slot died server-side (connect / lock /
-                // transfer failure reported via the uploader webhook). Clear
-                // the Uploading overlay NOW and say so — same idiom as the
-                // synchronous POST failure path in uploadSlot(). Before this,
-                // the spinner silently sat out its 120s safety timer and a
-                // 15s failure looked like a minute-long hang.
+                // transfer failure). Clear the overlay and say why in the
+                // panel, with whether the switcher's slot changed: the
+                // server's ``changed`` (false = nothing changed, null =
+                // unknown); a host that sends only ``status`` has always
+                // meant "not changed".
                 const payload = data.data || {};
                 const slotIdx = payload.slot;
                 if (typeof slotIdx !== 'number') break;
-                alpineInstance._clearUploading(slotIdx);
-                alert(`Slot ${slotIdx + 1}: upload ${payload.status || 'failed'} — ` +
-                      `the image was NOT changed on the ATEM. Please try again.`);
+                if (!alpineInstance.isSlotUploading(slotIdx)) break;
+                const reason = payload.reason
+                    || String(payload.status || 'failed').replace(/^failed \((.*)\)$/, '$1');
+                alpineInstance.failUpload(slotIdx, reason, payload.changed);
                 break;
             }
             case 'media_pool_player_updated': {
@@ -983,6 +990,9 @@ window.ATEMControl = {
                         slot: payload.slot,
                         slot_name: payload.slot_name || '',
                         from_cache: !!payload.from_cache,
+                        // when this arrived: the "no slot finished for
+                        // N s" line counts from here
+                        at: Date.now(),
                     };
                 }
                 break;

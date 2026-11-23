@@ -131,7 +131,8 @@ def test_a_failed_drag_and_drop_upload_is_told_to_the_page(layer, monkeypatch, t
     views._run_upload('10.0.0.5', 3, str(tmp_path / 'a.png'), str(tmp_path))
     assert layer.sent == [('atem_mediapool_10_0_0_5', {
         'type': 'mediapool.upload_failed',
-        'payload': {'slot': 3, 'status': 'failed (upload timeout: nothing for 90s)'}})]
+        'payload': {'slot': 3, 'status': 'failed (upload timeout: nothing for 90s)',
+                    'reason': 'upload timeout: nothing for 90s', 'changed': False}})]
 
 
 def test_a_finished_drag_and_drop_upload_is_told_to_the_page(layer, monkeypatch, tmp_path):

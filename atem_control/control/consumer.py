@@ -1512,6 +1512,15 @@ class ATEMConsumer(ATEMConnectionLoggingMixin, ATEMStateMixin, AsyncWebsocketCon
             'data': event.get('payload', {}),
         })
 
+    async def mediapool_upload_progress(self, event):
+        # What a drag-and-drop upload is doing as it moves (connecting,
+        # sending with its real percent, verifying): drives the slot's ring
+        # and its "no progress for N s" line.
+        await self._safe_send_json({
+            'type': 'media_pool_upload_progress',
+            'data': event.get('payload', {}),
+        })
+
     async def mediapool_upload_failed(self, event):
         # Broadcast on a failed/cancelled upload:
         # clears the initiator's Uploading overlay and surfaces the error

@@ -69,6 +69,9 @@ document.addEventListener('alpine:init', () => {
         // template reads these via ``$store.atem.profileCapture*``.
         profileCaptureSession: '',
         profileCaptureProgress: null,
+        // Wall clock for the capture's "no slot finished for N s" line,
+        // ticked once a second by AtemProfile.runSave while it runs.
+        profileCaptureClock: 0,
 
         // HyperDeck transport modal. Open flag + the deck's clips/status live
         // here (driven by window.AtemHyperdeck over the /atem/hyperdeck/ HTTP

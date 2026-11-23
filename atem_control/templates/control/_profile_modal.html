@@ -76,6 +76,11 @@
                                 + ($store.atem.profileCaptureProgress.slot_name
                                    ? ' — ' + $store.atem.profileCaptureProgress.slot_name : ''))"></span>
                         </div>
+                        <!-- No slot finished for a while: said plainly, while
+                             the bar stays where the real count left it. -->
+                        <div class="text-xs text-warning font-semibold mt-1"
+                             x-show="$store.atem.profileCaptureStallText()"
+                             x-text="$store.atem.profileCaptureStallText()"></div>
                     </div>
 
                     <!-- Loading-state when descriptor not loaded yet -->
