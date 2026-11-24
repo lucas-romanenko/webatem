@@ -1381,6 +1381,7 @@
         for (const slot of alpineInstance.pendingUploads.slice()) {
           alpineInstance._clearUploading(slot);
         }
+        alpineInstance.uploadErrors = [];
         alpineInstance.audioMetersSubscribed = false;
         window.AudioMeters.reset();
         window.ATEMControl.RealtimeSlider.cancelAll();
@@ -1597,12 +1598,16 @@
           alpineInstance._finishUpload(slotIdx);
           break;
         }
+        case "media_pool_upload_progress":
+          alpineInstance.noteUploadProgress(data.data || {});
+          break;
         case "media_pool_upload_failed": {
           const payload = data.data || {};
           const slotIdx = payload.slot;
           if (typeof slotIdx !== "number") break;
-          alpineInstance._clearUploading(slotIdx);
-          alert(`Slot ${slotIdx + 1}: upload ${payload.status || "failed"} — the image was NOT changed on the ATEM. Please try again.`);
+          if (!alpineInstance.isSlotUploading(slotIdx)) break;
+          const reason = payload.reason || String(payload.status || "failed").replace(/^failed \((.*)\)$/, "$1");
+          alpineInstance.failUpload(slotIdx, reason, payload.changed);
           break;
         }
         case "media_pool_player_updated": {
@@ -1622,7 +1627,10 @@
               total: payload.total || 0,
               slot: payload.slot,
               slot_name: payload.slot_name || "",
-              from_cache: !!payload.from_cache
+              from_cache: !!payload.from_cache,
+              // when this arrived: the "no slot finished for
+              // N s" line counts from here
+              at: Date.now()
             };
           }
           break;
@@ -2150,6 +2158,84 @@
     return handlers;
   }
 
+  // ../../atem_control/js/upload_status.js
+  var STALL_AFTER_S = 10;
+  var LOST_AFTER_S = 180;
+  function ringPercent(st) {
+    if (st && st.stage === "done") return 100;
+    if (!st || st.stage !== "sending" || typeof st.percent !== "number") return null;
+    return Math.max(0, Math.min(99, st.percent));
+  }
+  function stalledSeconds(st, now) {
+    if (!st || typeof st.movedAt !== "number") return 0;
+    return Math.max(0, Math.floor((now - st.movedAt) / 1e3));
+  }
+  function retryOf(st) {
+    const m = st && typeof st.stage === "string" && st.stage.match(/^retrying (\d+)\/(\d+)$/);
+    return m ? `${m[1]}/${m[2]}` : null;
+  }
+  function uploadLabel(st, now) {
+    if (st && st.stage === "done") return "Done";
+    const retry = retryOf(st);
+    if (retry) return `Retrying (${retry})…`;
+    const quiet = stalledSeconds(st, now);
+    if (quiet >= STALL_AFTER_S) return `No progress for ${quiet} s`;
+    switch (st && st.stage) {
+      case "connecting":
+        return "Connecting…";
+      case "preparing":
+        return "Preparing…";
+      case "waiting":
+        return "Waiting for off air…";
+      case "sending":
+        return `${Math.round(ringPercent(st) || 0)}%`;
+      case "verifying":
+        return "Checking…";
+      default:
+        return "Starting…";
+    }
+  }
+  function uploadStallText(slotIndex, st, now) {
+    const quiet = stalledSeconds(st, now);
+    if (quiet < STALL_AFTER_S) return "";
+    const slot = `Slot ${slotIndex + 1}`;
+    const retry = retryOf(st);
+    if (retry) {
+      return `${slot}: the upload stopped moving and is starting again from the beginning (${retry}), ${quiet} s so far…`;
+    }
+    switch (st && st.stage) {
+      case "connecting":
+        return `${slot}: still connecting to the switcher after ${quiet} s. Still trying…`;
+      case "preparing":
+        return `${slot}: still preparing the image after ${quiet} s…`;
+      case "waiting":
+        return `${slot}: waiting ${quiet} s so far for the slot to go off air…`;
+      case "sending":
+        return `${slot}: no progress for ${quiet} s: the switcher isn't acknowledging. Still trying…`;
+      case "verifying":
+        return `${slot}: the switcher has the image; no confirmation yet after ${quiet} s…`;
+      default:
+        return `${slot}: no word from the upload for ${quiet} s. Still waiting…`;
+    }
+  }
+  function changedText(changed) {
+    if (changed === false || changed === void 0) {
+      return "Nothing was changed on the switcher: the slot keeps its old image.";
+    }
+    return "The switcher may or may not have the new image: check the slot.";
+  }
+  function uploadFailureText(slotIndex, reason, changed) {
+    const why = String(reason || "failed").trim().replace(/[.\s]+$/, "");
+    return `Slot ${slotIndex + 1}: upload failed: ${why}. ${changedText(changed)}`;
+  }
+  function captureStallText(progress, now) {
+    if (!progress || !(progress.total > 0) || progress.completed >= progress.total) return "";
+    if (typeof progress.at !== "number") return "";
+    const quiet = Math.max(0, Math.floor((now - progress.at) / 1e3));
+    if (quiet < STALL_AFTER_S) return "";
+    return `No slot has finished for ${quiet} s: the switcher is slow to send, or not answering. Still trying…`;
+  }
+
   // ../../atem_control/js/media_pool.js
   var mediaPoolStore = {
     // Media pool — pushed from server via Channels group, real-time multi-user.
@@ -2234,6 +2320,18 @@
     // Track slots currently awaiting a new thumbnail from an upload we
     // initiated. Kept as an array so Alpine reactivity fires cleanly.
     pendingUploads: [],
+    // slot -> {stage, percent, movedAt}: what the server last said the
+    // upload was doing (media_pool_upload_progress) and when it last
+    // moved. The ring and its words come from this alone (upload_status.js).
+    uploadStatus: {},
+    // [{slot, text}]: failed uploads, said in the panel until dismissed or
+    // the slot is uploaded to again.
+    uploadErrors: [],
+    // Wall clock for the "no progress for N s" words, ticked once a second
+    // while an upload is pending (bindings that read it re-evaluate).
+    uploadClock: 0,
+    _uploadClockTimer: null,
+    // setInterval handle (non-reactive use)
     isSlotUploading(slotIndex) {
       return this.pendingUploads.includes(slotIndex);
     },
@@ -2241,35 +2339,47 @@
       if (!this.pendingUploads.includes(slotIndex)) {
         this.pendingUploads.push(slotIndex);
       }
-      this._startUploadRing(slotIndex);
+      this.uploadErrors = this.uploadErrors.filter((e) => e.slot !== slotIndex);
+      this.uploadStatus[slotIndex] = { stage: null, percent: null, movedAt: Date.now() };
+      this._tickUploadClock();
+      requestAnimationFrame(() => this._paintUploadRing(slotIndex));
     },
     _clearUploading(slotIndex) {
-      const t = this._uploadSafetyTimers[slotIndex];
-      if (t) {
-        clearTimeout(t);
-        delete this._uploadSafetyTimers[slotIndex];
-      }
-      this._stopUploadRing(slotIndex);
+      delete this.uploadStatus[slotIndex];
       const i = this.pendingUploads.indexOf(slotIndex);
       if (i >= 0) this.pendingUploads.splice(i, 1);
+      if (!this.pendingUploads.length) this._stopUploadClock();
+    },
+    // The server says how an upload is moving: {slot, stage, percent}.
+    // A stage change or a higher percent is movement and restarts the
+    // stall clock; a repeat is not. Uploads this page didn't start are
+    // left alone (their tiles update when the slot does).
+    noteUploadProgress(payload) {
+      const slotIndex = payload && payload.slot;
+      if (typeof slotIndex !== "number" || !this.isSlotUploading(slotIndex)) return;
+      const cur = this.uploadStatus[slotIndex] || {};
+      const percent = typeof payload.percent === "number" ? payload.percent : null;
+      const moved = payload.stage !== cur.stage || percent !== null && (cur.percent === null || percent > cur.percent);
+      this.uploadStatus[slotIndex] = {
+        stage: payload.stage || cur.stage || null,
+        percent: percent !== null ? percent : payload.stage === cur.stage ? cur.percent : null,
+        movedAt: moved ? Date.now() : cur.movedAt
+      };
+      this._paintUploadRing(slotIndex);
     },
     // --- Upload progress ring (drag-drop onto a slot) ---
-    // The real ATEM upload runs in a separate process; the browser only
-    // learns "accepted" (the POST) and "done" (the WS completion event) —
-    // there is no byte-level progress. So the ring EASES toward a ceiling
-    // (~90%) on a time estimate between those two real milestones, and only
-    // the real completion snaps it to 100% (_finishUpload). It never claims
-    // "done" on the estimate; a long upload just holds near the ceiling.
+    // Fills to the percent of the still the switcher has really granted
+    // (bmdwire's upload-progress, relayed by the server); spins while
+    // there is no such number (connecting, preparing, verifying). Only the
+    // server's word that the upload ended fills it to 100 (_finishUpload).
+    // It used to ease towards 90 % on a timer whatever the switcher did,
+    // so a stalled upload looked like one about to finish.
     // JS owns the DOM directly (no Alpine binding on stroke-dashoffset — it
     // would fight these writes, the same failure mode as the sliders).
     _RING_CIRCUMFERENCE: 100.53,
     // 2*pi*16, matches the template's r=16
-    _RING_TARGET_PCT: 90,
-    // estimate ceiling; only completion hits 100
-    _RING_TAU_MS: 1500,
-    // ease time-constant (~86% by ~3s)
-    _uploadRings: {},
-    // slot -> setInterval handle (non-reactive)
+    _RING_SPIN_PCT: 25,
+    // the arc shown while it spins
     _paintRing(slotIndex, pct) {
       const el = document.querySelector('[data-upload-ring="' + slotIndex + '"]');
       if (el) {
@@ -2277,30 +2387,54 @@
         el.setAttribute("stroke-dashoffset", String(off));
       }
     },
-    _startUploadRing(slotIndex) {
-      this._stopUploadRing(slotIndex);
-      const started = typeof performance !== "undefined" ? performance.now() : Date.now();
-      const tick = () => {
-        if (!this.isSlotUploading(slotIndex)) {
-          this._stopUploadRing(slotIndex);
-          return;
-        }
-        const elapsed = (typeof performance !== "undefined" ? performance.now() : Date.now()) - started;
-        const pct = this._RING_TARGET_PCT * (1 - Math.exp(-elapsed / this._RING_TAU_MS));
-        this._paintRing(slotIndex, pct);
-      };
-      requestAnimationFrame(() => {
-        this._paintRing(slotIndex, 4);
-        tick();
-      });
-      this._uploadRings[slotIndex] = setInterval(tick, 150);
+    _paintUploadRing(slotIndex) {
+      const pct = ringPercent(this.uploadStatus[slotIndex]);
+      this._paintRing(slotIndex, pct === null ? this._RING_SPIN_PCT : pct);
     },
-    _stopUploadRing(slotIndex) {
-      const h = this._uploadRings[slotIndex];
-      if (h) {
-        clearInterval(h);
-        delete this._uploadRings[slotIndex];
+    // Template helpers: spin or fill, the line under the ring, and the
+    // panel's sentences for uploads that have gone quiet.
+    uploadRingSpins(slotIndex) {
+      return ringPercent(this.uploadStatus[slotIndex]) === null;
+    },
+    uploadLabelFor(slotIndex) {
+      return uploadLabel(this.uploadStatus[slotIndex], this.uploadClock || Date.now());
+    },
+    uploadStallLines() {
+      const now = this.uploadClock || Date.now();
+      const out = [];
+      for (const slot of this.pendingUploads) {
+        const text = uploadStallText(slot, this.uploadStatus[slot], now);
+        if (text) out.push({ slot, text });
       }
+      return out;
+    },
+    _tickUploadClock() {
+      this.uploadClock = Date.now();
+      if (!this._uploadClockTimer) {
+        this._uploadClockTimer = setInterval(() => this._onUploadClock(), 1e3);
+      }
+    },
+    _stopUploadClock() {
+      if (this._uploadClockTimer) {
+        clearInterval(this._uploadClockTimer);
+        this._uploadClockTimer = null;
+      }
+    },
+    // Once a second while uploads are pending: move the clock, and give up
+    // on one the server has said nothing about for LOST_AFTER_S (the
+    // server process went away, say) — out loud, never silently.
+    _onUploadClock() {
+      this.uploadClock = Date.now();
+      for (const slot of this.pendingUploads.slice()) {
+        if (stalledSeconds(this.uploadStatus[slot], this.uploadClock) >= LOST_AFTER_S) {
+          this.failUpload(
+            slot,
+            `no word about it from the server for ${LOST_AFTER_S} s, so this page has stopped waiting`,
+            null
+          );
+        }
+      }
+      if (!this.pendingUploads.length) this._stopUploadClock();
     },
     // Success completion: fill the ring to 100%, hold briefly so the fill
     // reads, then clear the overlay (it fades out, revealing the thumbnail
@@ -2310,21 +2444,30 @@
         this._clearUploading(slotIndex);
         return;
       }
-      this._stopUploadRing(slotIndex);
+      if (this.uploadStatus[slotIndex]) this.uploadStatus[slotIndex].stage = "done";
       this._paintRing(slotIndex, 100);
       setTimeout(() => this._clearUploading(slotIndex), 240);
     },
-    // Per-slot upload safety-timer handles (L24). Plain non-reactive
-    // property — nothing binds to it; only _armUploadSafetyTimer /
-    // _clearUploading touch it.
-    _uploadSafetyTimers: {},
-    _armUploadSafetyTimer(slotIndex) {
-      const prev = this._uploadSafetyTimers[slotIndex];
-      if (prev) clearTimeout(prev);
-      this._uploadSafetyTimers[slotIndex] = setTimeout(() => {
-        console.warn("[mediaPoolUpload] safety timeout fired for slot", slotIndex);
-        this._clearUploading(slotIndex);
-      }, 12e4);
+    // Failure: clear the overlay and say why in the panel, with what it
+    // changed on the switcher (`changed`: false = nothing, null = unknown).
+    failUpload(slotIndex, reason, changed) {
+      this._clearUploading(slotIndex);
+      this.uploadErrors = this.uploadErrors.filter((e) => e.slot !== slotIndex);
+      this.uploadErrors.push({ slot: slotIndex, text: uploadFailureText(slotIndex, reason, changed) });
+    },
+    // Profile save's capture: its "no slot finished for N s" line.
+    profileCaptureStallText() {
+      return captureStallText(
+        this.profileCaptureProgress,
+        this.profileCaptureClock || Date.now()
+      );
+    },
+    dismissUploadError(slotIndex) {
+      this.uploadErrors = this.uploadErrors.filter((e) => e.slot !== slotIndex);
+    },
+    uploadErrorFor(slotIndex) {
+      const e = this.uploadErrors.find((x) => x.slot === slotIndex);
+      return e ? e.text : "";
     },
     // Optimistic clear after a delete confirm. The frontend already
     // knows which slot was cleared, so update the tile immediately
@@ -2432,7 +2575,6 @@
         return;
       }
       this._markUploading(slotIndex);
-      this._armUploadSafetyTimer(slotIndex);
       const fd = new FormData();
       fd.append("ip", this.currentIP);
       fd.append("slot", String(slotIndex));
@@ -2453,14 +2595,11 @@
         });
         console.log("[mediaPoolUpload] response payload", payload);
         if (!resp.ok || !payload.success) {
-          this._clearUploading(slotIndex);
-          const msg = payload.error || `Upload failed (${resp.status})`;
-          alert(`Slot ${slotIndex + 1}: ${msg}`);
+          this.failUpload(slotIndex, payload.error || `the server refused it (HTTP ${resp.status})`, false);
         }
       } catch (e) {
         console.error("[mediaPoolUpload] fetch threw", e);
-        this._clearUploading(slotIndex);
-        alert(`Slot ${slotIndex + 1}: upload failed — ${e.message || e}`);
+        this.failUpload(slotIndex, `this page could not reach the server (${e.message || e})`, null);
       }
     },
     // Tally a slot: on-air if any media player that's currently on-air
@@ -2523,6 +2662,9 @@
       // template reads these via ``$store.atem.profileCapture*``.
       profileCaptureSession: "",
       profileCaptureProgress: null,
+      // Wall clock for the capture's "no slot finished for N s" line,
+      // ticked once a second by AtemProfile.runSave while it runs.
+      profileCaptureClock: 0,
       // HyperDeck transport modal. Open flag + the deck's clips/status live
       // here (driven by window.AtemHyperdeck over the /atem/hyperdeck/ HTTP
       // endpoints — not the ATEM WebSocket). decks = the ATEM-bound decks

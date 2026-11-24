@@ -430,9 +430,15 @@
         const store = window.Alpine && window.Alpine.store
             ? window.Alpine.store('atem') : null;
         const sessionId = _newSessionId();
+        let clock = null;
         if (store) {
             store.profileCaptureSession = sessionId;
             store.profileCaptureProgress = null;
+            // Moves the dialog's "no slot finished for N s" line.
+            store.profileCaptureClock = Date.now();
+            clock = setInterval(function () {
+                store.profileCaptureClock = Date.now();
+            }, 1000);
         }
 
         try {
@@ -472,6 +478,7 @@
         } finally {
             alpine.profileBusy = false;
             alpine.profileBusyMessage = '';
+            if (clock) clearInterval(clock);
             if (store) {
                 store.profileCaptureSession = '';
                 store.profileCaptureProgress = null;
