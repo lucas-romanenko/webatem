@@ -554,6 +554,26 @@ def _upload_one(protocol, slot: int, image_path: str, width: int, height: int,
 
     progress_id = protocol.on('upload-progress', _on_progress)
 
+    # bmdwire (1.14.9 on) starts an upload again by itself when it stops
+    # moving without the switcher saying it is done, a few times, then
+    # gives up with a file-transfer-error of status 'stalled'. Older
+    # bmdwire never raises either; the timeouts below still hold.
+    gave_up = {}
+
+    def _on_retrying(store, uploaded_slot, attempt, of):
+        if store == 0 and uploaded_slot == slot:
+            last_progress['t'] = time.time()
+            log_append(f"slot {slot_user}: the upload stopped moving; bmdwire starts it "
+                       f"again from the beginning ({attempt} of {of})")
+            _quietly(progress, slot, f'retrying {attempt}/{of}', None)
+
+    def _on_error(err):
+        if getattr(err, 'status', None) == 'stalled':
+            gave_up['why'] = getattr(err, 'message', None) or 'no progress'
+
+    retry_id = protocol.on('upload-retrying', _on_retrying)
+    error_id = protocol.on('file-transfer-error', _on_error)
+
     def _fail_and_release(reason: str, **kw) -> ItemResult:
         # A failed/abandoned upload leaves the protocol's transfer lane
         # wedged (transfer_requested stuck, store lock held) — every later
@@ -577,6 +597,11 @@ def _upload_one(protocol, slot: int, image_path: str, width: int, height: int,
             return _fail_and_release(f"upload() raised: {e}")
 
         while not upload_done['flag']:
+            if gave_up:
+                return _fail_and_release(
+                    f"the switcher stopped taking the still and bmdwire's own retries "
+                    f"did not get it through ({gave_up['why']})",
+                    upload_seconds=time.time() - t_upload)
             if canceller.is_set():
                 return _fail_and_release("cancelled during upload",
                                          upload_seconds=time.time() - t_upload)
@@ -593,7 +618,8 @@ def _upload_one(protocol, slot: int, image_path: str, width: int, height: int,
             # loop past the deadline checks above (2026-07-06).
             ticked_pump(protocol, idle_sleep=0.02)
     finally:
-        for event, event_id in (('upload-done', done_id), ('upload-progress', progress_id)):
+        for event, event_id in (('upload-done', done_id), ('upload-progress', progress_id),
+                                ('upload-retrying', retry_id), ('file-transfer-error', error_id)):
             try:
                 protocol.off(event, event_id)
             except Exception:

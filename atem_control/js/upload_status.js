@@ -37,8 +37,16 @@ export function stalledSeconds(st, now) {
 }
 
 // The short line under the ring.
+// bmdwire starting an upload again by itself: stage 'retrying 2/3'.
+export function retryOf(st) {
+    const m = st && typeof st.stage === 'string' && st.stage.match(/^retrying (\d+)\/(\d+)$/);
+    return m ? `${m[1]}/${m[2]}` : null;
+}
+
 export function uploadLabel(st, now) {
     if (st && st.stage === 'done') return 'Done';
+    const retry = retryOf(st);
+    if (retry) return `Retrying (${retry})…`;
     const quiet = stalledSeconds(st, now);
     if (quiet >= STALL_AFTER_S) return `No progress for ${quiet} s`;
     switch (st && st.stage) {
@@ -57,6 +65,10 @@ export function uploadStallText(slotIndex, st, now) {
     const quiet = stalledSeconds(st, now);
     if (quiet < STALL_AFTER_S) return '';
     const slot = `Slot ${slotIndex + 1}`;
+    const retry = retryOf(st);
+    if (retry) {
+        return `${slot}: the upload stopped moving and is starting again from the beginning (${retry}), ${quiet} s so far…`;
+    }
     switch (st && st.stage) {
         case 'connecting':
             return `${slot}: still connecting to the switcher after ${quiet} s. Still trying…`;

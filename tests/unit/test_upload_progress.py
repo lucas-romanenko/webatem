@@ -210,3 +210,46 @@ def test_the_page_has_no_timer_driven_ring_and_hears_progress():
     bundle = (ROOT / 'atem_control/static/js/atem_control.js').read_text()
     assert 'media_pool_upload_progress' in bundle and 'noteUploadProgress' in bundle
     assert "the switcher isn't acknowledging" in bundle
+
+
+# --- bmdwire starting an upload again by itself (1.14.9) ---------------------
+
+def test_a_retry_by_bmdwire_is_shown_and_counts_as_progress(no_prep, monkeypatch):
+    monkeypatch.setattr(U, 'UPLOAD_TIMEOUT', 0.3)
+    seen = []
+    p = _SlowLink(every=0.01, budgets=2)
+    loop = p.loop
+    state = {'n': 0}
+
+    def retry_then_finish():
+        if p._t0 is not None and not state['n']:     # the upload under way
+            state['n'] = 1
+            p._raise('upload-retrying', 0, 0, 1, 3)
+        loop()
+    p.loop = retry_then_finish
+    _upload(p, lambda slot, stage, pct: seen.append(stage))
+    assert 'retrying 1/3' in seen
+
+
+def test_bmdwire_giving_up_fails_the_upload_at_once_with_why(no_prep, monkeypatch):
+    import time
+    monkeypatch.setattr(U, 'UPLOAD_TIMEOUT', 30)
+    p = _SlowLink(every=10, budgets=10)          # nothing would ever come
+    loop = p.loop
+
+    def gives_up():
+        p._raise('file-transfer-error', types.SimpleNamespace(
+            status='stalled', transfer=1, message='no progress for 6 s, 3 attempts'))
+        loop()
+    p.loop = gives_up
+    t = time.time()
+    result = _upload(p, None)
+    assert time.time() - t < 5, 'not the 30 s timeout'
+    assert result.success is False and 'retries did not get it through' in result.error
+    assert result.transfer_complete is False
+    assert p.aborts == 1
+
+
+def test_the_page_says_retrying():
+    js = (ROOT / 'atem_control/js/upload_status.js').read_text()
+    assert 'Retrying (' in js and 'retrying (\\d+)' in js
