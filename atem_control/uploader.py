@@ -34,7 +34,15 @@ Public API:
         skip_tally: bool,
         check_cancelled: Callable[[], bool] | None = None,
         log_append: Callable[[str], None] | None = None,
+        on_event: Callable[[UploadEvent], None] | None = None,
     ) -> list[ItemResult]
+
+Each ``ItemResult`` says how its item ended in fields a host can report
+from without reading log lines: ``reason`` (a stable code for a failure),
+``tally`` and ``tally_seconds`` (the off-air wait), ``retries`` and
+``finished_at``. ``on_event`` hears the steps as they happen (connected,
+a connect attempt retried or failed, each item done, the macros), for a
+host that writes its own log.
 
 Also public, for a host that runs its own upload or capture worker around
 this module: ``is_slot_safe`` and ``StateNotReady`` (is a
@@ -50,7 +58,7 @@ import logging
 import os
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable, List, Optional
 
 from PIL import Image, UnidentifiedImageError
@@ -106,6 +114,7 @@ from atem_control.tally import (
     _state_ready,
     ticked_pump,
     wait_for_safe_cycle,
+    CycleReport,
     TALLY_OBSERVATION_SECONDS,
     TALLY_TIMEOUT,
 )
@@ -133,6 +142,83 @@ class ItemResult:
     # failure with this False changed nothing on the switcher; one with it
     # True failed afterwards (the hash check) and may have.
     transfer_complete: bool = False
+    # Why it failed, as a stable code a host can word for its own users
+    # (``error`` keeps the technical text). None on success. One of:
+    # 'image' (not a readable image), 'cancelled', 'tally-timeout' (the slot
+    # stayed on air), 'state-not-ready' (no switcher state to check it
+    # with), 'prep' (the frame could not be prepared), 'upload-error'
+    # (upload() raised), 'upload-gave-up' (bmdwire's own restarts did not get
+    # it through), 'upload-stalled' (nothing from the switcher for
+    # UPLOAD_TIMEOUT: the media lock never came, or it stopped taking the
+    # still), 'upload-too-long' (UPLOAD_MAX), 'hash-mismatch',
+    # 'not-confirmed' (the slot's hash never became the still's),
+    # 'no-free-connection', 'connect-timeout', and for the macro row 'macro'.
+    reason: Optional[str] = None
+    # The off-air wait before the upload: 'skipped' (the caller asked for no
+    # tally check), 'clear' (off air for the whole watch), 'waited' (it was
+    # on air, or went on air while watched, and then came off), 'timeout',
+    # 'state-not-ready', 'cancelled'; None when the item never got there.
+    tally: Optional[str] = None
+    tally_seconds: float = 0.0
+    # Stretches with no switcher state during the wait, ``[gone_at,
+    # back_at]`` (wall clock; back_at None if it never came back).
+    tally_gaps: List[list] = field(default_factory=list)
+    # bmdwire starting a stalled upload again: ``(at, attempt, of)``.
+    retries: List[tuple] = field(default_factory=list)
+    # When the item ended (wall clock, ``time.time()``).
+    finished_at: float = 0.0
+
+    def __post_init__(self):
+        if not self.finished_at:
+            self.finished_at = time.time()
+
+
+@dataclass
+class UploadEvent:
+    """A step of ``execute_upload`` as it happens, for ``on_event``.
+
+    ``kind`` is one of:
+
+    - ``'connect-retry'``: connect attempt ``attempt`` of ``of`` timed out;
+      the next starts in ``seconds``.
+    - ``'connected'``: the session is up (``attempt`` of ``of``), its state
+      came in ``seconds``, the switcher runs ``width`` x ``height``.
+    - ``'connect-failed'``: no session; ``reason`` is 'no-free-connection'
+      or 'connect-timeout' (after ``attempt`` attempts); ``error`` says it.
+    - ``'item'``: an image is done, ``result`` says how.
+    - ``'macro'``: the macros of ``path`` applied (``result`` None) or
+      failed (``result`` the failed row); ``error`` is the apply's summary.
+    - ``'macro-skipped'``: not applied because an image failed.
+
+    ``at`` is when it happened (wall clock). ``slot`` is 0-indexed.
+    """
+    kind: str
+    ip: str
+    at: float = 0.0
+    slot: Optional[int] = None
+    attempt: int = 0
+    of: int = 0
+    seconds: float = 0.0
+    width: int = 0
+    height: int = 0
+    reason: str = ''
+    error: str = ''
+    path: str = ''
+    result: Optional[ItemResult] = None
+
+    def __post_init__(self):
+        if not self.at:
+            self.at = time.time()
+
+
+def _tell(on_event: Optional[Callable], event: UploadEvent) -> None:
+    """Hand ``event`` to the host; a failure there never fails an upload."""
+    if on_event is None:
+        return
+    try:
+        on_event(event)
+    except Exception:  # noqa: BLE001
+        logger.debug('upload event report failed', exc_info=True)
 
 
 # ---------------------------------------------------------------------------
@@ -328,7 +414,8 @@ def _wait_for_safe_upload_window(protocol, slot_0_indexed: int,
                                  canceller: _Canceller,
                                  log_append: Callable[[str], None],
                                  observation: float = TALLY_OBSERVATION_SECONDS,
-                                 timeout: float = TALLY_TIMEOUT) -> bool:
+                                 timeout: float = TALLY_TIMEOUT,
+                                 report: Optional[CycleReport] = None) -> bool:
     """Cycle-wait for tally safety before overwriting a media-pool slot. Thin
     wrapper over the shared ``wait_for_safe_cycle`` (atem_control.tally) with
     the media-pool slot liveness predicate, so the cold->hot->cold loop is
@@ -356,6 +443,7 @@ def _wait_for_safe_upload_window(protocol, slot_0_indexed: int,
         label=f'slot {slot_user}',
         observation=observation,
         timeout=timeout,
+        **({'report': report} if report is not None else {}),
     )
 
 
@@ -457,31 +545,47 @@ def _upload_one(protocol, slot: int, image_path: str, width: int, height: int,
     except ValueError as e:
         log_append(f"slot {slot_user}: FAIL — image validation: {e}")
         return ItemResult(slot=slot, image_path=image_path, success=False,
-                          error=f"image validation failed: {e}")
+                          error=f"image validation failed: {e}", reason='image')
+
+    # How the off-air wait went, carried on every result from here on.
+    tally = {'tally': 'skipped' if skip_tally else None}
+    retries: list = []
+
+    def _result(**kw) -> ItemResult:
+        return ItemResult(slot=slot, image_path=image_path, retries=retries,
+                          **tally, **kw)
 
     if not skip_tally:
         if canceller.is_set():
-            return ItemResult(slot=slot, image_path=image_path, success=False,
-                              error="cancelled before tally check")
+            log_append(f"slot {slot_user}: FAIL — cancelled before the tally check")
+            return _result(success=False, error="cancelled before tally check",
+                           reason='cancelled')
         _quietly(progress, slot, 'waiting', None)
         not_ready = None
+        cycle = CycleReport()
+        t_tally = time.time()
         try:
-            safe = _wait_for_safe_upload_window(protocol, slot, canceller, log_append)
+            safe = _wait_for_safe_upload_window(protocol, slot, canceller, log_append,
+                                                report=cycle)
         except StateNotReady as e:
             safe, not_ready = False, str(e)
+        tally.update(tally_seconds=time.time() - t_tally, tally_gaps=cycle.gaps)
         if not safe:
             if canceller.is_set():
-                err = "cancelled during tally wait"
+                err, why = "cancelled during tally wait", 'cancelled'
             elif not_ready:
-                err = not_ready
-                log_append(f"slot {slot_user}: FAIL — {err}")
+                err, why = not_ready, 'state-not-ready'
             else:
                 err = f"tally timeout: slot {slot_user} stayed live > {TALLY_TIMEOUT:.0f}s"
-            return ItemResult(slot=slot, image_path=image_path, success=False, error=err)
+                why = 'tally-timeout'
+            log_append(f"slot {slot_user}: FAIL — {err}")
+            tally['tally'] = why
+            return _result(success=False, error=err, reason=why)
+        tally['tally'] = 'waited' if cycle.seen_live else 'clear'
 
     if canceller.is_set():
-        return ItemResult(slot=slot, image_path=image_path, success=False,
-                          error="cancelled before upload")
+        log_append(f"slot {slot_user}: FAIL — cancelled before upload")
+        return _result(success=False, error="cancelled before upload", reason='cancelled')
 
     # Frame prep runs on a worker WITH THE LOOP PUMPED, because nothing else
     # pumps it here. The session is already open at this point and the switcher
@@ -528,8 +632,7 @@ def _upload_one(protocol, slot: int, image_path: str, width: int, height: int,
     if 'error' in prep_result:
         e = prep_result['error']
         log_append(f"slot {slot_user}: FAIL — frame prep: {e}")
-        return ItemResult(slot=slot, image_path=image_path, success=False,
-                          error=f"frame prep failed: {e}")
+        return _result(success=False, error=f"frame prep failed: {e}", reason='prep')
     atem_data = prep_result['data']
     log_append(f"slot {slot_user}: frame prep took {time.time() - t_prep:.2f}s")
 
@@ -563,6 +666,7 @@ def _upload_one(protocol, slot: int, image_path: str, width: int, height: int,
     def _on_retrying(store, uploaded_slot, attempt, of):
         if store == 0 and uploaded_slot == slot:
             last_progress['t'] = time.time()
+            retries.append((time.time(), attempt, of))
             log_append(f"slot {slot_user}: the upload stopped moving; bmdwire starts it "
                        f"again from the beginning ({attempt} of {of})")
             _quietly(progress, slot, f'retrying {attempt}/{of}', None)
@@ -574,7 +678,7 @@ def _upload_one(protocol, slot: int, image_path: str, width: int, height: int,
     retry_id = protocol.on('upload-retrying', _on_retrying)
     error_id = protocol.on('file-transfer-error', _on_error)
 
-    def _fail_and_release(reason: str, **kw) -> ItemResult:
+    def _fail_and_release(reason: str, why: str, **kw) -> ItemResult:
         # A failed/abandoned upload leaves the protocol's transfer lane
         # wedged (transfer_requested stuck, store lock held) — every later
         # item in this batch would queue behind the corpse and time out
@@ -585,8 +689,7 @@ def _upload_one(protocol, slot: int, image_path: str, width: int, height: int,
         except Exception:
             pass
         log_append(f"slot {slot_user}: FAIL — {reason}")
-        return ItemResult(slot=slot, image_path=image_path, success=False,
-                          error=reason, **kw)
+        return _result(success=False, error=reason, reason=why, **kw)
 
     t_upload = time.time()
     _quietly(progress, slot, 'sending', 0.0)
@@ -594,26 +697,26 @@ def _upload_one(protocol, slot: int, image_path: str, width: int, height: int,
         try:
             protocol.upload(store=0, index=slot, data=atem_data, compress=True, name=name)
         except Exception as e:
-            return _fail_and_release(f"upload() raised: {e}")
+            return _fail_and_release(f"upload() raised: {e}", 'upload-error')
 
         while not upload_done['flag']:
             if gave_up:
                 return _fail_and_release(
                     f"the switcher stopped taking the still and bmdwire's own retries "
-                    f"did not get it through ({gave_up['why']})",
+                    f"did not get it through ({gave_up['why']})", 'upload-gave-up',
                     upload_seconds=time.time() - t_upload)
             if canceller.is_set():
-                return _fail_and_release("cancelled during upload",
+                return _fail_and_release("cancelled during upload", 'cancelled',
                                          upload_seconds=time.time() - t_upload)
             if time.time() - last_progress['t'] > UPLOAD_TIMEOUT:
                 return _fail_and_release(
                     f"upload timeout: nothing for {UPLOAD_TIMEOUT:.0f}s from the switcher "
                     f"(it never gave the media lock, or stopped taking the still)",
-                    upload_seconds=time.time() - t_upload)
+                    'upload-stalled', upload_seconds=time.time() - t_upload)
             if time.time() - t_upload > UPLOAD_MAX:
                 return _fail_and_release(
                     f"upload timeout: still not finished after {UPLOAD_MAX:.0f}s",
-                    upload_seconds=time.time() - t_upload)
+                    'upload-too-long', upload_seconds=time.time() - t_upload)
             # ticked: a stalled transfer's quiet wire must not block this
             # loop past the deadline checks above (2026-07-06).
             ticked_pump(protocol, idle_sleep=0.02)
@@ -639,18 +742,19 @@ def _upload_one(protocol, slot: int, image_path: str, width: int, height: int,
         log_append(f"slot {slot_user}: PASS upload={upload_duration:.2f}s "
                    f"settle={settle:.2f}s (pre==expected)")
         _seed_still_cache(atem_data, expected_hash, width, height)
-        return ItemResult(slot=slot, image_path=image_path, success=True,
-                          upload_seconds=upload_duration, settle_seconds=settle,
-                          content_hash=expected_hash.hex(),
-                          transfer_complete=True)
+        return _result(success=True,
+                       upload_seconds=upload_duration, settle_seconds=settle,
+                       content_hash=expected_hash.hex(),
+                       transfer_complete=True)
 
     while time.time() - settle_start < HASH_SETTLE_TIMEOUT:
         if canceller.is_set():
-            return ItemResult(slot=slot, image_path=image_path, success=False,
-                              upload_seconds=upload_duration,
-                              settle_seconds=time.time() - settle_start,
-                              error="cancelled during hash verify",
-                              transfer_complete=True)
+            log_append(f"slot {slot_user}: FAIL — cancelled during hash verify")
+            return _result(success=False,
+                           upload_seconds=upload_duration,
+                           settle_seconds=time.time() - settle_start,
+                           error="cancelled during hash verify", reason='cancelled',
+                           transfer_complete=True)
         ticked_pump(protocol, idle_sleep=0.02)
         current = _slot_hash(protocol, slot)
         if current == expected_hash:
@@ -660,10 +764,10 @@ def _upload_one(protocol, slot: int, image_path: str, width: int, height: int,
             err = (f"hash mismatch: expected {expected_hash.hex()[:16]}, "
                    f"got {current.hex()[:16]}")
             log_append(f"slot {slot_user}: FAIL — {err}")
-            return ItemResult(slot=slot, image_path=image_path, success=False,
-                              upload_seconds=upload_duration, settle_seconds=settle,
-                              error=err,
-                              transfer_complete=True)
+            return _result(success=False,
+                           upload_seconds=upload_duration, settle_seconds=settle,
+                           error=err, reason='hash-mismatch',
+                           transfer_complete=True)
         time.sleep(0.02)
 
     settle = time.time() - settle_start
@@ -672,17 +776,17 @@ def _upload_one(protocol, slot: int, image_path: str, width: int, height: int,
         err = (f"silent failure: hash never settled to expected "
                f"(still {final.hex()[:16] if final else 'None'})")
         log_append(f"slot {slot_user}: FAIL — {err}")
-        return ItemResult(slot=slot, image_path=image_path, success=False,
-                          upload_seconds=upload_duration, settle_seconds=settle, error=err,
-                          transfer_complete=True)
+        return _result(success=False,
+                       upload_seconds=upload_duration, settle_seconds=settle, error=err,
+                       reason='not-confirmed', transfer_complete=True)
 
     log_append(f"slot {slot_user}: PASS upload={upload_duration:.2f}s "
                f"settle={settle:.2f}s")
     _seed_still_cache(atem_data, expected_hash, width, height)
-    return ItemResult(slot=slot, image_path=image_path, success=True,
-                      upload_seconds=upload_duration, settle_seconds=settle,
-                      content_hash=expected_hash.hex(),
-                      transfer_complete=True)
+    return _result(success=True,
+                   upload_seconds=upload_duration, settle_seconds=settle,
+                   content_hash=expected_hash.hex(),
+                   transfer_complete=True)
 
 
 # ---------------------------------------------------------------------------
@@ -723,7 +827,7 @@ def apply_macro_xml(protocol, macro_xml_path: str,
         log_append(msg)
         return ItemResult(
             slot=-1, image_path=f'<macros:{macro_xml_path}>',
-            success=False, error=msg,
+            success=False, error=msg, reason='macro',
         )
 
     try:
@@ -733,7 +837,7 @@ def apply_macro_xml(protocol, macro_xml_path: str,
         log_append(msg)
         return ItemResult(
             slot=-1, image_path=f'<macros:{macro_xml_path}>',
-            success=False, error=msg,
+            success=False, error=msg, reason='macro',
         )
 
     # Start the pump thread before kicking off apply.
@@ -760,7 +864,7 @@ def apply_macro_xml(protocol, macro_xml_path: str,
         log_append(msg)
         return ItemResult(
             slot=-1, image_path=f'<macros:{macro_xml_path}>',
-            success=False, error=msg,
+            success=False, error=msg, reason='macro',
         )
     finally:
         stop_pump.set()
@@ -782,7 +886,7 @@ def apply_macro_xml(protocol, macro_xml_path: str,
             log_append(f"macro apply error: {err}")
         return ItemResult(
             slot=-1, image_path=f'<macros:{macro_xml_path}>',
-            success=False, error='; '.join(result.errors),
+            success=False, error='; '.join(result.errors), reason='macro',
         )
     return None
 
@@ -793,7 +897,8 @@ def _run_for_single_ip(ip_address: str,
                        canceller: _Canceller,
                        log_append: Callable[[str], None],
                        macro_xml_path: Optional[str] = None,
-                       progress: Optional[Callable[..., None]] = None) -> List[ItemResult]:
+                       progress: Optional[Callable[..., None]] = None,
+                       on_event: Optional[Callable[[UploadEvent], None]] = None) -> List[ItemResult]:
     """Open one atemwire socket, upload all slot_paths tuples for this IP.
 
     If ``macro_xml_path`` is provided and every image upload succeeded,
@@ -844,6 +949,8 @@ def _run_for_single_ip(ip_address: str,
             if attempt < CONNECT_ATTEMPTS:
                 log_append(f"attempt {attempt} timed out — retrying in "
                            f"{CONNECT_RETRY_DELAY:.0f}s")
+                _tell(on_event, UploadEvent('connect-retry', ip_address, attempt=attempt,
+                                            of=CONNECT_ATTEMPTS, seconds=CONNECT_RETRY_DELAY))
                 time.sleep(CONNECT_RETRY_DELAY)
         except BaseException:
             # Anything else while connecting (a SIGTERM-raised SystemExit, a
@@ -853,12 +960,16 @@ def _run_for_single_ip(ip_address: str,
             close_protocol(candidate)
             raise
     if protocol is None:
+        why = 'no-free-connection' if refused else 'connect-timeout'
+        err = (NO_FREE_CONNECTION_ERROR if refused
+               else f"connection timeout ({CONNECT_ATTEMPTS} attempts)")
+        _tell(on_event, UploadEvent('connect-failed', ip_address, attempt=attempt,
+                                    of=CONNECT_ATTEMPTS, reason=why, error=err,
+                                    seconds=time.time() - t_connect))
         for slot, image_path in slot_paths:
             out.append(ItemResult(
                 slot=slot, image_path=image_path,
-                success=False,
-                error=(NO_FREE_CONNECTION_ERROR if refused
-                       else f"connection timeout ({CONNECT_ATTEMPTS} attempts)"),
+                success=False, error=err, reason=why,
             ))
         return out
 
@@ -877,6 +988,9 @@ def _run_for_single_ip(ip_address: str,
 
         width, height = video_mode.get_resolution()
         log_append(f"video mode: {width}x{height} on {ip_address}")
+        _tell(on_event, UploadEvent('connected', ip_address, attempt=attempt,
+                                    of=CONNECT_ATTEMPTS, seconds=t_connected - t_connect,
+                                    width=width, height=height))
         # A sighting for the equipment row (best-effort, never raises): the
         # content-change form validates stills against what was last seen here.
         try:
@@ -888,10 +1002,14 @@ def _run_for_single_ip(ip_address: str,
         for idx, (slot, image_path) in enumerate(slot_paths):
             if canceller.is_set():
                 for remain_slot, remain_path in slot_paths[idx:]:
+                    log_append(f"slot {remain_slot + 1}: not started, the upload was cancelled")
                     out.append(ItemResult(
                         slot=remain_slot, image_path=remain_path,
                         success=False, error="cancelled — batch terminated",
+                        reason='cancelled',
                     ))
+                    _tell(on_event, UploadEvent('item', ip_address, slot=remain_slot,
+                                                path=remain_path, result=out[-1]))
                 break
             t_item = time.time()
             item_result = _upload_one(
@@ -900,6 +1018,8 @@ def _run_for_single_ip(ip_address: str,
             )
             log_append(f"slot {slot + 1}: total item time {time.time() - t_item:.2f}s")
             out.append(item_result)
+            _tell(on_event, UploadEvent('item', ip_address, slot=slot, path=image_path,
+                                        result=item_result))
 
         # Macro apply runs on the same socket after the last image. Skipped on
         # cancel or partial-failure — see apply_macro_xml docstring. The
@@ -911,8 +1031,13 @@ def _run_for_single_ip(ip_address: str,
                 macro_result = apply_macro_xml(protocol, macro_xml_path, log_append)
                 if macro_result is not None:
                     out.append(macro_result)
+                _tell(on_event, UploadEvent('macro', ip_address, path=macro_xml_path,
+                                            result=macro_result,
+                                            error=macro_result.error if macro_result else ''))
             else:
                 log_append("skipping macro apply: not all image uploads succeeded")
+                _tell(on_event, UploadEvent('macro-skipped', ip_address, path=macro_xml_path,
+                                            reason='images-failed'))
 
         # Flush pending outbound for a moment so the lock release etc. goes
         # out before we close the socket.
@@ -945,7 +1070,8 @@ def execute_upload(items: List[tuple],
                    check_cancelled: Optional[Callable[[], bool]] = None,
                    log_append: Optional[Callable[[str], None]] = None,
                    log_line_prefix: str = '',
-                   progress: Optional[Callable[..., None]] = None) -> List[ItemResult]:
+                   progress: Optional[Callable[..., None]] = None,
+                   on_event: Optional[Callable[[UploadEvent], None]] = None) -> List[ItemResult]:
     """Upload N images to M ATEMs. Items can span multiple IPs; the function
     groups by IP internally and opens one atemwire socket per unique IP.
 
@@ -982,6 +1108,11 @@ def execute_upload(items: List[tuple],
         ``verifying``. ``percent`` is None outside ``sending``. It runs on
         the upload's own thread and must be quick; an exception in it is
         logged and ignored.
+    :param on_event: optional ``on_event(UploadEvent)``, called as each step
+        happens (see ``UploadEvent``), on the upload's own thread; an
+        exception in it is logged and ignored. Together with the results'
+        own fields it is enough for a host to write its own job log without
+        reading the log lines.
 
     Returns one ItemResult per input item, in input order. When
     ``macro_xml_path`` is set and macros fail to apply, an extra
@@ -1024,7 +1155,10 @@ def execute_upload(items: List[tuple],
                 per_key_result[orig_idx] = ItemResult(
                     slot=slot, image_path=path,
                     success=False, error="cancelled — batch terminated",
+                    reason='cancelled',
                 )
+                _tell(on_event, UploadEvent('item', ip, slot=slot, path=path,
+                                            result=per_key_result[orig_idx]))
             continue
 
         t_ip_start = time.time()
@@ -1033,8 +1167,9 @@ def execute_upload(items: List[tuple],
             macro_xml_path=macro_xml_path,
             # only when asked for, so a caller's stand-in keeps working
             **({'progress': progress} if progress is not None else {}),
+            **({'on_event': on_event} if on_event is not None else {}),
         )
-        sink(f"=== {ip}: _run_for_single_ip total {time.time() - t_ip_start:.2f}s for {len(slot_paths)} item(s)")
+        sink(f"{ip}: done in {time.time() - t_ip_start:.2f}s, {len(slot_paths)} item(s)")
         # _run_for_single_ip may append one synthetic macro-apply result.
         # Map the image results back to their original input indices; keep
         # the macro result on the side for end-of-list append.
