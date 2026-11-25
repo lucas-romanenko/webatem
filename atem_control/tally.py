@@ -10,7 +10,8 @@ predicate's: a session that drops inside the cycle starts it again.
 """
 
 import time
-from typing import Callable, Optional
+from dataclasses import dataclass, field
+from typing import Callable, List, Optional
 
 from atemwire.transport import Wakeup
 
@@ -129,6 +130,27 @@ class _StateWatch:
         return bool(live) if counts else None
 
 
+@dataclass
+class CycleReport:
+    """What one ``wait_for_safe_cycle`` saw, for a caller that reports it (a
+    job log, say) rather than reading the log lines. Filled in as the cycle
+    runs when passed as ``report``; it changes nothing about the cycle.
+
+    - ``seen_live``: the source was seen on air (at the start, or as a
+      rotation while it was watched).
+    - ``ended``: ``'no-activity'`` (off air for the whole watch),
+      ``'cycle-complete'`` (the trailing cold after a rotation),
+      ``'timeout'`` or ``'cancelled'``; ``''`` while it runs, and when the
+      liveness check raised and ended it.
+    - ``gaps``: ``[gone_at, back_at]`` wall-clock times (``time.time()``) of
+      each stretch with no switcher state; ``back_at`` is None for one still
+      open when the cycle ended.
+    """
+    seen_live: bool = False
+    ended: str = ''
+    gaps: List[list] = field(default_factory=list)
+
+
 # The cycle's phases (see wait_for_safe_cycle).
 _START, _WAIT_COLD, _OBSERVE, _TRAILING = 'start', 'wait-cold', 'observe', 'trailing'
 
@@ -142,6 +164,7 @@ def wait_for_safe_cycle(
     label: str = 'source',
     observation: float = TALLY_OBSERVATION_SECONDS,
     timeout: float = TALLY_TIMEOUT,
+    report: Optional[CycleReport] = None,
 ) -> bool:
     """Block until ``is_live()`` shows a stable cold window, then return True.
     Return False on cancel or after ``timeout`` seconds total.
@@ -177,10 +200,13 @@ def wait_for_safe_cycle(
     extends it, so a session that keeps dropping ends in False (not safe), not
     in a wait without end. A predicate that raises still ends the cycle, as
     before (the still check does when the state stays away too long).
+
+    ``report``, if given, is filled with what the cycle saw (``CycleReport``).
     """
     sink = log or (lambda _line: None)
     start = time.time()
     watch = _StateWatch(protocol)
+    seen = report if report is not None else CycleReport()
 
     def aborted() -> Optional[str]:
         if is_cancelled is not None:
@@ -197,6 +223,7 @@ def wait_for_safe_cycle(
     while True:
         reason = aborted()
         if reason:
+            seen.ended = 'cancelled' if reason == 'cancelled' else 'timeout'
             sink(f'{label}: aborted ({reason})')
             return False
         read_at = time.time()
@@ -207,16 +234,19 @@ def wait_for_safe_cycle(
             # A gap. Note when it began (the reading may have waited it out).
             if gap_since is None:
                 gap_since = read_at
+                seen.gaps.append([read_at, None])
                 sink(f'{label}: switcher state gone (session reconnecting), '
                      f'the source cannot be seen until it is back')
             phase = _START
         else:
             if gap_since is not None:
+                seen.gaps[-1][1] = now
                 sink(f'{label}: switcher state back after {now - gap_since:.1f}s, '
                      f'starting the cycle again')
                 gap_since = None
             if phase == _START and live:
                 # Phase 1 -- currently live, wait until cold.
+                seen.seen_live = True
                 sink(f'{label}: currently live, waiting for cold...')
                 phase = _WAIT_COLD
             elif phase in (_START, _WAIT_COLD) and not live:
@@ -225,13 +255,16 @@ def wait_for_safe_cycle(
             elif phase == _OBSERVE:
                 # Phase 2 -- a source going live here is a rotation, not a gap.
                 if live:
+                    seen.seen_live = True
                     sink(f'{label}: rotation detected, waiting for trailing cold...')
                     phase = _TRAILING
                 elif now - obs_start >= observation:
+                    seen.ended = 'no-activity'
                     sink(f'{label}: no activity in {int(observation)}s, safe')
                     return True
             elif phase == _TRAILING and not live:
                 # Phase 3 -- went live while observed; this is the trailing cold.
+                seen.ended = 'cycle-complete'
                 sink(f'{label}: cycle complete, safe')
                 return True
 
